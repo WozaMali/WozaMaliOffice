@@ -1,73 +1,113 @@
-# Welcome to your Lovable project
+# Woza Mali - Recycling Management System
 
-## Project info
+A comprehensive recycling management platform for South Africa, built with React, TypeScript, and Supabase.
 
-**URL**: https://lovable.dev/projects/2367d48a-d0a6-4c69-9bb9-e0f412e502ae
+## 🌟 Features
 
-## How can I edit this code?
+- **Collector Dashboard** - Streamlined pickup workflow with photo capture
+- **Admin Portal** - Complete management interface with analytics
+- **Customer Dashboard** - Track recycling impact and rewards
+- **Auto-Calculator** - Real-time pricing and environmental impact
+- **Authentication System** - Role-based access control
+- **Database Schema** - Complete Supabase backend with RLS
 
-There are several ways of editing your application.
+## 🚀 Getting Started
 
-**Use Lovable**
+### Prerequisites
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/2367d48a-d0a6-4c69-9bb9-e0f412e502ae) and start prompting.
+- Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Supabase account and project
 
-Changes made via Lovable will be committed automatically to this repo.
+### Development Setup
 
-**Use your preferred IDE**
+1. **Clone the repository**
+   ```sh
+   git clone https://github.com/WozaMali/WozaMaliOffice.git
+   cd WozaMaliOffice
+   ```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+2. **Install dependencies**
+   ```sh
+   npm install
+   ```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+3. **Set up environment variables**
+   Create a `.env` file with your Supabase credentials:
+   ```env
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
 
-Follow these steps:
+4. **Install database schema**
+   - Open Supabase SQL Editor
+   - Run the contents of `schemas/00-install-all.sql`
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+5. **Start development server**
+   ```sh
+   npm run dev
+   ```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## 🏗️ Project Structure
 
-# Step 3: Install the necessary dependencies.
-npm i
+```
+src/
+├── components/     # Reusable UI components
+├── pages/         # Application pages
+├── hooks/         # Custom React hooks
+├── lib/           # Utility functions and schemas
+└── contexts/      # React contexts for state management
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+schemas/           # Database schema files
+├── 00-install-all.sql          # Master installation script
+├── 01-profiles.sql             # User profiles
+├── 02-addresses.sql            # Address management
+├── 03-materials.sql            # Material pricing
+├── 04-pickups.sql             # Pickup records
+├── 05-pickup-items.sql        # Individual items
+├── 06-pickup-photos.sql       # Photo storage
+├── 07-payments.sql            # Payment tracking
+└── 08-views-and-seed-data.sql # Dashboard views & sample data
 ```
 
-**Edit a file directly in GitHub**
+## 🛠️ Technologies Used
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- **Frontend**: React, TypeScript, Vite
+- **UI Components**: shadcn-ui, Radix UI
+- **Styling**: Tailwind CSS
+- **Backend**: Supabase (PostgreSQL)
+- **Authentication**: Supabase Auth
+- **State Management**: React Context, React Query
+- **Forms**: React Hook Form, Zod validation
 
-**Use GitHub Codespaces**
+## 📱 Available Routes
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- `/` - Login page
+- `/dashboard` - Main dashboard (authenticated)
+- `/admin/*` - Admin portal routes
+- `/collector` - Collector dashboard
+- `/customer` - Customer dashboard
+- `/calculator` - Recycling calculator
 
-## What technologies are used for this project?
+## 🚀 Deployment
 
-This project is built with:
+This project can be deployed to any platform that supports Node.js applications:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- **Vercel** - Recommended for React apps
+- **Netlify** - Great for static sites
+- **Railway** - Full-stack deployment
+- **Supabase** - Database hosting
 
-## How can I deploy this project?
+## 🤝 Contributing
 
-Simply open [Lovable](https://lovable.dev/projects/2367d48a-d0a6-4c69-9bb9-e0f412e502ae) and click on Share -> Publish.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
-## Can I connect a custom domain to my Lovable project?
+## 📄 License
 
-Yes, you can!
+This project is proprietary software for Woza Mali.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📞 Support
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+For support and questions, contact the Woza Mali development team.
