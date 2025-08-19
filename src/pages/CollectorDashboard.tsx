@@ -46,7 +46,8 @@ import {
 import { MaterialType, calculateTransactionTotals, formatCurrency, formatWeight, formatPoints } from "@/lib/recycling-schema";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
-import { pickupServices, materialServices, pickupItemServices, dashboardServices, enhancedPickupServices, profileServices } from "@/lib/supabase-services";
+import { pickupServices, materialServices, pickupItemServices, dashboardServices, enhancedPickupServices } from "@/lib/supabase-services";
+import { useCustomerProfiles } from "@/hooks/use-customer-profiles";
 import type { CollectorDashboardView, Material, ProfileWithAddresses } from "@/lib/supabase";
 
 // Updated interfaces to match Supabase schema
@@ -123,6 +124,7 @@ interface MaterialPhoto {
 export default function CollectorDashboard() {
   const { theme } = useTheme();
   const { user } = useAuth();
+  const { customers, isLoading: customersLoading, error: customersError } = useCustomerProfiles();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<PickupLocation | null>(null);
@@ -146,7 +148,6 @@ export default function CollectorDashboard() {
   // Real data from Supabase
   const [realCollectorData, setRealCollectorData] = useState<CollectorDashboardView[]>([]);
   const [realMaterials, setRealMaterials] = useState<Material[]>([]);
-  const [customerProfiles, setCustomerProfiles] = useState<ProfileWithAddresses[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch real data from Supabase
@@ -164,10 +165,6 @@ export default function CollectorDashboard() {
         // Fetch available materials
         const materials = await materialServices.getActiveMaterials();
         setRealMaterials(materials);
-        
-        // Fetch all customer profiles with addresses
-        const profiles = await profileServices.getCustomerProfilesWithAddresses();
-        setCustomerProfiles(profiles);
         
       } catch (error) {
         console.error('Error fetching collector data:', error);
@@ -193,7 +190,7 @@ export default function CollectorDashboard() {
       hasPickup: true
     })),
     // Customer profiles without pickups (potential stops)
-    ...customerProfiles
+    ...customers
       .filter(profile => !realCollectorData.some(pickup => pickup.customer_email === profile.email))
       .map(profile => ({
         type: 'profile' as const,
@@ -434,6 +431,29 @@ export default function CollectorDashboard() {
       default: return <Clock className="h-4 w-4" />;
     }
   };
+
+  // Show loading spinner while fetching data
+  if (isLoading || customersLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Show error if customer profiles failed to load
+  if (customersError) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="h-16 w-16 text-destructive mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-destructive mb-2">Error Loading Customers</h2>
+          <p className="text-muted-foreground mb-4">{customersError}</p>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-primary/5">
