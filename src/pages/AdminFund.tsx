@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { AdminLayout } from "@/components/AdminLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { AdminLayout } from "../components/AdminLayout";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
 import { 
   Table, 
   TableBody, 
@@ -11,7 +11,7 @@ import {
   TableHead, 
   TableHeader, 
   TableRow 
-} from "@/components/ui/table";
+} from "../components/ui/table";
 import { 
   Dialog,
   DialogContent,
@@ -19,18 +19,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+} from "../components/ui/dialog";
+import { Label } from "../components/ui/label";
 import { 
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { TreePine, Plus, Recycle, DollarSign, GraduationCap, TrendingUp } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+} from "../components/ui/select";
+import { Textarea } from "../components/ui/textarea";
+import { TreePine, Plus, Recycle, GraduationCap, TrendingUp, LeafIcon } from "lucide-react";
+import { useToast } from "../hooks/use-toast";
+import { computeTotalImpact, formatImpactValue, getImpactDescription } from "@/lib/impact-config";
 
 // Mock fund data
 const mockContributions = [
@@ -104,7 +105,12 @@ const AdminFund = () => {
     }).length
   };
 
-  const totalFund = (fundStats.totalPet * 0.5) + fundStats.totalCash; // Assuming R0.50 per kg PET value
+  // Calculate real environmental impact
+  const environmentalImpact = computeTotalImpact(
+    mockContributions.map(c => ({ petKg: c.petAmount, cansKg: 0 })) // Assuming only PET for now
+  );
+
+  const totalFund = environmentalImpact.fundR + fundStats.totalCash;
 
   const handleAddContribution = () => {
     toast({
@@ -156,7 +162,7 @@ const AdminFund = () => {
           <Card>
             <CardContent className="p-4 flex items-center space-x-3">
               <div className="p-2 bg-info/10 rounded-lg">
-                <DollarSign className="h-5 w-5 text-info" />
+                <LeafIcon className="h-5 w-5 text-info" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-foreground">R {fundStats.totalCash.toFixed(2)}</div>
@@ -206,11 +212,11 @@ const AdminFund = () => {
                 </div>
               </div>
               
-              <div className="text-center p-6 rounded-lg bg-gradient-primary text-primary-foreground">
-                <div className="text-3xl font-bold mb-2">{(fundStats.totalPet * 2.3).toFixed(1)}</div>
-                <p className="text-sm opacity-90">CO₂ Saved (kg)</p>
-                <p className="text-xs opacity-75 mt-1">Environmental impact</p>
-              </div>
+                                <div className="text-center p-6 rounded-lg bg-gradient-primary text-primary-foreground">
+                    <div className="text-3xl font-bold mb-2">{environmentalImpact.co2Saved.toFixed(1)}</div>
+                    <p className="text-sm opacity-90">CO₂ Saved (kg)</p>
+                    <p className="text-xs opacity-75 mt-1">Environmental impact</p>
+                  </div>
             </div>
           </CardContent>
         </Card>
@@ -271,7 +277,6 @@ const AdminFund = () => {
                         <TableCell>
                           {contribution.cashAmount > 0 ? (
                             <div className="flex items-center space-x-1">
-                              <DollarSign className="h-4 w-4 text-info" />
                               <span className="font-medium">R {contribution.cashAmount.toFixed(2)}</span>
                             </div>
                           ) : (
@@ -294,6 +299,68 @@ const AdminFund = () => {
                   })}
                 </TableBody>
               </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Environmental Impact Details */}
+        <Card className="shadow-elegant">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <LeafIcon className="h-6 w-6 text-success" />
+              <span>Environmental Impact Details</span>
+            </CardTitle>
+            <CardDescription>
+              Detailed breakdown of environmental benefits from recycling
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="text-center p-4 rounded-lg bg-success/10">
+                <div className="text-2xl font-bold text-success mb-2">
+                  {formatImpactValue(environmentalImpact.co2Saved, 'kg')}
+                </div>
+                <p className="text-sm text-muted-foreground">CO₂ Saved</p>
+                <p className="text-xs text-success mt-1">{getImpactDescription('co2')}</p>
+              </div>
+              
+              <div className="text-center p-4 rounded-lg bg-info/10">
+                <div className="text-2xl font-bold text-info mb-2">
+                  {formatImpactValue(environmentalImpact.waterSavedL, 'L')}
+                </div>
+                <p className="text-sm text-muted-foreground">Water Saved</p>
+                <p className="text-xs text-info mt-1">{getImpactDescription('water')}</p>
+              </div>
+              
+              <div className="text-center p-4 rounded-lg bg-warning/10">
+                <div className="text-2xl font-bold text-warning mb-2">
+                  {formatImpactValue(environmentalImpact.landfillL, 'L')}
+                </div>
+                <p className="text-sm text-muted-foreground">Landfill Saved</p>
+                <p className="text-xs text-warning mt-1">{getImpactDescription('landfill')}</p>
+              </div>
+            </div>
+            
+            <div className="mt-6 p-4 rounded-lg bg-secondary">
+              <h4 className="font-semibold text-foreground mb-3">Impact Summary</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Total PET Recycled:</span>
+                  <span className="font-medium">{fundStats.totalPet.toFixed(1)} kg</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Fund Value Generated:</span>
+                  <span className="font-medium">R {environmentalImpact.fundR.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Points Earned:</span>
+                  <span className="font-medium">{environmentalImpact.points.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Total Impact Value:</span>
+                  <span className="font-medium">R {(environmentalImpact.fundR + fundStats.totalCash).toFixed(2)}</span>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

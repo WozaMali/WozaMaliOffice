@@ -1,8 +1,11 @@
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
+import { useAuth } from "@/hooks/use-auth";
 
 const NotFound = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuth();
 
   useEffect(() => {
     console.error(
@@ -10,6 +13,17 @@ const NotFound = () => {
       location.pathname
     );
   }, [location.pathname]);
+
+  // Redirect authenticated users to their appropriate dashboard
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.role === 'COLLECTOR') {
+        navigate('/collector');
+      } else {
+        navigate('/admin');
+      }
+    }
+  }, [isAuthenticated, user, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">

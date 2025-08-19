@@ -133,3 +133,28 @@ All colors MUST be HSL for consistency with brand identity.
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  /* Dashboard Card Styles */
+  .card-elegant {
+    @apply bg-card border border-border rounded-lg shadow-elegant;
+  }
+
+  /* Button Styles */
+  .btn-gradient {
+    @apply bg-gradient-primary text-primary-foreground px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:shadow-primary hover:scale-105;
+  }
+
+  .btn-warm {
+    @apply bg-gradient-accent text-accent-foreground px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:shadow-accent hover:scale-105;
+  }
+  
+  /* Gradient Backgrounds */
+  .bg-gradient-warm {
+    @apply bg-gradient-to-r from-orange-500 to-red-500;
+  }
+  
+  .text-warm-foreground {
+    @apply text-white;
+  }
+}

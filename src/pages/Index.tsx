@@ -3,8 +3,41 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Recycle, Users, BarChart3 } from "lucide-react";
+import { ThemeSwitcher } from "@/components/ui/theme-switcher";
+import { ThemeIndicator } from "@/components/ui/theme-indicator";
+import { UserProfile } from "@/components/UserProfile";
+import { useAuth } from "@/hooks/use-auth";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect unauthenticated users to login
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+
+  // Show loading while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-secondary/30 to-primary/5">
       {/* Header */}
@@ -20,9 +53,28 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Recycling Made Simple</p>
               </div>
             </div>
-            <Button asChild>
-              <a href="/admin">Access Admin Portal</a>
-            </Button>
+            <div className="flex items-center space-x-3">
+              <ThemeSwitcher />
+              <ThemeIndicator />
+              <Button variant="outline" asChild>
+                <a href="/calculator">Recycling Calculator</a>
+              </Button>
+              {isAuthenticated ? (
+                <UserProfile />
+              ) : (
+                <>
+                  <Button variant="outline" asChild>
+                    <a href="/collector-login">Collector Portal</a>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <a href="/login">Sign In</a>
+                  </Button>
+                </>
+              )}
+              <Button asChild>
+                <a href="/admin">Access Admin Portal</a>
+              </Button>
+            </div>
           </div>
         </div>
       </header>

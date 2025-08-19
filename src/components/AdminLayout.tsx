@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { 
   BarChart3, 
@@ -9,7 +11,9 @@ import {
   Settings,
   Menu,
   X,
-  LogOut
+  LogOut,
+  TrendingUp,
+  Package
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,8 +29,10 @@ const navigation = [
   { name: 'Withdrawals', href: '/admin/withdrawals', icon: CreditCard, page: 'withdrawals' },
   { name: 'Rewards', href: '/admin/rewards', icon: Gift, page: 'rewards' },
   { name: 'Green Scholar Fund', href: '/admin/fund', icon: TreePine, page: 'fund' },
-  { name: 'Collections', href: '/admin/collections', icon: Calendar, page: 'collections' },
-  { name: 'Site Config', href: '/admin/config', icon: Settings, page: 'config' },
+        { name: 'Collections', href: '/admin/collections', icon: Calendar, page: 'collections' },
+      { name: 'Pickups', href: '/admin/pickups', icon: Package, page: 'pickups' },
+      { name: 'Analytics', href: '/admin/analytics', icon: TrendingUp, page: 'analytics' },
+      { name: 'Site Config', href: '/admin/config', icon: Settings, page: 'config' },
 ];
 
 export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
