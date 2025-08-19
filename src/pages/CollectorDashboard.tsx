@@ -41,13 +41,14 @@ import {
   Zap,
   Leaf,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  RefreshCw
 } from "lucide-react";
 import { MaterialType, calculateTransactionTotals, formatCurrency, formatWeight, formatPoints } from "@/lib/recycling-schema";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { pickupServices, materialServices, pickupItemServices, dashboardServices, enhancedPickupServices } from "@/lib/supabase-services";
-import { useCustomerProfiles } from "@/hooks/use-customer-profiles";
+import { useCustomerManagement } from "@/hooks/use-customer-management";
 import type { CollectorDashboardView, Material, ProfileWithAddresses } from "@/lib/supabase";
 
 // Updated interfaces to match Supabase schema
@@ -124,7 +125,16 @@ interface MaterialPhoto {
 export default function CollectorDashboard() {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const { customers, isLoading: customersLoading, error: customersError } = useCustomerProfiles();
+  const { 
+    customers, 
+    statistics, 
+    loading: customersLoading, 
+    error: customersError,
+    getCustomerProfilesWithAddresses,
+    searchCustomers,
+    getCustomersByAddressStatus,
+    getCustomersReadyForFirstCollection 
+  } = useCustomerManagement();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<PickupLocation | null>(null);
@@ -176,6 +186,21 @@ export default function CollectorDashboard() {
     fetchData();
   }, [user]);
 
+  // Get all customers
+  useEffect(() => {
+    getCustomerProfilesWithAddresses();
+  }, [getCustomerProfilesWithAddresses]);
+
+  // Search customers
+  const handleSearch = (searchTerm: string) => {
+    searchCustomers({ search_term: searchTerm });
+  };
+
+  // Get customers ready for first collection
+  const getNewCustomersReady = () => {
+    getCustomersReadyForFirstCollection();
+  };
+
   // Combine existing pickups with all customer profiles for comprehensive view
   const allPotentialStops = [
     // Existing pickups (assigned stops)
@@ -204,13 +229,24 @@ export default function CollectorDashboard() {
       }))
   ];
 
-  // Filter combined stops based on search
-  const filteredStops = allPotentialStops.filter(stop =>
-    stop.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    stop.line1?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    stop.suburb?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    stop.city?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Use filtered customers from the hook for search results
+  const filteredStops = searchQuery ? 
+    // If searching, use the hook's filtered customers
+    customers
+      .filter(profile => !realCollectorData.some(pickup => pickup.customer_email === profile.email))
+      .map(profile => ({
+        type: 'profile' as const,
+        data: profile,
+        customer_name: profile.full_name || profile.email?.split('@')[0] || 'Unknown Customer',
+        line1: profile.addresses?.[0]?.line1 || 'No Address',
+        suburb: profile.addresses?.[0]?.suburb || 'No Suburb',
+        city: profile.addresses?.[0]?.city || 'No City',
+        status: 'potential',
+        hasPickup: false
+      }))
+    : 
+    // If not searching, show all potential stops
+    allPotentialStops;
 
   // Use real data for pickup history
   const pickupHistory = realCollectorData;
@@ -706,22 +742,77 @@ export default function CollectorDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Search className="h-5 w-5 text-primary" />
-                  Search Assigned Stops
+                  <Route className="h-5 w-5 text-primary" />
+                  Assigned Stops & Potential Customers
                 </CardTitle>
                 <CardDescription>
-                  Find your assigned pickup locations and customer information
+                  View your assigned pickups and discover potential new customers
                 </CardDescription>
+                
+                {/* Customer Statistics */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+                  <div className="text-center p-3 bg-primary/5 rounded-lg">
+                    <div className="text-2xl font-bold text-primary">{statistics.total}</div>
+                    <div className="text-sm text-muted-foreground">Total Customers</div>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 dark:bg-green-950 rounded-lg">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">{statistics.withAddresses}</div>
+                    <div className="text-sm text-muted-foreground">With Addresses</div>
+                  </div>
+                  <div className="text-center p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{statistics.readyForFirstCollection}</div>
+                    <div className="text-sm text-muted-foreground">Ready for Collection</div>
+                  </div>
+                  <div className="text-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg">
+                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{statistics.activeCustomers}</div>
+                    <div className="text-sm text-muted-foreground">Active</div>
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={getNewCustomersReady}
+                    className="flex items-center gap-2"
+                  >
+                    <Users className="h-4 w-4" />
+                    Show New Customers
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => getCustomersByAddressStatus(true)}
+                    className="flex items-center gap-2"
+                  >
+                    <MapPin className="h-4 w-4" />
+                    With Addresses
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => getCustomerProfilesWithAddresses()}
+                    className="flex items-center gap-2"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Refresh All
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search by customer name or address..."
+                      placeholder="Search customers, addresses, suburbs..."
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchQuery(value);
+                        handleSearch(value);
+                      }}
+                      className="max-w-sm"
                     />
                   </div>
                   
