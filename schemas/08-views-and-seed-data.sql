@@ -1,13 +1,12 @@
 -- ============================================================================
 -- 08. VIEWS AND SEED DATA
 -- ============================================================================
--- This file creates comprehensive views and seed data for dashboards
--- Run this after all other schema files are installed
+-- This file creates comprehensive views and seeds the database with initial data
 
 -- ============================================================================
 -- SEED MATERIAL RATES
 -- ============================================================================
-\echo 'Seeding material rates and updating existing materials...'
+-- Seeding material rates and updating existing materials...
 
 -- Update existing materials with correct rates
 UPDATE materials SET 
@@ -54,12 +53,12 @@ INSERT INTO materials (name, unit, rate_per_kg, is_active, description, category
   ('Mixed Metals', 'kg', 5.00, true, 'Mixed metal scrap and items', 'Metal')
 ON CONFLICT (name) DO NOTHING;
 
-\echo '✓ Material rates seeded'
+-- Material rates seeded
 
 -- ============================================================================
 -- IMPACT CALCULATION FUNCTIONS
 -- ============================================================================
-\echo 'Creating impact calculation functions...'
+-- Creating impact calculation functions...
 
 -- Function to calculate environmental impact for a given weight and material
 CREATE OR REPLACE FUNCTION calculate_environmental_impact(
@@ -161,12 +160,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
-\echo '✓ Impact calculation functions created'
+-- Impact calculation functions created
 
 -- ============================================================================
 -- COMPREHENSIVE DASHBOARD VIEWS
 -- ============================================================================
-\echo 'Creating comprehensive dashboard views...'
+-- Creating comprehensive dashboard views...
 
 -- ============================================================================
 -- CUSTOMER DASHBOARD VIEW
@@ -318,7 +317,7 @@ LEFT JOIN payments pay ON pay.pickup_id = p.id;
 -- ============================================================================
 -- ANALYTICS VIEWS FOR DASHBOARDS
 -- ============================================================================
-\echo 'Creating analytics views...'
+-- Creating analytics views...
 
 -- Overall system impact view
 CREATE OR REPLACE VIEW public.system_impact_view AS
@@ -420,12 +419,12 @@ WHERE cu.role = 'customer'
 GROUP BY cu.id, cu.full_name, cu.email, cu.phone
 ORDER BY total_kg_recycled DESC;
 
-\echo '✓ Analytics views created'
+-- Analytics views created
 
 -- ============================================================================
 -- RLS POLICIES FOR VIEWS
 -- ============================================================================
-\echo 'Setting up RLS policies for views...'
+-- Setting up RLS policies for views...
 
 -- Customer dashboard view - customers can only see their own data
 CREATE POLICY "customer_dashboard_view_policy" ON customer_dashboard_view
@@ -455,34 +454,33 @@ CREATE POLICY "collector_performance_view_policy" ON collector_performance_view
 CREATE POLICY "customer_performance_view_policy" ON customer_performance_view
   FOR SELECT USING (auth_role() = 'admin');
 
-\echo '✓ RLS policies for views created'
+-- RLS policies for views created
 
 -- ============================================================================
 -- INSTALLATION COMPLETE
 -- ============================================================================
-\echo ''
-\echo '🎉 VIEWS AND SEED DATA INSTALLATION COMPLETE! 🎉'
-\echo ''
-\echo 'Your recycling management system now includes:'
-\echo '✅ Updated material rates (PET = R1.50, Cans = R18.55, etc.)'
-\echo '✅ Environmental impact calculation functions'
-\echo '✅ Points calculation system'
-\echo '✅ Fund allocation functions (70% Green Scholar, 30% Wallet)'
-\echo '✅ Customer dashboard view with full impact data'
-\echo '✅ Collector dashboard view with performance metrics'
-\echo '✅ Admin dashboard view with comprehensive analytics'
-\echo '✅ System-wide impact analytics'
-\echo '✅ Material performance tracking'
-\echo '✅ Collector performance metrics'
-\echo '✅ Customer performance tracking'
-\echo ''
-\echo 'Next steps:'
-\echo '1. Test the views in your Supabase dashboard'
-\echo '2. Integrate these views into your React components'
-\echo '3. Build beautiful dashboards with real-time data!'
-\echo ''
-\echo 'Example usage:'
-\echo 'SELECT * FROM customer_dashboard_view;'
-\echo 'SELECT * FROM collector_dashboard_view;'
-\echo 'SELECT * FROM admin_dashboard_view;'
-\echo 'SELECT * FROM system_impact_view;'
+-- VIEWS AND SEED DATA INSTALLATION COMPLETE!
+
+-- Your recycling management system now includes:
+-- ✅ Updated material rates (PET = R1.50, Cans = R18.55, etc.)
+-- ✅ Environmental impact calculation functions
+-- ✅ Points calculation system
+-- ✅ Fund allocation functions (70% Green Scholar, 30% Wallet)
+-- ✅ Customer dashboard view with full impact data
+-- ✅ Collector dashboard view with performance metrics
+-- ✅ Admin dashboard view with comprehensive analytics
+-- ✅ System-wide impact analytics
+-- ✅ Material performance tracking
+-- ✅ Collector performance metrics
+-- ✅ Customer performance tracking
+
+-- Next steps:
+-- 1. Test the views in your Supabase dashboard
+-- 2. Integrate these views into your React components
+-- 3. Build beautiful dashboards with real-time data!
+
+-- Example usage:
+-- SELECT * FROM customer_dashboard_view;
+-- SELECT * FROM collector_dashboard_view;
+-- SELECT * FROM admin_dashboard_view;
+-- SELECT * FROM system_impact_view;

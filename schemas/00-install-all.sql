@@ -1,8 +1,43 @@
 -- ============================================================================
--- 00. MASTER INSTALLATION SCRIPT
+-- WOZA MALI RECYCLING MANAGEMENT SYSTEM
+-- COMPLETE DATABASE SCHEMA INSTALLATION
 -- ============================================================================
--- This file installs all schema components in the correct order
--- Run this file to set up your complete database
+-- This file installs the complete database schema for the recycling management system
+-- Run this file in your Supabase SQL editor to set up all tables, functions, and views
+
+-- ============================================================================
+-- CLEAN INSTALLATION - DROP EXISTING TABLES IF THEY EXIST
+-- ============================================================================
+-- This ensures a clean installation by removing any existing tables
+
+-- Drop tables in reverse dependency order
+DROP TABLE IF EXISTS payments CASCADE;
+DROP TABLE IF EXISTS pickup_photos CASCADE;
+DROP TABLE IF EXISTS pickup_items CASCADE;
+DROP TABLE IF EXISTS pickups CASCADE;
+DROP TABLE IF EXISTS materials CASCADE;
+DROP TABLE IF EXISTS addresses CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
+
+-- Drop functions
+DROP FUNCTION IF EXISTS auth_role() CASCADE;
+DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
+DROP FUNCTION IF EXISTS handle_new_user_address() CASCADE;
+DROP FUNCTION IF EXISTS create_payment_on_approval() CASCADE;
+DROP FUNCTION IF EXISTS update_payment_processed_at() CASCADE;
+DROP FUNCTION IF EXISTS update_pickup_totals() CASCADE;
+DROP FUNCTION IF EXISTS calculate_environmental_impact(text, numeric) CASCADE;
+DROP FUNCTION IF EXISTS calculate_points(text, numeric) CASCADE;
+DROP FUNCTION IF EXISTS calculate_fund_allocation(numeric) CASCADE;
+
+-- Drop views
+DROP VIEW IF EXISTS customer_dashboard_view CASCADE;
+DROP VIEW IF EXISTS collector_dashboard_view CASCADE;
+DROP VIEW IF EXISTS admin_dashboard_view CASCADE;
+DROP VIEW IF EXISTS system_impact_view CASCADE;
+DROP VIEW IF EXISTS material_performance_view CASCADE;
+DROP VIEW IF EXISTS collector_performance_view CASCADE;
+DROP VIEW IF EXISTS customer_performance_view CASCADE;
 
 -- ============================================================================
 -- PREREQUISITES
@@ -25,10 +60,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================================
 -- STEP 1: PROFILES & AUTHENTICATION
 -- ============================================================================
-\echo 'Installing Profiles & Authentication Schema...'
+-- Installing Profiles & Authentication Schema...
 
 -- Create profiles table
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
   id uuid primary key default auth.uid(),
   email text unique not null,
   full_name text,
@@ -39,9 +74,18 @@ CREATE TABLE profiles (
 );
 
 -- Create indexes
-CREATE INDEX idx_profiles_email ON profiles(email);
-CREATE INDEX idx_profiles_role ON profiles(role);
-CREATE INDEX idx_profiles_active ON profiles(is_active);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_active ON profiles(is_active);
+
+-- Function to get current user's role for RLS policies
+CREATE OR REPLACE FUNCTION auth_role() 
+RETURNS text 
+LANGUAGE sql 
+STABLE 
+AS $$ 
+  SELECT role FROM profiles WHERE id = auth.uid() 
+$$;
 
 -- Enable RLS
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
@@ -50,17 +94,6 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own profile" ON profiles
   FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "Users can update own profile" ON profiles
-  FOR UPDATE USING (auth.uid() = id);
-
--- Row Level Security (RLS) Policies
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-
--- Users can view their own profile
-CREATE POLICY "Users can view own profile" ON profiles
-  FOR SELECT USING (auth.uid() = id);
-
--- Users can update their own profile
 CREATE POLICY "Users can update own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
 
@@ -80,32 +113,19 @@ CREATE POLICY "Admins can insert profiles" ON profiles
 CREATE POLICY "Admins can delete profiles" ON profiles
   FOR DELETE USING (auth_role() = 'admin');
 
--- Function to get current user's role for RLS policies
-CREATE OR REPLACE FUNCTION auth_role() 
-RETURNS text 
-LANGUAGE sql 
-STABLE 
-AS $$ 
-  SELECT role FROM profiles WHERE id = auth.uid() 
-$$;
-
--- Additional admin profiles policy
-CREATE POLICY "admin_profiles" ON profiles
-  FOR ALL USING (auth_role() = 'admin') WITH CHECK (auth_role() = 'admin');
-
 -- Additional customer read policy
 CREATE POLICY "customer_read_profile" ON profiles
   FOR SELECT USING (id = auth.uid());
 
-\echo '✓ Profiles & Authentication Schema installed'
+-- Profiles & Authentication Schema installed
 
 -- ============================================================================
 -- STEP 2: ADDRESSES
 -- ============================================================================
-\echo 'Installing Addresses Schema...'
+-- Installing Addresses Schema...
 
 -- Create addresses table
-CREATE TABLE addresses (
+CREATE TABLE IF NOT EXISTS addresses (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid references profiles(id) on delete cascade,
   line1 text not null,
@@ -120,11 +140,11 @@ CREATE TABLE addresses (
 );
 
 -- Create indexes
-CREATE INDEX idx_addresses_profile_id ON addresses(profile_id);
-CREATE INDEX idx_addresses_city ON addresses(city);
-CREATE INDEX idx_addresses_suburb ON addresses(suburb);
-CREATE INDEX idx_addresses_primary ON addresses(is_primary);
-CREATE INDEX idx_addresses_location ON addresses(lat, lng);
+CREATE INDEX IF NOT EXISTS idx_addresses_profile_id ON addresses(profile_id);
+CREATE INDEX IF NOT EXISTS idx_addresses_city ON addresses(city);
+CREATE INDEX IF NOT EXISTS idx_addresses_suburb ON addresses(suburb);
+CREATE INDEX IF NOT EXISTS idx_addresses_primary ON addresses(is_primary);
+CREATE INDEX IF NOT EXISTS idx_addresses_location ON addresses(lat, lng);
 
 -- Create constraints
 CREATE UNIQUE INDEX idx_addresses_one_primary_per_profile 
@@ -196,15 +216,15 @@ CREATE TRIGGER on_auth_user_address_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_address();
 
-\echo '✓ Addresses Schema installed'
+-- Addresses Schema installed
 
 -- ============================================================================
 -- STEP 3: MATERIALS
 -- ============================================================================
-\echo 'Installing Materials Schema...'
+-- Installing Materials Schema...
 
 -- Create materials table
-CREATE TABLE materials (
+CREATE TABLE IF NOT EXISTS materials (
   id uuid primary key default gen_random_uuid(),
   name text unique not null,
   unit text not null default 'kg',
@@ -217,10 +237,10 @@ CREATE TABLE materials (
 );
 
 -- Create indexes
-CREATE INDEX idx_materials_name ON materials(name);
-CREATE INDEX idx_materials_active ON materials(is_active);
-CREATE INDEX idx_materials_category ON materials(category);
-CREATE INDEX idx_materials_rate ON materials(rate_per_kg);
+CREATE INDEX IF NOT EXISTS idx_materials_name ON materials(name);
+CREATE INDEX IF NOT EXISTS idx_materials_active ON materials(is_active);
+CREATE INDEX IF NOT EXISTS idx_materials_category ON materials(category);
+CREATE INDEX IF NOT EXISTS idx_materials_rate ON materials(rate_per_kg);
 
 -- Create constraints
 ALTER TABLE materials ADD CONSTRAINT chk_materials_rate_positive 
@@ -257,15 +277,15 @@ INSERT INTO materials (name, unit, rate_per_kg, is_active, description, category
   ('Paper', 'kg', 0.80, true, 'Mixed paper and cardboard', 'Paper'),
   ('Cardboard', 'kg', 0.60, true, 'Corrugated cardboard boxes', 'Paper');
 
-\echo '✓ Materials Schema installed'
+-- Materials Schema installed
 
 -- ============================================================================
 -- STEP 4: PICKUPS
 -- ============================================================================
-\echo 'Installing Pickups Schema...'
+-- Installing Pickups Schema...
 
 -- Create pickups table
-CREATE TABLE pickups (
+CREATE TABLE IF NOT EXISTS pickups (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid references profiles(id),
   collector_id uuid references profiles(id),
@@ -283,13 +303,13 @@ CREATE TABLE pickups (
 );
 
 -- Create indexes
-CREATE INDEX idx_pickups_customer_id ON pickups(customer_id);
-CREATE INDEX idx_pickups_collector_id ON pickups(collector_id);
-CREATE INDEX idx_pickups_address_id ON pickups(address_id);
-CREATE INDEX idx_pickups_status ON pickups(status);
-CREATE INDEX idx_pickups_started_at ON pickups(started_at);
-CREATE INDEX idx_pickups_submitted_at ON pickups(submitted_at);
-CREATE INDEX idx_pickups_location ON pickups(lat, lng);
+CREATE INDEX IF NOT EXISTS idx_pickups_customer_id ON pickups(customer_id);
+CREATE INDEX IF NOT EXISTS idx_pickups_collector_id ON pickups(collector_id);
+CREATE INDEX IF NOT EXISTS idx_pickups_address_id ON pickups(address_id);
+CREATE INDEX IF NOT EXISTS idx_pickups_status ON pickups(status);
+CREATE INDEX IF NOT EXISTS idx_pickups_started_at ON pickups(started_at);
+CREATE INDEX IF NOT EXISTS idx_pickups_submitted_at ON pickups(submitted_at);
+CREATE INDEX IF NOT EXISTS idx_pickups_location ON pickups(lat, lng);
 
 -- Create constraints
 ALTER TABLE pickups ADD CONSTRAINT chk_pickups_positive_values 
@@ -348,42 +368,21 @@ CREATE POLICY "collector_read_own_pickups" ON pickups
 CREATE POLICY "admin_pickups" ON pickups
   FOR ALL USING (auth_role() = 'admin') WITH CHECK (auth_role() = 'admin');
 
--- Comprehensive admin view for pickup management
-CREATE OR REPLACE VIEW public.pickup_admin_view AS
-SELECT
-  p.id AS pickup_id,
-  cu.full_name AS customer_name,
-  cu.email AS customer_email,
-  co.full_name AS collector_name,
-  p.status,
-  p.started_at,
-  p.submitted_at,
-  SUM(pi.kilograms) AS total_kg,
-  SUM(pi.kilograms * m.rate_per_kg) AS total_value,
-  COUNT(DISTINCT ph.id) AS photo_count
-FROM pickups p
-LEFT JOIN profiles cu ON cu.id = p.customer_id
-LEFT JOIN profiles co ON co.id = p.collector_id
-LEFT JOIN pickup_items pi ON pi.pickup_id = p.id
-LEFT JOIN materials m ON m.id = pi.material_id
-LEFT JOIN pickup_photos ph ON ph.pickup_id = p.id
-GROUP BY p.id, cu.full_name, cu.email, co.full_name;
-
 -- Create trigger
 CREATE TRIGGER update_pickups_updated_at 
   BEFORE UPDATE ON pickups 
   FOR EACH ROW 
   EXECUTE FUNCTION update_updated_at_column();
 
-\echo '✓ Pickups Schema installed'
+-- Pickups Schema installed
 
 -- ============================================================================
 -- STEP 5: PICKUP ITEMS
 -- ============================================================================
-\echo 'Installing Pickup Items Schema...'
+-- Installing Pickup Items Schema...
 
 -- Create pickup_items table
-CREATE TABLE pickup_items (
+CREATE TABLE IF NOT EXISTS pickup_items (
   id uuid primary key default gen_random_uuid(),
   pickup_id uuid references pickups(id) on delete cascade,
   material_id uuid references materials(id),
@@ -394,9 +393,9 @@ CREATE TABLE pickup_items (
 );
 
 -- Create indexes
-CREATE INDEX idx_pickup_items_pickup_id ON pickup_items(pickup_id);
-CREATE INDEX idx_pickup_items_material_id ON pickup_items(material_id);
-CREATE INDEX idx_pickup_items_kilograms ON pickup_items(kilograms);
+CREATE INDEX IF NOT EXISTS idx_pickup_items_pickup_id ON pickup_items(pickup_id);
+CREATE INDEX IF NOT EXISTS idx_pickup_items_material_id ON pickup_items(material_id);
+CREATE INDEX IF NOT EXISTS idx_pickup_items_kilograms ON pickup_items(kilograms);
 
 -- Create constraints
 ALTER TABLE pickup_items ADD CONSTRAINT chk_pickup_items_positive_weight 
@@ -482,15 +481,15 @@ CREATE TRIGGER trigger_update_pickup_totals_delete
     FOR EACH ROW
     EXECUTE FUNCTION update_pickup_totals();
 
-\echo '✓ Pickup Items Schema installed'
+-- Pickup Items Schema installed
 
 -- ============================================================================
 -- STEP 6: PHOTOS
 -- ============================================================================
-\echo 'Installing Photos Schema...'
+-- Installing Photos Schema...
 
 -- Create pickup_photos table
-CREATE TABLE pickup_photos (
+CREATE TABLE IF NOT EXISTS pickup_photos (
   id uuid primary key default gen_random_uuid(),
   pickup_id uuid references pickups(id) on delete cascade,
   url text not null,
@@ -505,10 +504,10 @@ CREATE TABLE pickup_photos (
 );
 
 -- Create indexes
-CREATE INDEX idx_pickup_photos_pickup_id ON pickup_photos(pickup_id);
-CREATE INDEX idx_pickup_photos_type ON pickup_photos(type);
-CREATE INDEX idx_pickup_photos_taken_at ON pickup_photos(taken_at);
-CREATE INDEX idx_pickup_photos_location ON pickup_photos(lat, lng);
+CREATE INDEX IF NOT EXISTS idx_pickup_photos_pickup_id ON pickup_photos(pickup_id);
+CREATE INDEX IF NOT EXISTS idx_pickup_photos_type ON pickup_photos(type);
+CREATE INDEX IF NOT EXISTS idx_pickup_photos_taken_at ON pickup_photos(taken_at);
+CREATE INDEX IF NOT EXISTS idx_pickup_photos_location ON pickup_photos(lat, lng);
 
 -- Create constraints
 ALTER TABLE pickup_photos ADD CONSTRAINT chk_pickup_photos_valid_url 
@@ -587,15 +586,15 @@ CREATE TRIGGER trigger_set_mime_type
     FOR EACH ROW
     EXECUTE FUNCTION set_default_mime_type();
 
-\echo '✓ Photos Schema installed'
+-- Photos Schema installed
 
 -- ============================================================================
 -- STEP 7: PAYMENTS
 -- ============================================================================
-\echo 'Installing Payments Schema...'
+-- Installing Payments Schema...
 
 -- Create payments table
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
   id uuid primary key default gen_random_uuid(),
   pickup_id uuid unique references pickups(id) on delete cascade,
   amount numeric(10,2) not null check (amount >= 0),
@@ -610,11 +609,11 @@ CREATE TABLE payments (
 );
 
 -- Create indexes
-CREATE INDEX idx_payments_pickup_id ON payments(pickup_id);
-CREATE INDEX idx_payments_status ON payments(status);
-CREATE INDEX idx_payments_method ON payments(method);
-CREATE INDEX idx_payments_processed_at ON payments(processed_at);
-CREATE INDEX idx_payments_reference ON payments(reference_number);
+CREATE INDEX IF NOT EXISTS idx_payments_pickup_id ON payments(pickup_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+CREATE INDEX IF NOT EXISTS idx_payments_method ON payments(method);
+CREATE INDEX IF NOT EXISTS idx_payments_processed_at ON payments(processed_at);
+CREATE INDEX IF NOT EXISTS idx_payments_reference ON payments(reference_number);
 
 -- Create constraints
 ALTER TABLE payments ADD CONSTRAINT chk_payments_positive_amount 
@@ -697,36 +696,448 @@ CREATE TRIGGER update_payments_updated_at
   FOR EACH ROW 
   EXECUTE FUNCTION update_updated_at_column();
 
-\echo '✓ Payments Schema installed'
+-- Payments Schema installed
 
 -- ============================================================================
 -- STEP 8: VIEWS & SEED DATA
 -- ============================================================================
-\echo 'Installing Views & Seed Data...'
+-- Installing Views & Seed Data...
 
--- Include the complete views and seed data file
-\i schemas/08-views-and-seed-data.sql
+-- ============================================================================
+-- SEED MATERIAL RATES
+-- ============================================================================
+-- Seeding material rates and updating existing materials...
 
-\echo '✓ Views & Seed Data installed'
+-- Update existing materials with correct rates
+UPDATE materials SET 
+  rate_per_kg = 1.50,
+  description = 'Polyethylene terephthalate bottles and containers',
+  category = 'Plastic'
+WHERE name = 'PET';
+
+UPDATE materials SET 
+  rate_per_kg = 18.55,
+  description = 'Aluminum beverage and food cans',
+  category = 'Metal'
+WHERE name = 'Aluminium Cans';
+
+UPDATE materials SET 
+  rate_per_kg = 2.00,
+  description = 'High-density polyethylene containers',
+  category = 'Plastic'
+WHERE name = 'HDPE';
+
+UPDATE materials SET 
+  rate_per_kg = 1.20,
+  description = 'Glass bottles and containers',
+  category = 'Glass'
+WHERE name = 'Glass';
+
+UPDATE materials SET 
+  rate_per_kg = 0.80,
+  description = 'Mixed paper and cardboard',
+  category = 'Paper'
+WHERE name = 'Paper';
+
+UPDATE materials SET 
+  rate_per_kg = 0.60,
+  description = 'Corrugated cardboard boxes',
+  category = 'Paper'
+WHERE name = 'Cardboard';
+
+-- Insert additional materials if they don't exist
+INSERT INTO materials (name, unit, rate_per_kg, is_active, description, category) VALUES
+  ('Steel Cans', 'kg', 2.50, true, 'Steel food and beverage cans', 'Metal'),
+  ('LDPE', 'kg', 1.80, true, 'Low-density polyethylene bags and films', 'Plastic'),
+  ('PP', 'kg', 2.20, true, 'Polypropylene containers and packaging', 'Plastic'),
+  ('Mixed Metals', 'kg', 5.00, true, 'Mixed metal scrap and items', 'Metal')
+ON CONFLICT (name) DO NOTHING;
+
+-- Material rates seeded
+
+-- ============================================================================
+-- IMPACT CALCULATION FUNCTIONS
+-- ============================================================================
+-- Creating impact calculation functions...
+
+-- Function to calculate environmental impact for a given weight and material
+CREATE OR REPLACE FUNCTION calculate_environmental_impact(
+  material_name text,
+  weight_kg numeric
+) RETURNS json AS $$
+DECLARE
+  impact json;
+BEGIN
+  -- Environmental impact factors (kg CO2 saved per kg of material)
+  -- These are approximate values based on recycling industry standards
+  CASE material_name
+    WHEN 'PET' THEN
+      impact := json_build_object(
+        'co2_saved', weight_kg * 2.5,  -- 2.5 kg CO2 saved per kg PET
+        'water_saved', weight_kg * 25,  -- 25L water saved per kg PET
+        'landfill_saved', weight_kg * 0.8,  -- 0.8 kg landfill saved per kg PET
+        'trees_equivalent', round((weight_kg * 2.5) / 22.0, 2)  -- 22 kg CO2 = 1 tree
+      );
+    WHEN 'Aluminium Cans' THEN
+      impact := json_build_object(
+        'co2_saved', weight_kg * 8.0,  -- 8.0 kg CO2 saved per kg aluminum
+        'water_saved', weight_kg * 40,  -- 40L water saved per kg aluminum
+        'landfill_saved', weight_kg * 0.9,  -- 0.9 kg landfill saved per kg aluminum
+        'trees_equivalent', round((weight_kg * 8.0) / 22.0, 2)
+      );
+    WHEN 'HDPE' THEN
+      impact := json_build_object(
+        'co2_saved', weight_kg * 2.0,  -- 2.0 kg CO2 saved per kg HDPE
+        'water_saved', weight_kg * 20,  -- 20L water saved per kg HDPE
+        'landfill_saved', weight_kg * 0.7,  -- 0.7 kg landfill saved per kg HDPE
+        'trees_equivalent', round((weight_kg * 2.0) / 22.0, 2)
+      );
+    WHEN 'Glass' THEN
+      impact := json_build_object(
+        'co2_saved', weight_kg * 1.2,  -- 1.2 kg CO2 saved per kg glass
+        'water_saved', weight_kg * 15,  -- 15L water saved per kg glass
+        'landfill_saved', weight_kg * 0.6,  -- 0.6 kg landfill saved per kg glass
+        'trees_equivalent', round((weight_kg * 1.2) / 22.0, 2)
+      );
+    WHEN 'Paper', 'Cardboard' THEN
+      impact := json_build_object(
+        'co2_saved', weight_kg * 1.8,  -- 1.8 kg CO2 saved per kg paper
+        'water_saved', weight_kg * 30,  -- 30L water saved per kg paper
+        'landfill_saved', weight_kg * 0.5,  -- 0.5 kg landfill saved per kg paper
+        'trees_equivalent', round((weight_kg * 1.8) / 22.0, 2)
+      );
+    ELSE
+      impact := json_build_object(
+        'co2_saved', weight_kg * 1.5,  -- Default impact
+        'water_saved', weight_kg * 20,
+        'landfill_saved', weight_kg * 0.6,
+        'trees_equivalent', round((weight_kg * 1.5) / 22.0, 2)
+      );
+  END CASE;
+  
+  RETURN impact;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Function to calculate points for a given weight and material
+CREATE OR REPLACE FUNCTION calculate_points(
+  material_name text,
+  weight_kg numeric
+) RETURNS integer AS $$
+DECLARE
+  base_points integer;
+BEGIN
+  -- Base points per kg for different materials
+  CASE material_name
+    WHEN 'PET' THEN base_points := 15;
+    WHEN 'Aluminium Cans' THEN base_points := 185;
+    WHEN 'HDPE' THEN base_points := 20;
+    WHEN 'Glass' THEN base_points := 12;
+    WHEN 'Paper' THEN base_points := 8;
+    WHEN 'Cardboard' THEN base_points := 6;
+    ELSE base_points := 10;
+  END CASE;
+  
+  RETURN round(weight_kg * base_points);
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Function to calculate fund allocation (Green Scholar Fund)
+CREATE OR REPLACE FUNCTION calculate_fund_allocation(
+  total_value numeric
+) RETURNS json AS $$
+DECLARE
+  fund_allocation json;
+BEGIN
+  -- Allocate 70% to Green Scholar Fund, 30% to user wallet
+  fund_allocation := json_build_object(
+    'green_scholar_fund', round(total_value * 0.7, 2),
+    'user_wallet', round(total_value * 0.3, 2),
+    'total_value', total_value
+  );
+  
+  RETURN fund_allocation;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Impact calculation functions created
+
+-- ============================================================================
+-- COMPREHENSIVE DASHBOARD VIEWS
+-- ============================================================================
+-- Creating comprehensive dashboard views...
+
+-- ============================================================================
+-- CUSTOMER DASHBOARD VIEW
+-- ============================================================================
+CREATE OR REPLACE VIEW public.customer_dashboard_view AS
+SELECT
+  p.id AS pickup_id,
+  p.status,
+  p.started_at,
+  p.submitted_at,
+  p.total_kg,
+  p.total_value,
+  -- Environmental impact
+  (SELECT json_build_object(
+    'co2_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'co2_saved' AS numeric)),
+    'water_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'water_saved' AS numeric)),
+    'landfill_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'landfill_saved' AS numeric)),
+    'trees_equivalent', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'trees_equivalent' AS numeric))
+  ) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS environmental_impact,
+  -- Fund allocation
+  calculate_fund_allocation(p.total_value) AS fund_allocation,
+  -- Total points earned
+  (SELECT SUM(calculate_points(m.name, pi.kilograms)) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS total_points,
+  -- Material breakdown
+  (SELECT json_agg(json_build_object(
+    'material_name', m.name,
+    'weight_kg', pi.kilograms,
+    'rate_per_kg', m.rate_per_kg,
+    'value', pi.kilograms * m.rate_per_kg,
+    'points', calculate_points(m.name, pi.kilograms),
+    'impact', calculate_environmental_impact(m.name, pi.kilograms)
+  )) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS materials_breakdown,
+  -- Photo count
+  (SELECT COUNT(*) FROM pickup_photos ph WHERE ph.pickup_id = p.id) AS photo_count,
+  -- Collector info
+  co.full_name AS collector_name,
+  co.phone AS collector_phone,
+  -- Address info
+  a.line1, a.suburb, a.city, a.postal_code
+FROM pickups p
+LEFT JOIN profiles co ON co.id = p.collector_id
+LEFT JOIN addresses a ON a.id = p.address_id
+WHERE p.customer_id = auth.uid();
+
+-- ============================================================================
+-- COLLECTOR DASHBOARD VIEW
+-- ============================================================================
+CREATE OR REPLACE VIEW public.collector_dashboard_view AS
+SELECT
+  p.id AS pickup_id,
+  p.status,
+  p.started_at,
+  p.submitted_at,
+  p.total_kg,
+  p.total_value,
+  -- Customer info
+  cu.full_name AS customer_name,
+  cu.email AS customer_email,
+  cu.phone AS customer_phone,
+  -- Address info
+  a.line1, a.suburb, a.city, a.postal_code,
+  -- Environmental impact
+  (SELECT json_build_object(
+    'co2_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'co2_saved' AS numeric)),
+    'water_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'water_saved' AS numeric)),
+    'landfill_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'landfill_saved' AS numeric)),
+    'trees_equivalent', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'trees_equivalent' AS numeric))
+  ) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS environmental_impact,
+  -- Fund allocation
+  calculate_fund_allocation(p.total_value) AS fund_allocation,
+  -- Total points earned
+  (SELECT SUM(calculate_points(m.name, pi.kilograms)) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS total_points,
+  -- Material breakdown
+  (SELECT json_agg(json_build_object(
+    'material_name', m.name,
+    'weight_kg', pi.kilograms,
+    'rate_per_kg', m.rate_per_kg,
+    'value', pi.kilograms * m.rate_per_kg,
+    'points', calculate_points(m.name, pi.kilograms),
+    'impact', calculate_environmental_impact(m.name, pi.kilograms)
+  )) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS materials_breakdown,
+  -- Photo count
+  (SELECT COUNT(*) FROM pickup_photos ph WHERE ph.pickup_id = p.id) AS photo_count,
+  -- Payment info
+  pay.status AS payment_status,
+  pay.amount AS payment_amount,
+  pay.method AS payment_method
+FROM pickups p
+LEFT JOIN profiles cu ON cu.id = p.customer_id
+LEFT JOIN addresses a ON a.id = p.address_id
+LEFT JOIN payments pay ON pay.pickup_id = p.id
+WHERE p.collector_id = auth.uid();
+
+-- ============================================================================
+-- ADMIN DASHBOARD VIEW (Enhanced)
+-- ============================================================================
+CREATE OR REPLACE VIEW public.admin_dashboard_view AS
+SELECT
+  p.id AS pickup_id,
+  p.status,
+  p.started_at,
+  p.submitted_at,
+  p.total_kg,
+  p.total_value,
+  -- Customer info
+  cu.full_name AS customer_name,
+  cu.email AS customer_email,
+  cu.phone AS customer_phone,
+  -- Collector info
+  co.full_name AS collector_name,
+  co.phone AS collector_phone,
+  -- Address info
+  a.line1, a.suburb, a.city, a.postal_code,
+  -- Environmental impact
+  (SELECT json_build_object(
+    'co2_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'co2_saved' AS numeric)),
+    'water_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'water_saved' AS numeric)),
+    'landfill_saved', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'landfill_saved' AS numeric)),
+    'trees_equivalent', SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'trees_equivalent' AS numeric))
+  ) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS environmental_impact,
+  -- Fund allocation
+  calculate_fund_allocation(p.total_value) AS fund_allocation,
+  -- Total points earned
+  (SELECT SUM(calculate_points(m.name, pi.kilograms)) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS total_points,
+  -- Material breakdown
+  (SELECT json_agg(json_build_object(
+    'material_name', m.name,
+    'weight_kg', pi.kilograms,
+    'rate_per_kg', m.rate_per_kg,
+    'value', pi.kilograms * m.rate_per_kg,
+    'points', calculate_points(m.name, pi.kilograms),
+    'impact', calculate_environmental_impact(m.name, pi.kilograms)
+  )) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS materials_breakdown,
+  -- Photo count
+  (SELECT COUNT(*) FROM pickup_photos ph WHERE ph.pickup_id = p.id) AS photo_count,
+  -- Payment info
+  pay.status AS payment_status,
+  pay.amount AS payment_amount,
+  pay.method AS payment_method,
+  pay.processed_at AS payment_processed_at,
+  -- Approval info
+  p.approval_note
+FROM pickups p
+LEFT JOIN profiles cu ON cu.id = p.customer_id
+LEFT JOIN profiles co ON co.id = p.collector_id
+LEFT JOIN addresses a ON a.id = p.address_id
+LEFT JOIN payments pay ON pay.pickup_id = p.id;
+
+-- ============================================================================
+-- ANALYTICS VIEWS FOR DASHBOARDS
+-- ============================================================================
+-- Creating analytics views...
+
+-- Overall system impact view
+CREATE OR REPLACE VIEW public.system_impact_view AS
+SELECT
+  COUNT(DISTINCT p.id) AS total_pickups,
+  COUNT(DISTINCT p.customer_id) AS unique_customers,
+  COUNT(DISTINCT p.collector_id) AS unique_collectors,
+  SUM(p.total_kg) AS total_kg_collected,
+  SUM(p.total_value) AS total_value_generated,
+  -- Environmental impact totals
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'co2_saved' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_co2_saved,
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'water_saved' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_water_saved,
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'landfill_saved' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_landfill_saved,
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'trees_equivalent' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_trees_equivalent,
+  -- Fund allocation totals
+  SUM(CAST(calculate_fund_allocation(p.total_value)->>'green_scholar_fund' AS numeric)) AS total_green_scholar_fund,
+  SUM(CAST(calculate_fund_allocation(p.total_value)->>'user_wallet' AS numeric)) AS total_user_wallet_fund,
+  -- Points totals
+  SUM((SELECT SUM(calculate_points(m.name, pi.kilograms)) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id)) AS total_points_generated,
+  -- Status breakdown
+  COUNT(CASE WHEN p.status = 'submitted' THEN 1 END) AS pending_pickups,
+  COUNT(CASE WHEN p.status = 'approved' THEN 1 END) AS approved_pickups,
+  COUNT(CASE WHEN p.status = 'rejected' THEN 1 END) AS rejected_pickups
+FROM pickups p;
+
+-- Material performance view
+CREATE OR REPLACE VIEW public.material_performance_view AS
+SELECT
+  m.name AS material_name,
+  m.category,
+  m.rate_per_kg,
+  COUNT(DISTINCT pi.pickup_id) AS pickup_count,
+  SUM(pi.kilograms) AS total_kg_collected,
+  SUM(pi.kilograms * m.rate_per_kg) AS total_value_generated,
+  AVG(pi.kilograms) AS avg_kg_per_pickup,
+  -- Environmental impact
+  SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'co2_saved' AS numeric)) AS total_co2_saved,
+  SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'water_saved' AS numeric)) AS total_water_saved,
+  SUM(CAST(calculate_environmental_impact(m.name, pi.kilograms)->>'landfill_saved' AS numeric)) AS total_landfill_saved,
+  -- Points generated
+  SUM(calculate_points(m.name, pi.kilograms)) AS total_points_generated
+FROM materials m
+LEFT JOIN pickup_items pi ON pi.material_id = m.id
+LEFT JOIN pickups p ON p.id = pi.pickup_id
+WHERE m.is_active = true
+GROUP BY m.id, m.name, m.category, m.rate_per_kg
+ORDER BY total_kg_collected DESC;
+
+-- Collector performance view
+CREATE OR REPLACE VIEW public.collector_performance_view AS
+SELECT
+  co.id AS collector_id,
+  co.full_name AS collector_name,
+  co.email AS collector_email,
+  co.phone AS collector_phone,
+  COUNT(DISTINCT p.id) AS total_pickups,
+  SUM(p.total_kg) AS total_kg_collected,
+  SUM(p.total_value) AS total_value_generated,
+  -- Environmental impact
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'co2_saved' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_co2_saved,
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'water_saved' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_water_saved,
+  -- Points generated
+  SUM((SELECT SUM(calculate_points(m.name, pi.kilograms)) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id)) AS total_points_generated,
+  -- Status breakdown
+  COUNT(CASE WHEN p.status = 'submitted' THEN 1 END) AS pending_pickups,
+  COUNT(CASE WHEN p.status = 'approved' THEN 1 END) AS approved_pickups,
+  COUNT(CASE WHEN p.status = 'rejected' THEN 1 END) AS rejected_pickups,
+  -- Recent activity
+  MAX(p.submitted_at) AS last_pickup_date
+FROM profiles co
+LEFT JOIN pickups p ON p.collector_id = co.id
+WHERE co.role = 'collector'
+GROUP BY co.id, co.full_name, co.email, co.phone
+ORDER BY total_kg_collected DESC;
+
+-- Customer performance view
+CREATE OR REPLACE VIEW public.customer_performance_view AS
+SELECT
+  cu.id AS customer_id,
+  cu.full_name AS customer_name,
+  cu.email AS customer_email,
+  cu.phone AS customer_phone,
+  COUNT(DISTINCT p.id) AS total_pickups,
+  SUM(p.total_kg) AS total_kg_recycled,
+  SUM(p.total_value) AS total_value_earned,
+  -- Environmental impact
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'co2_saved' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_co2_saved,
+  SUM(CAST((SELECT calculate_environmental_impact(m.name, pi.kilograms)->>'water_saved' FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id) AS numeric)) AS total_water_saved,
+  -- Points earned
+  SUM((SELECT SUM(calculate_points(m.name, pi.kilograms)) FROM pickup_items pi JOIN materials m ON pi.material_id = m.id WHERE pi.pickup_id = p.id)) AS total_points_earned,
+  -- Fund allocation
+  SUM(CAST(calculate_fund_allocation(p.total_value)->>'green_scholar_fund' AS numeric)) AS total_green_scholar_contribution,
+  SUM(CAST(calculate_fund_allocation(p.total_value)->>'user_wallet' AS numeric)) AS total_wallet_balance,
+  -- Recent activity
+  MAX(p.submitted_at) AS last_recycling_date
+FROM profiles cu
+LEFT JOIN pickups p ON p.customer_id = cu.id
+WHERE cu.role = 'customer'
+GROUP BY cu.id, cu.full_name, cu.email, cu.phone
+ORDER BY total_kg_recycled DESC;
+
+-- Analytics views created
 
 -- ============================================================================
 -- INSTALLATION COMPLETE
 -- ============================================================================
-\echo ''
-\echo '🎉 DATABASE SCHEMA INSTALLATION COMPLETE! 🎉'
-\echo ''
-\echo 'Your recycling management system is now ready with:'
-\echo '✅ User profiles with role-based access'
-\echo '✅ Address management with geolocation'
-\echo '✅ Materials with dynamic pricing'
-\echo '✅ Pickup workflow management'
-\echo '✅ Material tracking with contamination'
-\echo '✅ Photo management with GPS'
-\echo '✅ Payment processing automation'
-\echo ''
-\echo 'Next steps:'
-\echo '1. Set up Supabase authentication'
-\echo '2. Configure your environment variables'
-\echo '3. Test the system with your application'
-\echo ''
-\echo 'For detailed setup instructions, see SUPABASE_SETUP.md'
+-- DATABASE SCHEMA INSTALLATION COMPLETE!
+
+-- Your recycling management system is now ready with:
+-- ✅ User profiles with role-based access
+-- ✅ Address management with geolocation
+-- ✅ Materials with dynamic pricing
+-- ✅ Pickup workflow management
+-- ✅ Material tracking with contamination
+-- ✅ Photo management with GPS
+-- ✅ Payment processing automation
+
+-- Next steps:
+-- 1. Set up Supabase authentication
+-- 2. Configure your environment variables
+-- 3. Test the system with your application
+
+-- For detailed setup instructions, see SUPABASE_SETUP.md

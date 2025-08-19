@@ -9,7 +9,14 @@ import type {
   Payment,
   PickupWithDetails,
   PickupItemWithMaterial,
-  ProfileWithAddresses
+  ProfileWithAddresses,
+  CustomerDashboardView,
+  CollectorDashboardView,
+  AdminDashboardView,
+  SystemImpactView,
+  MaterialPerformanceView,
+  CollectorPerformanceView,
+  CustomerPerformanceView
 } from './supabase'
 
 // Profile Services
@@ -420,6 +427,145 @@ export const paymentServices = {
     } catch (error) {
       console.error('Error fetching payment:', error)
       return null
+    }
+  }
+}
+
+// Dashboard Services - NEW! Using the installed schema views
+export const dashboardServices = {
+  // Get collector dashboard data
+  async getCollectorDashboard(): Promise<CollectorDashboardView[]> {
+    try {
+      const { data, error } = await supabase
+        .from('collector_dashboard_view')
+        .select('*')
+        .order('started_at', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching collector dashboard:', error)
+      return []
+    }
+  },
+
+  // Get admin dashboard data
+  async getAdminDashboard(): Promise<AdminDashboardView[]> {
+    try {
+      const { data, error } = await supabase
+        .from('admin_dashboard_view')
+        .select('*')
+        .order('started_at', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching admin dashboard:', error)
+      return []
+    }
+  }
+}
+
+// Analytics Services - NEW! Using the installed schema views
+export const analyticsServices = {
+  // Get system impact overview
+  async getSystemImpact(): Promise<SystemImpactView | null> {
+    try {
+      const { data, error } = await supabase
+        .from('system_impact_view')
+        .select('*')
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error fetching system impact:', error)
+      return null
+    }
+  },
+
+  // Get material performance analytics
+  async getMaterialPerformance(): Promise<MaterialPerformanceView[]> {
+    try {
+      const { data, error } = await supabase
+        .from('material_performance_view')
+        .select('*')
+        .order('total_kg_collected', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching material performance:', error)
+      return []
+    }
+  },
+
+  // Get collector performance analytics
+  async getCollectorPerformance(): Promise<CollectorPerformanceView[]> {
+    try {
+      const { data, error } = await supabase
+        .from('collector_performance_view')
+        .select('*')
+        .order('total_kg_collected', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching collector performance:', error)
+      return []
+    }
+  },
+
+}
+
+// Customer Services
+export const customerServices = {
+  // Get customer profile
+  async getCustomerProfile(profileId: string): Promise<Profile | null> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', profileId)
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error fetching customer profile:', error)
+      return null
+    }
+  },
+
+  // Get customer dashboard data
+  async getCustomerDashboard(): Promise<CustomerDashboardView[]> {
+    try {
+      const { data, error } = await supabase
+        .from('customer_dashboard_view')
+        .select('*')
+        .order('total_kg_recycled', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching customer dashboard:', error)
+      return []
+    }
+  },
+
+  // Get customer performance analytics
+  async getCustomerPerformance(): Promise<CustomerPerformanceView[]> {
+    try {
+      const { data, error } = await supabase
+        .from('customer_performance_view')
+        .select('*')
+        .order('total_kg_recycled', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching customer performance:', error)
+      return []
     }
   }
 }

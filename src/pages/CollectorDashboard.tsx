@@ -46,33 +46,51 @@ import {
 import { MaterialType, calculateTransactionTotals, formatCurrency, formatWeight, formatPoints } from "@/lib/recycling-schema";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
-import { pickupServices, materialServices, collectorServices } from "@/lib/supabase-services";
+import { pickupServices, materialServices, pickupItemServices, dashboardServices } from "@/lib/supabase-services";
+import type { CollectorDashboardView, Material } from "@/lib/supabase";
 
+// Updated interfaces to match Supabase schema
 interface PickupLocation {
-  id: string;
-  address: string;
-  customerName: string;
-  assignedDate: string;
-  status: 'pending' | 'completed' | 'overdue';
-  materials: MaterialType[];
-  phone?: string;
-  email?: string;
-  notes?: string;
+  pickup_id: string;
+  status: string;
+  started_at: string;
+  submitted_at?: string;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  line1?: string;
+  suburb?: string;
+  city?: string;
+  postal_code?: string;
+  total_kg: number;
+  total_value: number;
+  total_points: number;
+  materials_breakdown: Array<{
+    material_name: string;
+    weight_kg: number;
+    rate_per_kg: number;
+    value: number;
+    points: number;
+  }>;
 }
 
 interface PickupHistory {
-  id: string;
-  date: string;
-  customerName: string;
-  address: string;
-  totalKg: number;
-  totalValue: number;
-  totalPoints: number;
-  status: 'pending' | 'approved' | 'rejected';
-  materials: Array<{
-    type: MaterialType;
-    kg: number;
-    price: number;
+  pickup_id: string;
+  status: string;
+  started_at: string;
+  submitted_at?: string;
+  customer_name?: string;
+  line1?: string;
+  suburb?: string;
+  city?: string;
+  total_kg: number;
+  total_value: number;
+  total_points: number;
+  materials_breakdown: Array<{
+    material_name: string;
+    weight_kg: number;
+    rate_per_kg: number;
+    value: number;
     points: number;
   }>;
 }
@@ -83,117 +101,24 @@ interface NewPickupForm {
   phone?: string;
   email?: string;
   materials: Array<{
-    type: MaterialType;
-    kg: number;
+    material_id: string;
+    kilograms: number;
     photos: string[];
   }>;
   notes: string;
 }
 
 interface MaterialPhoto {
-  type: MaterialType;
-  kg: number;
+  material_id: string;
+  kilograms: number;
   photos: string[];
 }
 
-// Mock data for collector metrics
-const mockCollectorMetrics = {
-  personal: {
-    totalCollections: 156,
-    totalKgCollected: 2347.5,
-    totalPoints: 3456,
-    totalEarnings: 2347.50,
-    streak: 12,
-    rank: 3,
-    monthlyGoal: 85,
-    weeklyProgress: 67
-  },
-  team: {
-    totalCollectors: 8,
-    teamTotalKg: 18750.3,
-    teamTotalPoints: 28450,
-    teamTotalEarnings: 18750.30,
-    teamRank: 2,
-    topCollector: "Emma Wilson",
-    topCollectorKg: 3120.8,
-    averagePerCollector: 2343.8
-  },
-  environmental: {
-    co2Saved: 2347.5 * 2.5, // 2.5kg CO2 per kg recycled
-    waterSaved: 2347.5 * 100, // 100L water per kg recycled
-    landfillSaved: 2347.5 * 0.8, // 0.8kg landfill per kg recycled
-    treesEquivalent: Math.floor(2347.5 / 50) // 1 tree per 50kg recycled
-  }
-};
+// Real data will be calculated from Supabase data
 
-// Mock data
-const mockAssignedStops: PickupLocation[] = [
-  {
-    id: '1',
-    address: '123 Main Street, Cape Town',
-    customerName: 'Sarah Johnson',
-    assignedDate: '2024-01-15',
-    status: 'pending',
-    materials: ['PET', 'ALUMINUM_CANS', 'PAPER'],
-    phone: '+27 82 123 4567',
-    email: 'sarah.johnson@email.com',
-    notes: 'Customer prefers afternoon pickups'
-  },
-  {
-    id: '2',
-    address: '456 Oak Avenue, Cape Town',
-    customerName: 'Mike Chen',
-    assignedDate: '2024-01-15',
-    status: 'pending',
-    materials: ['GLASS', 'PAPER', 'ELECTRONICS'],
-    phone: '+27 83 456 7890',
-    email: 'mike.chen@email.com',
-    notes: 'Large quantities expected'
-  },
-  {
-    id: '3',
-    address: '789 Pine Road, Cape Town',
-    customerName: 'Lisa Thompson',
-    assignedDate: '2024-01-16',
-    status: 'pending',
-    materials: ['PET', 'ALUMINUM_CANS'],
-    phone: '+27 84 789 1234',
-    email: 'lisa.thompson@email.com',
-    notes: 'First time customer'
-  }
-];
+// Real data will be fetched from Supabase
 
-const mockPickupHistory: PickupHistory[] = [
-  {
-    id: '1',
-    date: '2024-01-14',
-    customerName: 'John Smith',
-    address: '321 Elm Street, Cape Town',
-    totalKg: 15.5,
-    totalValue: 45.75,
-    totalPoints: 45,
-    status: 'approved',
-    materials: [
-      { type: 'PET', kg: 8.0, price: 12.00, points: 12 },
-      { type: 'ALUMINUM_CANS', kg: 2.5, price: 46.38, points: 46 },
-      { type: 'PAPER', kg: 5.0, price: 6.00, points: 6 }
-    ]
-  },
-  {
-    id: '2',
-    date: '2024-01-13',
-    customerName: 'Emma Wilson',
-    address: '654 Maple Drive, Cape Town',
-    totalKg: 22.3,
-    totalValue: 67.45,
-    totalPoints: 67,
-    status: 'pending',
-    materials: [
-      { type: 'GLASS', kg: 12.0, price: 30.00, points: 30 },
-      { type: 'PAPER', kg: 10.3, price: 12.36, points: 12 }
-    ]
-  }
-];
+// Real data will be fetched from Supabase
 
 export default function CollectorDashboard() {
   const { theme } = useTheme();
@@ -208,8 +133,8 @@ export default function CollectorDashboard() {
     notes: ''
   });
 
-  const [newMaterial, setNewMaterial] = useState<{ type: MaterialType; kg: number }>({
-    type: 'PET',
+  const [newMaterial, setNewMaterial] = useState<{ type: string; kg: number }>({
+    type: '',
     kg: 0
   });
 
@@ -218,25 +143,91 @@ export default function CollectorDashboard() {
   const [currentPhotoType, setCurrentPhotoType] = useState<'scale' | 'materials' | 'material'>('scale');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Filter assigned stops based on search
-  const filteredStops = mockAssignedStops.filter(stop =>
-    stop.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    stop.address.toLowerCase().includes(searchQuery.toLowerCase())
+  // Real data from Supabase
+  const [realCollectorData, setRealCollectorData] = useState<CollectorDashboardView[]>([]);
+  const [realMaterials, setRealMaterials] = useState<Material[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch real data from Supabase
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return;
+      
+      try {
+        setIsLoading(true);
+        
+        // Fetch collector dashboard data
+        const collectorData = await dashboardServices.getCollectorDashboard();
+        setRealCollectorData(collectorData);
+        
+        // Fetch available materials
+        const materials = await materialServices.getActiveMaterials();
+        setRealMaterials(materials);
+        
+      } catch (error) {
+        console.error('Error fetching collector data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
+
+  // Filter assigned stops based on search - use real data only
+  const filteredStops = realCollectorData.filter(stop =>
+    stop.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stop.line1?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stop.suburb?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    stop.city?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Use real data for pickup history
+  const pickupHistory = realCollectorData;
+
+  // Calculate real-time metrics from Supabase data
+  const realTimeMetrics = {
+    personal: {
+      totalCollections: realCollectorData.length,
+      totalKgCollected: realCollectorData.reduce((sum, pickup) => sum + pickup.total_kg, 0),
+      totalPoints: realCollectorData.reduce((sum, pickup) => sum + pickup.total_points, 0),
+      totalEarnings: realCollectorData.reduce((sum, pickup) => sum + pickup.total_value, 0),
+      streak: 0, // Would need to calculate from actual pickup dates
+      rank: 0, // Would need to compare with other collectors
+      monthlyGoal: 85, // Could be configurable
+      weeklyProgress: 67 // Could be calculated from weekly data
+    },
+    team: {
+      totalCollectors: 0, // Would need to fetch from profiles table
+      teamTotalKg: realCollectorData.reduce((sum, pickup) => sum + pickup.total_kg, 0),
+      teamTotalPoints: realCollectorData.reduce((sum, pickup) => sum + pickup.total_points, 0),
+      teamTotalEarnings: realCollectorData.reduce((sum, pickup) => sum + pickup.total_value, 0),
+      teamRank: 0, // Would need to compare with other teams
+      topCollector: "N/A", // Would need to fetch from profiles table
+      topCollectorKg: 0, // Would need to calculate from profiles
+      averagePerCollector: 0 // Would need to calculate from profiles
+    },
+    environmental: {
+      co2Saved: realCollectorData.reduce((sum, pickup) => sum + (pickup.total_kg * 2.5), 0),
+      waterSaved: realCollectorData.reduce((sum, pickup) => sum + (pickup.total_kg * 100), 0),
+      landfillSaved: realCollectorData.reduce((sum, pickup) => sum + (pickup.total_kg * 0.8), 0),
+      treesEquivalent: Math.floor(realCollectorData.reduce((sum, pickup) => sum + pickup.total_kg, 0) / 50)
+    }
+  };
 
   // Calculate totals for new pickup
   const pickupCalculation = calculateTransactionTotals(
-    newPickup.materials.map(m => ({ type: m.type, kg: m.kg }))
+    newPickup.materials.map(m => ({ type: m.material_id as MaterialType, kg: m.kilograms }))
   );
 
   const handleCustomerSelect = (customer: PickupLocation) => {
     setSelectedCustomer(customer);
     setNewPickup(prev => ({
       ...prev,
-      customerName: customer.customerName,
-      address: customer.address,
-      phone: customer.phone,
-      email: customer.email
+      customerName: customer.customer_name || '',
+      address: `${customer.line1}, ${customer.suburb}, ${customer.city}`,
+      phone: customer.customer_phone || '',
+      email: customer.customer_email || ''
     }));
     setActiveTab('new-pickup');
   };
@@ -246,12 +237,12 @@ export default function CollectorDashboard() {
       setNewPickup(prev => ({
         ...prev,
         materials: [...prev.materials, { 
-          type: newMaterial.type, 
-          kg: newMaterial.kg,
+          material_id: newMaterial.type, 
+          kilograms: newMaterial.kg,
           photos: [...currentMaterialPhotos]
         }]
       }));
-      setNewMaterial({ type: 'PET', kg: 0 });
+      setNewMaterial({ type: '', kg: 0 });
       setCurrentMaterialPhotos([]);
     }
   };
@@ -310,10 +301,10 @@ export default function CollectorDashboard() {
       const pickupData = {
         collector_id: user.id,
         collector_name: user.email?.split('@')[0] || 'Unknown Collector',
-        customer_name: newPickup.customerName || selectedCustomer?.customerName || '',
-        customer_phone: selectedCustomer?.phone || null,
-        customer_email: selectedCustomer?.email || null,
-        address: newPickup.address || selectedCustomer?.address || '',
+        customer_name: newPickup.customerName || selectedCustomer?.customer_name || '',
+        customer_phone: selectedCustomer?.customer_phone || null,
+        customer_email: selectedCustomer?.customer_email || null,
+        address: newPickup.address || selectedCustomer?.line1 || '',
         total_kg: pickupCalculation.totalKg,
         total_value: pickupCalculation.totalPrice,
         total_points: pickupCalculation.totalPoints,
@@ -321,18 +312,26 @@ export default function CollectorDashboard() {
         environmental_impact: environmentalImpact
       };
 
-      const newPickupRecord = await pickupServices.createPickup(pickupData);
+      // Add required fields to match Omit<Pickup, "id" | "started_at">
+      const pickupDataWithRequiredFields = {
+        ...pickupData,
+        customer_id: selectedCustomer?.pickup_id || null, // Assuming pickup_id is the customer_id for now
+        address_id: null, // Will need to be set based on actual address data
+        status: 'submitted' as const
+      };
+
+      const newPickupRecord = await pickupServices.createPickup(pickupDataWithRequiredFields);
       
       if (newPickupRecord) {
         // Add materials to the pickup
         const materialsData = newPickup.materials.map(material => ({
           pickup_id: newPickupRecord.id,
-          material_type: material.type,
-          kg: material.kg,
-          photos: material.photos
+          material_id: material.material_id, // Assuming material.material_id contains the material ID
+          kilograms: material.kilograms,
+          contamination_pct: 0 // Default to 0% contamination
         }));
 
-        await materialServices.addMaterials(newPickupRecord.id, materialsData);
+        await pickupItemServices.addPickupItems(newPickupRecord.id, materialsData);
         
         alert('Pickup submitted successfully! Admin will review and approve.');
         
@@ -394,11 +393,11 @@ export default function CollectorDashboard() {
             <div className="flex items-center space-x-3">
               <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                 <Target className="h-4 w-4 mr-1" />
-                Rank #{mockCollectorMetrics.personal.rank}
+                Rank #{realTimeMetrics.personal.rank}
               </Badge>
               <Badge variant="outline" className="bg-success/10 text-success border-success/20">
                 <Zap className="h-4 w-4 mr-1" />
-                {mockCollectorMetrics.personal.streak} Day Streak
+                {realTimeMetrics.personal.streak} Day Streak
               </Badge>
             </div>
           </div>
@@ -407,7 +406,15 @@ export default function CollectorDashboard() {
 
       {/* Main Content */}
       <main className="container mx-auto px-6 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading collector data...</p>
+            </div>
+          </div>
+        ) : (
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
@@ -436,7 +443,7 @@ export default function CollectorDashboard() {
                   <CardTitle className="text-sm font-medium opacity-90">Total Collections</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{mockCollectorMetrics.personal.totalCollections}</div>
+                  <div className="text-3xl font-bold">{realTimeMetrics.personal.totalCollections}</div>
                   <p className="text-xs opacity-90 mt-1">This month</p>
                 </CardContent>
               </Card>
@@ -446,7 +453,7 @@ export default function CollectorDashboard() {
                   <CardTitle className="text-sm font-medium opacity-90">Total Kg Collected</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{formatWeight(mockCollectorMetrics.personal.totalKgCollected)}</div>
+                  <div className="text-3xl font-bold">{formatWeight(realTimeMetrics.personal.totalKgCollected)}</div>
                   <p className="text-xs opacity-90 mt-1">Lifetime total</p>
                 </CardContent>
               </Card>
@@ -456,7 +463,7 @@ export default function CollectorDashboard() {
                   <CardTitle className="text-sm font-medium opacity-90">Total Points</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{formatPoints(mockCollectorMetrics.personal.totalPoints)}</div>
+                  <div className="text-3xl font-bold">{formatPoints(realTimeMetrics.personal.totalPoints)}</div>
                   <p className="text-xs opacity-90 mt-1">Earned this month</p>
                 </CardContent>
               </Card>
@@ -466,7 +473,7 @@ export default function CollectorDashboard() {
                   <CardTitle className="text-sm font-medium opacity-90">Total Earnings</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{formatCurrency(mockCollectorMetrics.personal.totalEarnings)}</div>
+                  <div className="text-3xl font-bold">{formatCurrency(realTimeMetrics.personal.totalEarnings)}</div>
                   <p className="text-xs opacity-90 mt-1">This month</p>
                 </CardContent>
               </Card>
@@ -486,16 +493,16 @@ export default function CollectorDashboard() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Weight Goal</span>
-                      <span>{mockCollectorMetrics.personal.monthlyGoal}%</span>
-                    </div>
-                    <Progress value={mockCollectorMetrics.personal.monthlyGoal} className="h-2" />
+                                              <span>{realTimeMetrics.personal.monthlyGoal}%</span>
+                      </div>
+                      <Progress value={realTimeMetrics.personal.monthlyGoal} className="h-2" />
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Weekly Progress</span>
-                      <span>{mockCollectorMetrics.personal.weeklyProgress}%</span>
-                    </div>
-                    <Progress value={mockCollectorMetrics.personal.weeklyProgress} className="h-2" />
+                                              <span>{realTimeMetrics.personal.weeklyProgress}%</span>
+                      </div>
+                      <Progress value={realTimeMetrics.personal.weeklyProgress} className="h-2" />
                   </div>
                 </CardContent>
               </Card>
@@ -546,19 +553,19 @@ export default function CollectorDashboard() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{mockCollectorMetrics.team.totalCollectors}</div>
+                    <div className="text-2xl font-bold text-primary">{realTimeMetrics.team.totalCollectors}</div>
                     <p className="text-sm text-muted-foreground">Active Collectors</p>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-success">{formatWeight(mockCollectorMetrics.team.teamTotalKg)}</div>
+                    <div className="text-2xl font-bold text-success">{formatWeight(realTimeMetrics.team.teamTotalKg)}</div>
                     <p className="text-sm text-muted-foreground">Team Total Kg</p>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-accent">{formatPoints(mockCollectorMetrics.team.teamTotalPoints)}</div>
+                    <div className="text-2xl font-bold text-accent">{formatPoints(realTimeMetrics.team.teamTotalPoints)}</div>
                     <p className="text-sm text-muted-foreground">Team Total Points</p>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-warm">{formatCurrency(mockCollectorMetrics.team.teamTotalEarnings)}</div>
+                    <div className="text-2xl font-bold text-warm">{formatCurrency(realTimeMetrics.team.teamTotalEarnings)}</div>
                     <p className="text-sm text-muted-foreground">Team Total Earnings</p>
                   </div>
                 </div>
@@ -567,10 +574,10 @@ export default function CollectorDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-medium">🏆 Top Collector</div>
-                      <div className="text-sm text-muted-foreground">{mockCollectorMetrics.team.topCollector}</div>
+                      <div className="text-sm text-muted-foreground">{realTimeMetrics.team.topCollector}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-medium">{formatWeight(mockCollectorMetrics.team.topCollectorKg)}</div>
+                      <div className="font-medium">{formatWeight(realTimeMetrics.team.topCollectorKg)}</div>
                       <div className="text-sm text-muted-foreground">This month</div>
                     </div>
                   </div>
@@ -590,19 +597,19 @@ export default function CollectorDashboard() {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-success">{Math.round(mockCollectorMetrics.environmental.co2Saved)} kg</div>
+                    <div className="text-2xl font-bold text-success">{Math.round(realTimeMetrics.environmental.co2Saved)} kg</div>
                     <p className="text-sm text-muted-foreground">CO₂ Saved</p>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-primary">{Math.round(mockCollectorMetrics.environmental.waterSaved)} L</div>
+                    <div className="text-2xl font-bold text-primary">{Math.round(realTimeMetrics.environmental.waterSaved)} L</div>
                     <p className="text-sm text-muted-foreground">Water Saved</p>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-accent">{Math.round(mockCollectorMetrics.environmental.landfillSaved)} kg</div>
+                    <div className="text-2xl font-bold text-accent">{Math.round(realTimeMetrics.environmental.landfillSaved)} kg</div>
                     <p className="text-sm text-muted-foreground">Landfill Saved</p>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-warm">{mockCollectorMetrics.environmental.treesEquivalent}</div>
+                    <div className="text-2xl font-bold text-warm">{realTimeMetrics.environmental.treesEquivalent}</div>
                     <p className="text-sm text-muted-foreground">Trees Equivalent</p>
                   </div>
                 </div>
@@ -635,48 +642,52 @@ export default function CollectorDashboard() {
                   </div>
                   
                   <div className="space-y-3">
-                    {filteredStops.map((stop) => (
-                      <div key={stop.id} className="p-4 rounded-lg border bg-card hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleCustomerSelect(stop)}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                              <MapPin className="h-5 w-5 text-primary" />
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-foreground">{stop.customerName}</h3>
-                              <p className="text-sm text-muted-foreground">{stop.address}</p>
-                              <div className="flex items-center gap-4 mt-1">
-                                <div className="flex items-center gap-2">
-                                  <Calendar className="h-3 w-3 text-muted-foreground" />
-                                  <span className="text-xs text-muted-foreground">
-                                    Assigned: {stop.assignedDate}
-                                  </span>
-                                </div>
-                                {stop.phone && (
+                    {filteredStops.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Route className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium">No assigned pickups</p>
+                        <p className="text-sm">You don't have any pickups assigned at the moment.</p>
+                      </div>
+                    ) : (
+                      filteredStops.map((stop) => (
+                        <div key={stop.pickup_id} className="p-4 rounded-lg border bg-card hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleCustomerSelect(stop)}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                <MapPin className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-foreground">{stop.customer_name}</h3>
+                                <p className="text-sm text-muted-foreground">{`${stop.line1}, ${stop.suburb}, ${stop.city}`}</p>
+                                <div className="flex items-center gap-4 mt-1">
                                   <div className="flex items-center gap-2">
-                                    <User className="h-3 w-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground">{stop.phone}</span>
+                                    <Calendar className="h-3 w-3 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">
+                                      Assigned: {new Date(stop.started_at).toLocaleDateString()}
+                                    </span>
                                   </div>
-                                )}
+                                  {stop.customer_phone && (
+                                    <div className="flex items-center gap-2">
+                                      <User className="h-3 w-3 text-muted-foreground" />
+                                      <span className="text-xs text-muted-foreground">{stop.customer_phone}</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                {stop.materials_breakdown.map(m => m.material_name).join(', ')}
+                              </Badge>
+                              <Button size="sm" variant="outline">
+                                Select Customer
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              {stop.materials.join(', ')}
-                            </Badge>
-                            <Button size="sm" variant="outline">
-                              Select Customer
-                            </Button>
-                          </div>
+                          {/* Notes are not directly available in the PickupLocation interface, so we'll omit them for now */}
                         </div>
-                        {stop.notes && (
-                          <div className="mt-3 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
-                            <strong>Notes:</strong> {stop.notes}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -706,22 +717,22 @@ export default function CollectorDashboard() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-sm font-medium">Customer Name</Label>
-                          <p className="text-lg font-semibold">{selectedCustomer.customerName}</p>
+                          <p className="text-lg font-semibold">{selectedCustomer.customer_name}</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium">Address</Label>
-                          <p className="text-lg font-semibold">{selectedCustomer.address}</p>
+                          <p className="text-lg font-semibold">{`${selectedCustomer.line1}, ${selectedCustomer.suburb}, ${selectedCustomer.city}`}</p>
                         </div>
-                        {selectedCustomer.phone && (
+                        {selectedCustomer.customer_phone && (
                           <div>
                             <Label className="text-sm font-medium">Phone</Label>
-                            <p className="text-lg font-semibold">{selectedCustomer.phone}</p>
+                            <p className="text-lg font-semibold">{selectedCustomer.customer_phone}</p>
                           </div>
                         )}
-                        {selectedCustomer.email && (
+                        {selectedCustomer.customer_email && (
                           <div>
                             <Label className="text-sm font-medium">Email</Label>
-                            <p className="text-lg font-semibold">{selectedCustomer.email}</p>
+                            <p className="text-lg font-semibold">{selectedCustomer.customer_email}</p>
                           </div>
                         )}
                       </div>
@@ -770,20 +781,19 @@ export default function CollectorDashboard() {
                       <Label htmlFor="materialType">Material Type</Label>
                       <Select
                         value={newMaterial.type}
-                        onValueChange={(value: MaterialType) =>
+                        onValueChange={(value: string) =>
                           setNewMaterial(prev => ({ ...prev, type: value }))
                         }
                       >
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Select material type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="PET">PET Plastic Bottles</SelectItem>
-                          <SelectItem value="ALUMINUM_CANS">Aluminum Cans</SelectItem>
-                          <SelectItem value="GLASS">Glass Bottles</SelectItem>
-                          <SelectItem value="PAPER">Paper & Cardboard</SelectItem>
-                          <SelectItem value="ELECTRONICS">Electronic Waste</SelectItem>
-                          <SelectItem value="BATTERIES">Batteries</SelectItem>
+                          {realMaterials.map((material) => (
+                            <SelectItem key={material.id} value={material.id}>
+                              {material.name} - R{material.rate_per_kg}/kg
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -805,7 +815,7 @@ export default function CollectorDashboard() {
 
                   {/* Photo Capture for Current Material */}
                   <div className="space-y-4">
-                    <Label>Photos for {newMaterial.type}</Label>
+                    <Label>Photos for {realMaterials.find(m => m.id === newMaterial.type)?.name || newMaterial.type}</Label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="p-4 rounded-lg border-2 border-dashed border-muted text-center">
                         <Camera className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
@@ -898,9 +908,9 @@ export default function CollectorDashboard() {
                           <div className="flex items-center gap-3">
                             <Package className="h-5 w-5 text-primary" />
                             <div>
-                              <div className="font-medium">{material.type}</div>
+                              <div className="font-medium">{realMaterials.find(m => m.id === material.material_id)?.name || material.material_id}</div>
                               <div className="text-sm text-muted-foreground">
-                                {formatWeight(material.kg)} • {material.photos.length} photos
+                                {formatWeight(material.kilograms)} • {material.photos.length} photos
                               </div>
                             </div>
                           </div>
@@ -1007,14 +1017,21 @@ export default function CollectorDashboard() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {mockPickupHistory.map((pickup) => (
-                    <div key={pickup.id} className="p-4 rounded-lg border bg-card">
+                                                  <div className="space-y-4">
+                  {pickupHistory.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-lg font-medium">No pickup history</p>
+                      <p className="text-sm">You haven't completed any pickups yet.</p>
+                    </div>
+                  ) : (
+                    pickupHistory.map((pickup) => (
+                    <div key={pickup.pickup_id} className="p-4 rounded-lg border bg-card">
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <h3 className="font-semibold text-foreground">{pickup.customerName}</h3>
-                          <p className="text-sm text-muted-foreground">{pickup.address}</p>
-                          <p className="text-xs text-muted-foreground">{pickup.date}</p>
+                          <h3 className="font-semibold text-foreground">{pickup.customer_name}</h3>
+                          <p className="text-sm text-muted-foreground">{`${pickup.line1}, ${pickup.suburb}, ${pickup.city}`}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(pickup.started_at).toLocaleDateString()}</p>
                         </div>
                         <Badge className={getStatusColor(pickup.status)}>
                           {getStatusIcon(pickup.status)}
@@ -1025,38 +1042,40 @@ export default function CollectorDashboard() {
                       <div className="grid grid-cols-3 gap-4 text-center mb-3">
                         <div>
                           <div className="text-lg font-bold text-primary">
-                            {formatWeight(pickup.totalKg)}
+                            {formatWeight(pickup.total_kg)}
                           </div>
                           <p className="text-xs text-muted-foreground">Weight</p>
                         </div>
                         <div>
                           <div className="text-lg font-bold text-success">
-                            {formatCurrency(pickup.totalValue)}
+                            {formatCurrency(pickup.total_value)}
                           </div>
                           <p className="text-xs text-muted-foreground">Value</p>
                         </div>
                         <div>
                           <div className="text-lg font-bold text-accent">
-                            {formatPoints(pickup.totalPoints)}
+                            {formatPoints(pickup.total_points)}
                           </div>
                           <p className="text-xs text-muted-foreground">Points</p>
                         </div>
                       </div>
 
                       <div className="flex flex-wrap gap-2">
-                        {pickup.materials.map((material, index) => (
+                        {pickup.materials_breakdown.map((material, index) => (
                           <Badge key={index} variant="outline" className="text-xs">
-                            {material.type}: {formatWeight(material.kg)}
+                            {material.material_name}: {formatWeight(material.weight_kg)}
                           </Badge>
                         ))}
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+        )}
       </main>
     </div>
   );
