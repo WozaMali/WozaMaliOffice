@@ -87,6 +87,26 @@ export const profileServices = {
       console.error('Error fetching profiles by role:', error)
       return []
     }
+  },
+
+  // Get customer profiles with their addresses for collector dashboard
+  async getCustomerProfilesWithAddresses(): Promise<ProfileWithAddresses[]> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          addresses(*)
+        `)
+        .eq('role', 'customer')
+        .eq('is_active', true)
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching customer profiles with addresses:', error)
+      return []
+    }
   }
 }
 
@@ -650,5 +670,53 @@ export const realtimeServices = {
       .channel('payment_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, callback)
       .subscribe()
+  }
+}
+
+// Enhanced Pickup Management Services
+export const enhancedPickupServices = {
+  // Compute totals for a pickup using the new function
+  async computePickupTotals(pickupId: string) {
+    try {
+      const { data, error } = await supabase
+        .rpc('compute_pickup_totals', { p_pickup_id: pickupId })
+
+      if (error) throw error
+      return data?.[0] || null
+    } catch (error) {
+      console.error('Error computing pickup totals:', error)
+      return null
+    }
+  },
+
+  // Finalize a pickup (collector function)
+  async finalizePickup(pickupId: string) {
+    try {
+      const { data, error } = await supabase
+        .rpc('finalize_pickup', { p_pickup_id: pickupId })
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error finalizing pickup:', error)
+      return null
+    }
+  },
+
+  // Approve a pickup (admin function)
+  async approvePickup(pickupId: string, adminId: string) {
+    try {
+      const { data, error } = await supabase
+        .rpc('approve_pickup', { 
+          p_pickup_id: pickupId, 
+          p_admin_id: adminId 
+        })
+
+      if (error) throw error
+      return data?.[0] || null
+    } catch (error) {
+      console.error('Error approving pickup:', error)
+      return null
+    }
   }
 }

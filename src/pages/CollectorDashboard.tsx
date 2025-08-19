@@ -46,8 +46,8 @@ import {
 import { MaterialType, calculateTransactionTotals, formatCurrency, formatWeight, formatPoints } from "@/lib/recycling-schema";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
-import { pickupServices, materialServices, pickupItemServices, dashboardServices } from "@/lib/supabase-services";
-import type { CollectorDashboardView, Material } from "@/lib/supabase";
+import { pickupServices, materialServices, pickupItemServices, dashboardServices, enhancedPickupServices, profileServices } from "@/lib/supabase-services";
+import type { CollectorDashboardView, Material, ProfileWithAddresses } from "@/lib/supabase";
 
 // Updated interfaces to match Supabase schema
 interface PickupLocation {
@@ -146,6 +146,7 @@ export default function CollectorDashboard() {
   // Real data from Supabase
   const [realCollectorData, setRealCollectorData] = useState<CollectorDashboardView[]>([]);
   const [realMaterials, setRealMaterials] = useState<Material[]>([]);
+  const [customerProfiles, setCustomerProfiles] = useState<ProfileWithAddresses[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch real data from Supabase
@@ -164,6 +165,10 @@ export default function CollectorDashboard() {
         const materials = await materialServices.getActiveMaterials();
         setRealMaterials(materials);
         
+        // Fetch all customer profiles with addresses
+        const profiles = await profileServices.getCustomerProfilesWithAddresses();
+        setCustomerProfiles(profiles);
+        
       } catch (error) {
         console.error('Error fetching collector data:', error);
       } finally {
@@ -174,8 +179,36 @@ export default function CollectorDashboard() {
     fetchData();
   }, [user]);
 
-  // Filter assigned stops based on search - use real data only
-  const filteredStops = realCollectorData.filter(stop =>
+  // Combine existing pickups with all customer profiles for comprehensive view
+  const allPotentialStops = [
+    // Existing pickups (assigned stops)
+    ...realCollectorData.map(pickup => ({
+      type: 'pickup' as const,
+      data: pickup,
+      customer_name: pickup.customer_name || 'Unknown Customer',
+      line1: pickup.line1 || 'No Address',
+      suburb: pickup.suburb || 'No Suburb',
+      city: pickup.city || 'No City',
+      status: pickup.status,
+      hasPickup: true
+    })),
+    // Customer profiles without pickups (potential stops)
+    ...customerProfiles
+      .filter(profile => !realCollectorData.some(pickup => pickup.customer_email === profile.email))
+      .map(profile => ({
+        type: 'profile' as const,
+        data: profile,
+        customer_name: profile.full_name || profile.email?.split('@')[0] || 'Unknown Customer',
+        line1: profile.addresses?.[0]?.line1 || 'No Address',
+        suburb: profile.addresses?.[0]?.suburb || 'No Suburb',
+        city: profile.addresses?.[0]?.city || 'No City',
+        status: 'potential',
+        hasPickup: false
+      }))
+  ];
+
+  // Filter combined stops based on search
+  const filteredStops = allPotentialStops.filter(stop =>
     stop.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     stop.line1?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     stop.suburb?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -220,14 +253,49 @@ export default function CollectorDashboard() {
     newPickup.materials.map(m => ({ type: m.material_id as MaterialType, kg: m.kilograms }))
   );
 
-  const handleCustomerSelect = (customer: PickupLocation) => {
-    setSelectedCustomer(customer);
+  const handleCustomerSelect = (stop: any) => {
+    if (stop.type === 'pickup') {
+      // Handle existing pickup
+      setSelectedCustomer({
+        pickup_id: stop.data.pickup_id,
+        status: stop.data.status,
+        started_at: stop.data.started_at,
+        customer_name: stop.data.customer_name || '',
+        customer_email: stop.data.customer_email || '',
+        customer_phone: stop.data.customer_phone || '',
+        line1: stop.data.line1 || '',
+        suburb: stop.data.suburb || '',
+        city: stop.data.city || '',
+        total_kg: stop.data.total_kg,
+        total_value: stop.data.total_value,
+        total_points: stop.data.total_points,
+        materials_breakdown: stop.data.materials_breakdown || []
+      });
+    } else {
+      // Handle customer profile
+      setSelectedCustomer({
+        pickup_id: `profile-${stop.data.id}`,
+        status: 'potential',
+        started_at: new Date().toISOString(),
+        customer_name: stop.data.full_name || stop.data.email?.split('@')[0] || '',
+        customer_email: stop.data.email || '',
+        customer_phone: stop.data.phone || '',
+        line1: stop.data.addresses?.[0]?.line1 || '',
+        suburb: stop.data.addresses?.[0]?.suburb || '',
+        city: stop.data.addresses?.[0]?.city || '',
+        total_kg: 0,
+        total_value: 0,
+        total_points: 0,
+        materials_breakdown: []
+      });
+    }
+    
     setNewPickup(prev => ({
       ...prev,
-      customerName: customer.customer_name || '',
-      address: `${customer.line1}, ${customer.suburb}, ${customer.city}`,
-      phone: customer.customer_phone || '',
-      email: customer.customer_email || ''
+      customerName: stop.customer_name || '',
+      address: `${stop.line1}, ${stop.suburb}, ${stop.city}`,
+      phone: stop.type === 'pickup' ? stop.data.customer_phone || '' : stop.data.phone || '',
+      email: stop.type === 'pickup' ? stop.data.customer_email || '' : stop.data.email || ''
     }));
     setActiveTab('new-pickup');
   };
@@ -289,14 +357,6 @@ export default function CollectorDashboard() {
     if (!user) return;
 
     try {
-      // Calculate environmental impact
-      const environmentalImpact = {
-        co2Saved: pickupCalculation.totalKg * 2.5,
-        waterSaved: pickupCalculation.totalKg * 100,
-        landfillSaved: pickupCalculation.totalKg * 0.8,
-        treesEquivalent: Math.floor(pickupCalculation.totalKg / 50)
-      };
-
       // Create pickup in Supabase
       const pickupData = {
         collector_id: user.id,
@@ -305,11 +365,7 @@ export default function CollectorDashboard() {
         customer_phone: selectedCustomer?.customer_phone || null,
         customer_email: selectedCustomer?.customer_email || null,
         address: newPickup.address || selectedCustomer?.line1 || '',
-        total_kg: pickupCalculation.totalKg,
-        total_value: pickupCalculation.totalPrice,
-        total_points: pickupCalculation.totalPoints,
-        notes: newPickup.notes || null,
-        environmental_impact: environmentalImpact
+        notes: newPickup.notes || null
       };
 
       // Add required fields to match Omit<Pickup, "id" | "started_at">
@@ -333,17 +389,25 @@ export default function CollectorDashboard() {
 
         await pickupItemServices.addPickupItems(newPickupRecord.id, materialsData);
         
-        alert('Pickup submitted successfully! Admin will review and approve.');
+        // Now finalize the pickup using the new function
+        const finalizedPickup = await enhancedPickupServices.finalizePickup(newPickupRecord.id);
         
-        // Reset form
-        setNewPickup({
-          customerName: '',
-          address: '',
-          materials: [],
-          notes: ''
-        });
-        setSelectedCustomer(null);
-        setCurrentMaterialPhotos([]);
+        if (finalizedPickup) {
+          alert('Pickup finalized successfully! Admin will review and approve.');
+          // Reset form
+          setNewPickup({
+            customerName: '',
+            address: '',
+            phone: '',
+            email: '',
+            materials: [],
+            notes: ''
+          });
+          setSelectedCustomer(null);
+          setActiveTab('dashboard');
+        } else {
+          alert('Error finalizing pickup. Please ensure you have at least 2 photos.');
+        }
       } else {
         alert('Error submitting pickup. Please try again.');
       }
@@ -649,8 +713,8 @@ export default function CollectorDashboard() {
                         <p className="text-sm">You don't have any pickups assigned at the moment.</p>
                       </div>
                     ) : (
-                      filteredStops.map((stop) => (
-                        <div key={stop.pickup_id} className="p-4 rounded-lg border bg-card hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleCustomerSelect(stop)}>
+                      filteredStops.map((stop, index) => (
+                        <div key={stop.type === 'pickup' ? stop.data.pickup_id : `profile-${stop.data.id}`} className="p-4 rounded-lg border bg-card hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleCustomerSelect(stop)}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-4">
                               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -660,31 +724,50 @@ export default function CollectorDashboard() {
                                 <h3 className="font-semibold text-foreground">{stop.customer_name}</h3>
                                 <p className="text-sm text-muted-foreground">{`${stop.line1}, ${stop.suburb}, ${stop.city}`}</p>
                                 <div className="flex items-center gap-4 mt-1">
-                                  <div className="flex items-center gap-2">
-                                    <Calendar className="h-3 w-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground">
-                                      Assigned: {new Date(stop.started_at).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                  {stop.customer_phone && (
+                                  {stop.type === 'pickup' ? (
+                                    <>
+                                      <div className="flex items-center gap-2">
+                                        <Calendar className="h-3 w-3 text-muted-foreground" />
+                                        <span className="text-xs text-muted-foreground">
+                                          Assigned: {new Date(stop.data.started_at).toLocaleDateString()}
+                                        </span>
+                                      </div>
+                                      {stop.data.customer_phone && (
+                                        <div className="flex items-center gap-2">
+                                          <User className="h-3 w-3 text-muted-foreground" />
+                                          <span className="text-xs text-muted-foreground">{stop.data.customer_phone}</span>
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
                                     <div className="flex items-center gap-2">
-                                      <User className="h-3 w-3 text-muted-foreground" />
-                                      <span className="text-xs text-muted-foreground">{stop.customer_phone}</span>
+                                      <AlertCircle className="h-3 w-3 text-muted-foreground" />
+                                      <span className="text-xs text-muted-foreground">Potential Customer</span>
                                     </div>
                                   )}
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">
-                                {stop.materials_breakdown.map(m => m.material_name).join(', ')}
-                              </Badge>
+                              {stop.type === 'pickup' ? (
+                                <>
+                                  <Badge variant="outline" className="text-xs">
+                                    {stop.data.materials_breakdown?.map(m => m.material_name).join(', ') || 'No materials'}
+                                  </Badge>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {stop.data.status}
+                                  </Badge>
+                                </>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">
+                                  New Customer
+                                </Badge>
+                              )}
                               <Button size="sm" variant="outline">
-                                Select Customer
+                                {stop.type === 'pickup' ? 'Select Customer' : 'Start Pickup'}
                               </Button>
                             </div>
                           </div>
-                          {/* Notes are not directly available in the PickupLocation interface, so we'll omit them for now */}
                         </div>
                       ))
                     )}
