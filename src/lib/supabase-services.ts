@@ -315,6 +315,25 @@ export const pickupServices = {
       console.error('Error submitting pickup:', error)
       return false
     }
+  },
+
+  // Update pickup payment status
+  async updatePickupPaymentStatus(pickupId: string, paymentStatus: 'pending' | 'paid' | 'failed', paymentMethod?: string): Promise<boolean> {
+    try {
+      const updateData: any = { payment_status: paymentStatus }
+      if (paymentMethod) updateData.payment_method = paymentMethod
+
+      const { error } = await supabase
+        .from('pickups')
+        .update(updateData)
+        .eq('id', pickupId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error updating pickup payment status:', error)
+      return false
+    }
   }
 }
 
@@ -469,6 +488,22 @@ export const dashboardServices = {
     }
   },
 
+  // Get customer dashboard data
+  async getCustomerDashboard(): Promise<CustomerDashboardView[]> {
+    try {
+      const { data, error } = await supabase
+        .from('customer_dashboard_view')
+        .select('*')
+        .order('total_kg_recycled', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching customer dashboard:', error)
+      return []
+    }
+  },
+
   // Get admin dashboard data
   async getAdminDashboard(): Promise<AdminDashboardView[]> {
     try {
@@ -609,6 +644,11 @@ export const adminServices = {
     }
   },
 
+  // Get pending pickups (alias for submitted)
+  async getPendingPickups(): Promise<Pickup[]> {
+    return this.getSubmittedPickups();
+  },
+
   // Get approved pickups
   async getApprovedPickups(): Promise<Pickup[]> {
     try {
@@ -624,6 +664,11 @@ export const adminServices = {
       console.error('Error fetching approved pickups:', error)
       return []
     }
+  },
+
+  // Get completed pickups (alias for approved)
+  async getCompletedPickups(): Promise<Pickup[]> {
+    return this.getApprovedPickups();
   },
 
   // Get rejected pickups

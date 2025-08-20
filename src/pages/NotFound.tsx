@@ -1,29 +1,30 @@
-import { useLocation, useNavigate } from "react-router-dom";
+"use client";
+
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 
 const NotFound = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const router = useRouter();
   const { isAuthenticated, user } = useAuth();
 
   useEffect(() => {
     console.error(
       "404 Error: User attempted to access non-existent route:",
-      location.pathname
+      typeof window !== 'undefined' ? window.location.pathname : 'unknown'
     );
-  }, [location.pathname]);
+  }, []);
 
   // Redirect authenticated users to their appropriate dashboard
   useEffect(() => {
     if (isAuthenticated && user) {
       if (user.role === 'COLLECTOR') {
-        navigate('/collector');
+        router.push('/collector');
       } else {
-        navigate('/admin');
+        router.push('/admin');
       }
     }
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">

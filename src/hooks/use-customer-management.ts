@@ -58,15 +58,16 @@ export function useCustomerManagement() {
 
     if (params.search_term) {
       const searchTerm = params.search_term.toLowerCase();
-      filtered = filtered.filter(customer => 
-        customer.full_name?.toLowerCase().includes(searchTerm) ||
-        customer.email.toLowerCase().includes(searchTerm) ||
-        customer.addresses?.some(addr => 
-          addr.line1.toLowerCase().includes(searchTerm) ||
-          addr.suburb.toLowerCase().includes(searchTerm) ||
-          addr.city.toLowerCase().includes(searchTerm)
-        )
-      );
+      filtered = filtered.filter(customer => {
+        const fullName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim().toLowerCase();
+        return fullName.includes(searchTerm) ||
+          customer.email.toLowerCase().includes(searchTerm) ||
+          customer.addresses?.some(addr => 
+            addr.line1.toLowerCase().includes(searchTerm) ||
+            addr.suburb.toLowerCase().includes(searchTerm) ||
+            addr.city.toLowerCase().includes(searchTerm)
+          );
+      });
     }
 
     if (params.role) {
@@ -111,7 +112,7 @@ export function useCustomerManagement() {
       // Filter to only show customers who haven't had pickups yet
       // This would need to be enhanced with actual pickup data comparison
       const readyCustomers = customersWithAddresses.filter(customer => 
-        customer.is_active && customer.role === 'customer'
+        customer.is_active && customer.role === 'CUSTOMER'
       );
       
       setFilteredCustomers(readyCustomers);
@@ -131,7 +132,7 @@ export function useCustomerManagement() {
       withoutAddresses: customerData.filter(c => !c.addresses || c.addresses.length === 0).length,
       readyForFirstCollection: customerData.filter(c => 
         c.is_active && 
-        c.role === 'customer' && 
+        c.role === 'CUSTOMER' && 
         c.addresses && 
         c.addresses.length > 0
       ).length,

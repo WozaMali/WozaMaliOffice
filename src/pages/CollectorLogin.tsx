@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,13 +27,13 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function CollectorLogin() {
   const { isAuthenticated } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [collectorId, setCollectorId] = useState('');
   const [selectedRoute, setSelectedRoute] = useState('');
 
   // Redirect authenticated users to their dashboard
   if (isAuthenticated) {
-    navigate('/dashboard');
+    router.push('/dashboard');
     return null;
   }
 

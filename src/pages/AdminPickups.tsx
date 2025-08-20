@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,15 +35,15 @@ import {
   Leaf
 } from "lucide-react";
 import { formatCurrency, formatWeight, formatPoints } from "@/lib/recycling-schema";
-import { pickupServices, adminServices } from "@/lib/supabase-services";
-import type { Pickup } from "@/lib/supabase";
+import { pickupServices, dashboardServices } from "@/lib/supabase-services";
+import type { AdminDashboardView } from "@/lib/supabase";
 
 export default function AdminPickups() {
-  const [selectedPickup, setSelectedPickup] = useState<Pickup | null>(null);
+  const [selectedPickup, setSelectedPickup] = useState<AdminDashboardView | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'bank_transfer' | 'cash'>('wallet');
   const [activeTab, setActiveTab] = useState('pending');
-  const [pickups, setPickups] = useState<Pickup[]>([]);
+  const [pickups, setPickups] = useState<AdminDashboardView[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch pickups based on active tab
@@ -49,21 +51,23 @@ export default function AdminPickups() {
     const fetchPickups = async () => {
       setLoading(true);
       try {
-        let fetchedPickups: Pickup[] = [];
+        const allPickups = await dashboardServices.getAdminDashboard();
         
+        // Filter based on active tab
+        let filteredPickups: AdminDashboardView[] = [];
         switch (activeTab) {
           case 'pending':
-            fetchedPickups = await adminServices.getPendingPickups();
+            filteredPickups = allPickups.filter(p => p.status === 'submitted');
             break;
           case 'approved':
-            fetchedPickups = await adminServices.getApprovedPickups();
+            filteredPickups = allPickups.filter(p => p.status === 'approved');
             break;
           case 'completed':
-            fetchedPickups = await adminServices.getCompletedPickups();
+            filteredPickups = allPickups.filter(p => p.status === 'approved');
             break;
         }
         
-        setPickups(fetchedPickups);
+        setPickups(filteredPickups);
       } catch (error) {
         console.error('Error fetching pickups:', error);
       } finally {
@@ -74,19 +78,19 @@ export default function AdminPickups() {
     fetchPickups();
   }, [activeTab]);
 
-  const pendingPickups = pickups.filter(p => p.status === 'pending');
+  const pendingPickups = pickups.filter(p => p.status === 'submitted');
   const approvedPickups = pickups.filter(p => p.status === 'approved');
-  const completedPickups = pickups.filter(p => p.status === 'completed');
+  const completedPickups = pickups.filter(p => p.status === 'approved');
 
-  const handleApprove = async (pickup: Pickup) => {
+  const handleApprove = async (pickup: AdminDashboardView) => {
     try {
-      const success = await adminServices.approvePickup(pickup.id, adminNotes);
+      const success = await pickupServices.updatePickupStatus(pickup.pickup_id, 'approved', adminNotes);
       if (success) {
         alert('Pickup approved successfully!');
         // Refresh pickups
         setPickups(prev => prev.map(p => 
-          p.id === pickup.id 
-            ? { ...p, status: 'approved', admin_notes: adminNotes }
+          p.pickup_id === pickup.pickup_id 
+            ? { ...p, status: 'approved', approval_note: adminNotes }
             : p
         ));
       } else {
@@ -101,20 +105,20 @@ export default function AdminPickups() {
     setAdminNotes('');
   };
 
-  const handleReject = async (pickup: Pickup) => {
+  const handleReject = async (pickup: AdminDashboardView) => {
     if (!adminNotes.trim()) {
       alert('Please provide rejection notes');
       return;
     }
-    
+
     try {
-      const success = await adminServices.rejectPickup(pickup.id, adminNotes);
+      const success = await pickupServices.updatePickupStatus(pickup.pickup_id, 'rejected', adminNotes);
       if (success) {
-        alert('Pickup rejected');
+        alert('Pickup rejected successfully!');
         // Refresh pickups
         setPickups(prev => prev.map(p => 
-          p.id === pickup.id 
-            ? { ...p, status: 'rejected', admin_notes: adminNotes }
+          p.pickup_id === pickup.pickup_id 
+            ? { ...p, status: 'rejected', approval_note: adminNotes }
             : p
         ));
       } else {
@@ -129,14 +133,14 @@ export default function AdminPickups() {
     setAdminNotes('');
   };
 
-  const handlePaymentUpdate = async (pickup: Pickup) => {
+  const handlePaymentUpdate = async (pickup: AdminDashboardView) => {
     try {
-      const success = await pickupServices.updatePaymentStatus('paid', pickup.id, paymentMethod);
+      const success = await pickupServices.updatePickupPaymentStatus(pickup.pickup_id, 'paid', paymentMethod);
       if (success) {
         alert('Payment status updated!');
         // Refresh pickups
         setPickups(prev => prev.map(p => 
-          p.id === pickup.id 
+          p.pickup_id === pickup.pickup_id 
             ? { ...p, payment_status: 'paid', payment_method: paymentMethod }
             : p
         ));
@@ -155,7 +159,7 @@ export default function AdminPickups() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'approved': return 'bg-success text-success-foreground';
-      case 'pending': return 'bg-warning text-warning-foreground';
+      case 'submitted': return 'bg-warning text-warning-foreground';
       case 'rejected': return 'bg-destructive text-destructive-foreground';
       case 'completed': return 'bg-primary text-primary-foreground';
       default: return 'bg-secondary text-secondary-foreground';
@@ -165,7 +169,7 @@ export default function AdminPickups() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'approved': return <CheckCircle className="h-4 w-4" />;
-      case 'pending': return <Clock className="h-4 w-4" />;
+      case 'submitted': return <Clock className="h-4 w-4" />;
       case 'rejected': return <XCircle className="h-4 w-4" />;
       case 'completed': return <CheckCircle className="h-4 w-4" />;
       default: return <Clock className="h-4 w-4" />;
@@ -181,17 +185,17 @@ export default function AdminPickups() {
     }
   };
 
-  const renderPickupCard = (pickup: Pickup, showActions = true) => (
-    <Card key={pickup.id} className="hover:shadow-md transition-shadow">
+  const renderPickupCard = (pickup: AdminDashboardView, showActions = true) => (
+    <Card key={pickup.pickup_id} className="hover:shadow-md transition-shadow">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Package className="h-5 w-5 text-primary" />
             <div>
-              <CardTitle className="text-lg">Pickup #{pickup.id.slice(-8)}</CardTitle>
-                               <CardDescription>
-                   {pickup.customer_name} • {pickup.address}
-                 </CardDescription>
+              <CardTitle className="text-lg">Pickup #{pickup.pickup_id.slice(-8)}</CardTitle>
+              <CardDescription>
+                {pickup.customer_name} • {pickup.line1}, {pickup.suburb}, {pickup.city}
+              </CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -199,132 +203,106 @@ export default function AdminPickups() {
               {getStatusIcon(pickup.status)}
               <span className="ml-1 capitalize">{pickup.status}</span>
             </Badge>
-                         <Badge className={getPaymentStatusColor(pickup.payment_status)}>
-               <DollarSign className="h-3 w-3 mr-1" />
-               {pickup.payment_status}
-             </Badge>
+            <Badge className={getPaymentStatusColor(pickup.payment_status || 'pending')}>
+              <DollarSign className="h-3 w-3 mr-1" />
+              {pickup.payment_status || 'pending'}
+            </Badge>
           </div>
         </div>
       </CardHeader>
       
       <CardContent className="space-y-4">
         {/* Collector Info */}
-                 <div className="flex items-center gap-4 text-sm">
-           <div className="flex items-center gap-2">
-             <User className="h-4 w-4 text-muted-foreground" />
-             <span className="font-medium">{pickup.collector_name}</span>
-           </div>
-           <div className="flex items-center gap-2">
-             <Calendar className="h-4 w-4 text-muted-foreground" />
-             <span>{new Date(pickup.pickup_date).toLocaleDateString()}</span>
-           </div>
-         </div>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{pickup.collector_name}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span>{new Date(pickup.started_at).toLocaleDateString()}</span>
+          </div>
+        </div>
 
         {/* Materials Summary */}
-                 <div className="grid grid-cols-3 gap-4 text-center">
-           <div>
-             <div className="text-2xl font-bold text-primary">
-               {formatWeight(pickup.total_kg)}
-             </div>
-             <p className="text-sm text-muted-foreground">Total Weight</p>
-           </div>
-           <div>
-             <div className="text-2xl font-bold text-success">
-               {formatCurrency(pickup.total_value)}
-             </div>
-             <p className="text-sm text-muted-foreground">Total Value</p>
-           </div>
-           <div>
-             <div className="text-2xl font-bold text-accent">
-               {formatPoints(pickup.total_points)}
-             </div>
-             <p className="text-sm text-muted-foreground">Points</p>
-           </div>
-         </div>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold text-primary">
+              {formatWeight(pickup.total_kg)}
+            </div>
+            <p className="text-sm text-muted-foreground">Total Weight</p>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-success">
+              {formatCurrency(pickup.total_value)}
+            </div>
+            <p className="text-sm text-muted-foreground">Total Value</p>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-accent">
+              {formatPoints(pickup.total_points)}
+            </div>
+            <p className="text-sm text-muted-foreground">Total Points</p>
+          </div>
+        </div>
 
-                 {/* Materials List */}
-         <div className="space-y-2">
-           <Label className="text-sm font-medium">Materials Collected:</Label>
-           <div className="flex flex-wrap gap-2">
-             {/* Note: materials are fetched separately for detailed view */}
-             {/* This is a placeholder for summary display */}
-             {pickup.total_kg > 0 && (
-               <Badge variant="outline" className="text-xs">
-                 {formatWeight(pickup.total_kg)} Total Weight
-               </Badge>
-             )}
-           </div>
-         </div>
-
-                 {/* Environmental Impact */}
-         <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/20">
-           <div className="flex items-center gap-2 mb-2">
-             <Leaf className="h-4 w-4 text-green-600" />
-             <Label className="text-sm font-medium text-green-800 dark:text-green-200">
-               Environmental Impact
-             </Label>
-           </div>
-           <div className="grid grid-cols-2 gap-2 text-xs">
-             <div>CO₂ Saved: {Math.round(pickup.environmental_impact?.co2Saved || 0)} kg</div>
-             <div>Water Saved: {Math.round(pickup.environmental_impact?.waterSaved || 0)} L</div>
-             <div>Landfill Saved: {Math.round(pickup.environmental_impact?.landfillSaved || 0)} kg</div>
-             <div>Trees Equivalent: {pickup.environmental_impact?.treesEquivalent || 0}</div>
-           </div>
-         </div>
-
-                 {/* Notes */}
-         {pickup.notes && (
-           <div className="p-3 rounded-lg bg-muted/50">
-             <Label className="text-sm font-medium">Collector Notes:</Label>
-             <p className="text-sm text-muted-foreground mt-1">{pickup.notes}</p>
-           </div>
-         )}
-
-         {/* Admin Notes */}
-         {pickup.admin_notes && (
-           <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20">
-             <Label className="text-sm font-medium text-blue-800 dark:text-blue-200">Admin Notes:</Label>
-             <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">{pickup.admin_notes}</p>
-           </div>
-         )}
+        {/* Environmental Impact */}
+        {pickup.environmental_impact && (
+          <div className="bg-muted p-4 rounded-lg">
+            <h4 className="font-medium mb-3 flex items-center gap-2">
+              <Leaf className="h-4 w-4 text-success" />
+              Environmental Impact
+            </h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="text-center">
+                <div className="font-medium text-success">
+                  {pickup.environmental_impact.co2_saved.toFixed(1)} kg
+                </div>
+                <p className="text-muted-foreground">CO2 Saved</p>
+              </div>
+              <div className="text-center">
+                <div className="font-medium text-success">
+                  {pickup.environmental_impact.water_saved.toFixed(0)} L
+                </div>
+                <p className="text-muted-foreground">Water Saved</p>
+              </div>
+              <div className="text-center">
+                <div className="font-medium text-success">
+                  {pickup.environmental_impact.landfill_saved.toFixed(1)} kg
+                </div>
+                <p className="text-muted-foreground">Landfill Saved</p>
+              </div>
+              <div className="text-center">
+                <div className="font-medium text-success">
+                  {pickup.environmental_impact.trees_equivalent.toFixed(1)}
+                </div>
+                <p className="text-muted-foreground">Trees Equivalent</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Actions */}
         {showActions && (
-          <div className="flex items-center gap-2 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSelectedPickup(pickup)}
-            >
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSelectedPickup(pickup)}>
               <Eye className="h-4 w-4 mr-2" />
               View Details
             </Button>
-            {pickup.status === 'pending' && (
+            {pickup.status === 'submitted' && (
               <>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => handleApprove(pickup)}
-                >
+                <Button variant="outline" size="sm" onClick={() => handleApprove(pickup)}>
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Approve
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => handleReject(pickup)}
-                >
+                <Button variant="outline" size="sm" onClick={() => handleReject(pickup)}>
                   <XCircle className="h-4 w-4 mr-2" />
                   Reject
                 </Button>
               </>
             )}
-                         {pickup.status === 'approved' && pickup.payment_status === 'pending' && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSelectedPickup(pickup)}
-              >
+            {pickup.status === 'approved' && pickup.payment_status === 'pending' && (
+              <Button variant="outline" size="sm" onClick={() => handlePaymentUpdate(pickup)}>
                 <DollarSign className="h-4 w-4 mr-2" />
                 Update Payment
               </Button>
@@ -427,7 +405,7 @@ export default function AdminPickups() {
         <Card className="fixed inset-4 z-50 overflow-y-auto bg-background border shadow-2xl">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Pickup Details - #{selectedPickup.id.slice(-8)}</CardTitle>
+              <CardTitle>Pickup Details - #{selectedPickup.pickup_id.slice(-8)}</CardTitle>
               <Button variant="ghost" size="sm" onClick={() => setSelectedPickup(null)}>
                 <XCircle className="h-4 w-4" />
               </Button>
@@ -438,24 +416,24 @@ export default function AdminPickups() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="text-sm font-medium">Customer Name</Label>
-                                 <p className="text-lg font-semibold">{selectedPickup.customer_name}</p>
+                <p className="text-lg font-semibold">{selectedPickup.customer_name}</p>
               </div>
               <div>
                 <Label className="text-sm font-medium">Address</Label>
-                <p className="text-lg font-semibold">{selectedPickup.address}</p>
+                <p className="text-lg font-semibold">{selectedPickup.line1}, {selectedPickup.suburb}, {selectedPickup.city}</p>
               </div>
-                             {selectedPickup.customer_phone && (
-                 <div>
-                   <Label className="text-sm font-medium">Phone</Label>
-                   <p className="text-lg font-semibold">{selectedPickup.customer_phone}</p>
-                 </div>
-               )}
-               {selectedPickup.customer_email && (
-                 <div>
-                   <Label className="text-sm font-medium">Email</Label>
-                   <p className="text-lg font-semibold">{selectedPickup.customer_email}</p>
-                 </div>
-               )}
+              {selectedPickup.customer_phone && (
+                <div>
+                  <Label className="text-sm font-medium">Phone</Label>
+                  <p className="text-lg font-semibold">{selectedPickup.customer_phone}</p>
+                </div>
+              )}
+              {selectedPickup.customer_email && (
+                <div>
+                  <Label className="text-sm font-medium">Email</Label>
+                  <p className="text-lg font-semibold">{selectedPickup.customer_email}</p>
+                </div>
+              )}
             </div>
 
                          {/* Materials with Photos */}
@@ -514,7 +492,7 @@ export default function AdminPickups() {
              </div>
 
             {/* Admin Actions */}
-            {selectedPickup.status === 'pending' && (
+            {selectedPickup.status === 'submitted' && (
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="adminNotes">Admin Notes (Optional)</Label>

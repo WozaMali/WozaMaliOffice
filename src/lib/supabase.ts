@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'your-anon-key'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://your-project.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -51,6 +51,13 @@ export interface Pickup {
   lng?: number
   status: 'submitted' | 'approved' | 'rejected'
   approval_note?: string
+  total_kg?: number
+  total_value?: number
+  payment_status?: 'pending' | 'paid' | 'failed'
+  payment_method?: string
+  customer_name?: string
+  collector_name?: string
+  pickup_date?: string
 }
 
 export interface PickupItem {

@@ -1,5 +1,7 @@
-import { ReactNode } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+"use client";
+
+import { ReactNode, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { canAccessAdmin, canAccessCollector, getRoleDisplayName } from '@/lib/auth-schema';
 import { Loader2 } from 'lucide-react';
@@ -18,7 +20,44 @@ export function ProtectedRoute({
   redirectTo 
 }: ProtectedRouteProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const location = useLocation();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to login if not authenticated
+    if (!isLoading && (!isAuthenticated || !user)) {
+      router.push('/');
+      return;
+    }
+
+    // Check role-based access
+    if (user && requiredRole && user.role !== requiredRole) {
+      const redirectPath = redirectTo || getDefaultRedirectPath(user.role);
+      router.push(redirectPath);
+      return;
+    }
+
+    // Check if user has any of the allowed roles
+    if (user && allowedRoles && !allowedRoles.includes(user.role)) {
+      const redirectPath = redirectTo || getDefaultRedirectPath(user.role);
+      router.push(redirectPath);
+      return;
+    }
+
+    // Check specific access permissions based on current path
+    if (user && typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      
+      if (currentPath.startsWith('/admin') && !canAccessAdmin(user)) {
+        router.push('/collector');
+        return;
+      }
+
+      if (currentPath.startsWith('/collector') && !canAccessCollector(user)) {
+        router.push('/admin');
+        return;
+      }
+    }
+  }, [user, isAuthenticated, isLoading, requiredRole, allowedRoles, redirectTo, router]);
 
   // Show loading spinner while checking authentication
   if (isLoading) {
@@ -32,30 +71,18 @@ export function ProtectedRoute({
     );
   }
 
-  // Redirect to login if not authenticated
+  // Don't render children if not authenticated
   if (!isAuthenticated || !user) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return null;
   }
 
-  // Check role-based access
+  // Don't render children if role check fails
   if (requiredRole && user.role !== requiredRole) {
-    const redirectPath = redirectTo || getDefaultRedirectPath(user.role);
-    return <Navigate to={redirectPath} replace />;
+    return null;
   }
 
-  // Check if user has any of the allowed roles
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    const redirectPath = redirectTo || getDefaultRedirectPath(user.role);
-    return <Navigate to={redirectPath} replace />;
-  }
-
-  // Check specific access permissions
-  if (location.pathname.startsWith('/admin') && !canAccessAdmin(user)) {
-    return <Navigate to="/collector" replace />;
-  }
-
-  if (location.pathname.startsWith('/collector') && !canAccessCollector(user)) {
-    return <Navigate to="/admin" replace />;
+    return null;
   }
 
   return <>{children}</>;

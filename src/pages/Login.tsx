@@ -1,5 +1,7 @@
+"use client";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,14 +37,14 @@ const getRoleRedirectUrl = (role: UserRole): string => {
 };
 
 export default function Login() {
-  const navigate = useNavigate();
+  const router = useRouter();
   const { login, isLoading, isAuthenticated, user } = useAuth();
   const { theme } = useTheme();
 
   // Redirect already authenticated users to their role-specific dashboard
   if (isAuthenticated && user) {
     const redirectUrl = getRoleRedirectUrl(user.role);
-    navigate(redirectUrl);
+    router.push(redirectUrl);
     return null;
   }
   
@@ -83,7 +85,7 @@ export default function Login() {
         
         // Redirect after a short delay
         setTimeout(() => {
-          navigate(response.redirectTo!);
+          router.push(response.redirectTo!);
         }, 1500);
       } else {
         setError(response.error || 'Login failed. Please try again.');

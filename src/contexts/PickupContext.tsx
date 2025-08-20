@@ -45,7 +45,7 @@ type PickupAction =
   | { type: 'APPROVE_PICKUP'; payload: { id: string; adminNotes?: string } }
   | { type: 'REJECT_PICKUP'; payload: { id: string; adminNotes: string } }
   | { type: 'COMPLETE_PICKUP'; payload: { id: string; customerFeedback?: string } }
-  | { type: 'UPDATE_PAYMENT_STATUS'; payload: { id: string; paymentStatus: PickupData['paymentStatus']; paymentMethod?: string } }
+  | { type: 'UPDATE_PAYMENT_STATUS'; payload: { id: string; paymentStatus: PickupData['paymentStatus']; paymentMethod?: PickupData['paymentMethod'] } }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null };
 
@@ -150,7 +150,7 @@ interface PickupContextType {
   approvePickup: (id: string, adminNotes?: string) => void;
   rejectPickup: (id: string, adminNotes: string) => void;
   completePickup: (id: string, customerFeedback?: string) => void;
-  updatePaymentStatus: (id: string, paymentStatus: PickupData['paymentStatus'], paymentMethod?: string) => void;
+  updatePaymentStatus: (id: string, paymentStatus: PickupData['paymentStatus'], paymentMethod?: PickupData['paymentMethod']) => void;
   getPickupsByCollector: (collectorId: string) => PickupData[];
   getPickupsByCustomer: (customerEmail: string) => PickupData[];
   getPendingPickups: () => PickupData[];
@@ -199,7 +199,7 @@ export function PickupProvider({ children }: { children: ReactNode }) {
     console.log('Pickup completed:', id, customerFeedback);
   };
 
-  const updatePaymentStatus = (id: string, paymentStatus: PickupData['paymentStatus'], paymentMethod?: string) => {
+  const updatePaymentStatus = (id: string, paymentStatus: PickupData['paymentStatus'], paymentMethod?: PickupData['paymentMethod']) => {
     dispatch({ type: 'UPDATE_PAYMENT_STATUS', payload: { id, paymentStatus, paymentMethod } });
     
     // In a real app, this would send to backend

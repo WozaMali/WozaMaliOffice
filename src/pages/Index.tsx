@@ -1,3 +1,5 @@
+"use client";
+
 // Update this page (the content is just a fallback if you fail to update the page)
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +10,7 @@ import { ThemeIndicator } from "@/components/ui/theme-indicator";
 import { UserProfile } from "@/components/UserProfile";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { UserRole } from "@/lib/auth-schema";
 
 // Helper function to get redirect URL based on user role
@@ -26,20 +28,20 @@ const getRoleRedirectUrl = (role: UserRole): string => {
 
 const Index = () => {
   const { user, isAuthenticated, isLoading } = useAuth();
-  const navigate = useNavigate();
+  const router = useRouter();
 
   // Redirect users to their role-specific dashboard or login
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
-        navigate('/');
+        router.push('/');
       } else if (user) {
         // Redirect authenticated users to their role-specific dashboard
         const redirectUrl = getRoleRedirectUrl(user.role);
-        navigate(redirectUrl);
+        router.push(redirectUrl);
       }
     }
-  }, [isAuthenticated, isLoading, user, navigate]);
+  }, [isAuthenticated, isLoading, user, router]);
 
   // Show loading while checking authentication
   if (isLoading) {
