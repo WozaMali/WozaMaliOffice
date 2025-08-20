@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -37,6 +38,7 @@ const navigation = [
 
 export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -109,7 +111,12 @@ export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
                   <p className="text-xs text-muted-foreground">Super Admin</p>
                 </div>
               </div>
-              <Button variant="ghost" size="sm">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => logout()}
+                className="hover:bg-destructive/10 hover:text-destructive"
+              >
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>

@@ -27,6 +27,8 @@ export interface AdminStaff extends User {
   canManageFunds: boolean;
 }
 
+
+
 export interface Collector extends User {
   role: 'COLLECTOR';
   collectorId: string;
@@ -192,9 +194,9 @@ export const mockUsers: (AdminStaff | Collector)[] = [
 
 // Default credentials for testing
 export const defaultCredentials = {
-  admin: { username: 'admin', password: 'admin123' },
-  staff: { username: 'manager', password: 'staff123' },
-  collector: { username: 'col001', password: 'collector123' },
+  admin: { username: 'admin', email: 'admin@wozamali.com', password: 'admin123' },
+  staff: { username: 'manager', email: 'manager@wozamali.com', password: 'staff123' },
+  collector: { username: 'col001', email: 'col001@wozamali.com', password: 'collector123' },
 };
 
 // ============================================================================

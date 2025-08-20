@@ -19,7 +19,7 @@ import AdminConfig from "./pages/AdminConfig";
 import RecyclingCalculatorPage from "./pages/RecyclingCalculatorPage";
 import CollectorDashboard from "./pages/CollectorDashboard";
 import CollectorLogin from "./pages/CollectorLogin";
-import CustomerDashboard from "./pages/CustomerDashboard";
+
 import NotFound from "./pages/NotFound";
 import { ProtectedRoute, AdminRoute, CollectorRoute } from "@/components/ProtectedRoute";
 
@@ -48,7 +48,7 @@ const App = () => (
               <Route path="/calculator" element={<ProtectedRoute><RecyclingCalculatorPage /></ProtectedRoute>} />
               <Route path="/collector" element={<CollectorRoute><CollectorDashboard /></CollectorRoute>} />
               <Route path="/collector-login" element={<CollectorLogin />} />
-              <Route path="/customer" element={<ProtectedRoute><CustomerDashboard /></ProtectedRoute>} />
+
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

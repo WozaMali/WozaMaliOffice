@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,89 +19,139 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Eye, Edit, Crown, Star, Gem } from "lucide-react";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Search, Eye, Edit, Crown, Star, Gem, Plus, UserPlus, Loader2, AlertCircle } from "lucide-react";
+import { UserService, CreateUserData } from "@/lib/user-services";
+import { User, UserRole } from "@/lib/auth-schema";
 
-// Mock user data
-const mockUsers = [
-  {
-    id: "1",
-    name: "Sarah Johnson",
-    email: "sarah.j@email.com",
-    phone: "+27 82 123 4567",
-    tier: "Gold",
-    totalKgRecycled: 45.2,
-    joinDate: "2024-01-15",
-    status: "Active"
-  },
-  {
-    id: "2", 
-    name: "Michael Chen",
-    email: "m.chen@email.com",
-    phone: "+27 71 987 6543",
-    tier: "Platinum",
-    totalKgRecycled: 128.7,
-    joinDate: "2023-11-22",
-    status: "Active"
-  },
-  {
-    id: "3",
-    name: "Nomsa Mthembu", 
-    email: "nomsa.m@email.com",
-    phone: "+27 83 555 7890",
-    tier: "Diamond",
-    totalKgRecycled: 256.3,
-    joinDate: "2023-09-10",
-    status: "Active"
-  },
-  {
-    id: "4",
-    name: "David Williams",
-    email: "d.williams@email.com", 
-    phone: "+27 84 444 1234",
-    tier: "Gold",
-    totalKgRecycled: 67.8,
-    joinDate: "2024-02-28",
-    status: "Inactive"
-  }
-];
+// User management state
+interface UserFormData {
+  email: string;
+  password: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  phone: string;
+}
 
-const getTierIcon = (tier: string) => {
-  switch (tier) {
-    case 'Gold': return <Crown className="h-4 w-4" />;
-    case 'Platinum': return <Star className="h-4 w-4" />;
-    case 'Diamond': return <Gem className="h-4 w-4" />;
-    default: return null;
-  }
-};
-
-const getTierColor = (tier: string) => {
-  switch (tier) {
-    case 'Gold': return 'bg-warning text-warning-foreground';
-    case 'Platinum': return 'bg-info text-info-foreground'; 
-    case 'Diamond': return 'bg-primary text-primary-foreground';
-    default: return 'bg-secondary text-secondary-foreground';
+const getRoleColor = (role: UserRole) => {
+  switch (role) {
+    case 'ADMIN': return 'bg-red-100 text-red-800 border-red-200';
+    case 'STAFF': return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'COLLECTOR': return 'bg-green-100 text-green-800 border-green-200';
+    default: return 'bg-gray-100 text-gray-800 border-gray-200';
   }
 };
 
 const AdminUsers = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [tierFilter, setTierFilter] = useState("all");
+  const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const filteredUsers = mockUsers.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesTier = tierFilter === "all" || user.tier === tierFilter;
-    const matchesStatus = statusFilter === "all" || user.status.toLowerCase() === statusFilter;
-    
-    return matchesSearch && matchesTier && matchesStatus;
+  const [formData, setFormData] = useState<UserFormData>({
+    email: '',
+    password: '',
+    username: '',
+    firstName: '',
+    lastName: '',
+    role: 'STAFF',
+    phone: '',
   });
 
-  const tierStats = {
-    total: mockUsers.length,
-    gold: mockUsers.filter(u => u.tier === 'Gold').length,
-    platinum: mockUsers.filter(u => u.tier === 'Platinum').length,
-    diamond: mockUsers.filter(u => u.tier === 'Diamond').length
+  // Load users from Supabase
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const loadUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('Loading users...');
+      const result = await UserService.getAllUsers();
+      
+      if (result.success) {
+        setUsers(result.users || []);
+        console.log('Users loaded successfully:', result.users);
+      } else {
+        const errorMsg = result.error || 'Failed to load users';
+        console.error('Failed to load users:', errorMsg);
+        setError(errorMsg);
+      }
+    } catch (error) {
+      console.error('Error in loadUsers:', error);
+      setError('An unexpected error occurred while loading users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    try {
+      setCreateLoading(true);
+      setError(null);
+      
+      const result = await UserService.createUser(formData);
+      if (result.success) {
+        setSuccess('User created successfully!');
+        setShowCreateDialog(false);
+        resetForm();
+        loadUsers(); // Reload users
+      } else {
+        setError(result.error || 'Failed to create user');
+      }
+    } catch (error) {
+      setError('An unexpected error occurred');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      email: '',
+      password: '',
+      username: '',
+      firstName: '',
+      lastName: '',
+      role: 'STAFF',
+      phone: '',
+    });
+  };
+
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = roleFilter === "all" || user.role === roleFilter;
+    const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? user.isActive : !user.isActive);
+    
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+
+  const userStats = {
+    total: users.length,
+    admin: users.filter(u => u.role === 'ADMIN').length,
+    staff: users.filter(u => u.role === 'STAFF').length,
+    collector: users.filter(u => u.role === 'COLLECTOR').length
   };
 
   return (
@@ -111,34 +161,34 @@ const AdminUsers = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-4">
-              <div className="text-2xl font-bold text-foreground">{tierStats.total}</div>
+              <div className="text-2xl font-bold text-foreground">{userStats.total}</div>
               <p className="text-sm text-muted-foreground">Total Users</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 flex items-center space-x-2">
-              <Crown className="h-5 w-5 text-warning" />
+              <Crown className="h-5 w-5 text-red-600" />
               <div>
-                <div className="text-2xl font-bold text-foreground">{tierStats.gold}</div>
-                <p className="text-sm text-muted-foreground">Gold Tier</p>
+                <div className="text-2xl font-bold text-foreground">{userStats.admin}</div>
+                <p className="text-sm text-muted-foreground">Admins</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 flex items-center space-x-2">
-              <Star className="h-5 w-5 text-info" />
+              <Star className="h-5 w-5 text-blue-600" />
               <div>
-                <div className="text-2xl font-bold text-foreground">{tierStats.platinum}</div>
-                <p className="text-sm text-muted-foreground">Platinum Tier</p>
+                <div className="text-2xl font-bold text-foreground">{userStats.staff}</div>
+                <p className="text-sm text-muted-foreground">Staff</p>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 flex items-center space-x-2">
-              <Gem className="h-5 w-5 text-primary" />
+              <Gem className="h-5 w-5 text-green-600" />
               <div>
-                <div className="text-2xl font-bold text-foreground">{tierStats.diamond}</div>
-                <p className="text-sm text-muted-foreground">Diamond Tier</p>
+                <div className="text-2xl font-bold text-foreground">{userStats.collector}</div>
+                <p className="text-sm text-muted-foreground">Collectors</p>
               </div>
             </CardContent>
           </Card>
@@ -147,12 +197,136 @@ const AdminUsers = () => {
         {/* User Management */}
         <Card className="shadow-elegant">
           <CardHeader>
-            <CardTitle>User Management</CardTitle>
-            <CardDescription>
-              Manage recycling community members and their tier progression
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>User Management</CardTitle>
+                <CardDescription>
+                  Manage system users and their roles
+                </CardDescription>
+              </div>
+              <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Create User
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Create New User</DialogTitle>
+                    <DialogDescription>
+                      Add a new user to the system. They will receive an email to set their password.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="firstName">First Name</Label>
+                        <Input
+                          id="firstName"
+                          value={formData.firstName}
+                          onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                          placeholder="First Name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lastName">Last Name</Label>
+                        <Input
+                          id="lastName"
+                          value={formData.lastName}
+                          onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                          placeholder="Last Name"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="email@example.com"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="username">Username</Label>
+                      <Input
+                        id="username"
+                        value={formData.username}
+                        onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
+                        placeholder="Username"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        value={formData.password}
+                        onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Password"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="role">Role</Label>
+                        <Select value={formData.role} onValueChange={(value: UserRole) => setFormData(prev => ({ ...prev, role: value }))}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ADMIN">Admin</SelectItem>
+                            <SelectItem value="STAFF">Staff</SelectItem>
+                            <SelectItem value="COLLECTOR">Collector</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">Phone</Label>
+                        <Input
+                          id="phone"
+                          value={formData.phone}
+                          onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                          placeholder="Phone"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleCreateUser} disabled={createLoading}>
+                      {createLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        'Create User'
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent>
+            {/* Error/Success Messages */}
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {success && (
+              <Alert className="mb-4 border-green-200 bg-green-50 text-green-800">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{success}</AlertDescription>
+              </Alert>
+            )}
+
             {/* Filters */}
             <div className="flex flex-col md:flex-row gap-4 mb-6">
               <div className="relative flex-1">
@@ -164,15 +338,15 @@ const AdminUsers = () => {
                   className="pl-10"
                 />
               </div>
-              <Select value={tierFilter} onValueChange={setTierFilter}>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
                 <SelectTrigger className="w-full md:w-[180px]">
-                  <SelectValue placeholder="Filter by tier" />
+                  <SelectValue placeholder="Filter by role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Tiers</SelectItem>
-                  <SelectItem value="Gold">Gold</SelectItem>
-                  <SelectItem value="Platinum">Platinum</SelectItem>
-                  <SelectItem value="Diamond">Diamond</SelectItem>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  <SelectItem value="STAFF">Staff</SelectItem>
+                  <SelectItem value="COLLECTOR">Collector</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -194,54 +368,72 @@ const AdminUsers = () => {
                   <TableRow>
                     <TableHead>User</TableHead>
                     <TableHead>Contact</TableHead>
-                    <TableHead>Tier</TableHead>
-                    <TableHead>KG Recycled</TableHead>
-                    <TableHead>Join Date</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Last Login</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium text-foreground">{user.name}</div>
-                          <div className="text-sm text-muted-foreground">{user.email}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {user.phone}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${getTierColor(user.tier)} flex items-center space-x-1 w-fit`}>
-                          {getTierIcon(user.tier)}
-                          <span>{user.tier}</span>
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {user.totalKgRecycled} kg
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(user.joinDate).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={user.status === 'Active' ? 'default' : 'secondary'}>
-                          {user.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex space-x-2">
-                          <Button variant="ghost" size="sm">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm">
-                            <Edit className="h-4 w-4" />
-                          </Button>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <div className="flex items-center justify-center space-x-2">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                          <span>Loading users...</span>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No users found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium text-foreground">
+                              {user.firstName} {user.lastName}
+                            </div>
+                            <div className="text-sm text-muted-foreground">{user.email}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {user.phone || 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={`${getRoleColor(user.role)} flex items-center space-x-1 w-fit`}>
+                            <span>{user.role}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(user.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={user.isActive ? 'default' : 'secondary'}>
+                            {user.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button variant="ghost" size="sm">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm">
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

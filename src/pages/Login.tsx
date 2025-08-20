@@ -19,16 +19,30 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
-import { defaultCredentials, getRoleDisplayName, getRoleColor } from "@/lib/auth-schema";
+import { defaultCredentials, getRoleDisplayName, getRoleColor, UserRole } from "@/lib/auth-schema";
+
+// Helper function to get redirect URL based on user role
+const getRoleRedirectUrl = (role: UserRole): string => {
+  switch (role) {
+    case 'COLLECTOR':
+      return '/collector';
+    case 'ADMIN':
+    case 'STAFF':
+      return '/admin';
+    default:
+      return '/';
+  }
+};
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isLoading, isAuthenticated } = useAuth();
+  const { login, isLoading, isAuthenticated, user } = useAuth();
   const { theme } = useTheme();
 
-  // Redirect already authenticated users
-  if (isAuthenticated) {
-    navigate('/dashboard');
+  // Redirect already authenticated users to their role-specific dashboard
+  if (isAuthenticated && user) {
+    const redirectUrl = getRoleRedirectUrl(user.role);
+    navigate(redirectUrl);
     return null;
   }
   
@@ -83,7 +97,7 @@ export default function Login() {
     const credentials = defaultCredentials[type];
     setFormData(prev => ({
       ...prev,
-      username: credentials.username,
+      username: credentials.email || credentials.username,
       password: credentials.password,
     }));
   };
@@ -117,22 +131,22 @@ export default function Login() {
           </CardHeader>
           <CardContent className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Username Field */}
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="username"
-                    type="text"
-                    value={formData.username}
-                    onChange={(e) => handleInputChange('username', e.target.value)}
-                    placeholder="Enter your username"
-                    className="pl-10"
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
+                             {/* Email Field */}
+               <div className="space-y-2">
+                 <Label htmlFor="username">Email</Label>
+                 <div className="relative">
+                   <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                   <Input
+                     id="username"
+                     type="email"
+                     value={formData.username}
+                     onChange={(e) => handleInputChange('username', e.target.value)}
+                     placeholder="Enter your email"
+                     className="pl-10"
+                     disabled={isLoading}
+                   />
+                 </div>
+               </div>
 
               {/* Password Field */}
               <div className="space-y-2">
@@ -229,7 +243,7 @@ export default function Login() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -274,27 +288,27 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-xs">
-            <div className="grid grid-cols-1 gap-2">
-              <div className="flex items-center justify-between p-2 rounded bg-background">
-                <span className="font-medium">Admin:</span>
-                <code className="text-muted-foreground">admin / admin123</code>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded bg-background">
-                <span className="font-medium">Staff:</span>
-                <code className="text-muted-foreground">manager / staff123</code>
-              </div>
-              <div className="flex items-center justify-between p-2 rounded bg-background">
-                <span className="font-medium">Collector:</span>
-                <code className="text-muted-foreground">col001 / collector123</code>
-              </div>
-            </div>
+                         <div className="grid grid-cols-1 gap-2">
+               <div className="flex items-center justify-between p-2 rounded bg-background">
+                 <span className="font-medium">Admin:</span>
+                 <code className="text-muted-foreground">admin@wozamali.com / admin123</code>
+               </div>
+               <div className="flex items-center justify-between p-2 rounded bg-background">
+                 <span className="font-medium">Staff:</span>
+                 <code className="text-muted-foreground">manager@wozamali.com / staff123</code>
+               </div>
+               <div className="flex items-center justify-between p-2 rounded bg-background">
+                 <span className="font-medium">Collector:</span>
+                 <code className="text-muted-foreground">col001@wozamali.com / collector123</code>
+               </div>
+             </div>
           </CardContent>
         </Card>
 
                     {/* Back to Main */}
             <div className="text-center">
               <Button variant="ghost" asChild>
-                <a href="/dashboard">← Go to Dashboard</a>
+                <a href="/">← Back to Login</a>
               </Button>
             </div>
       </div>

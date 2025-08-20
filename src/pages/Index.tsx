@@ -9,17 +9,37 @@ import { UserProfile } from "@/components/UserProfile";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { UserRole } from "@/lib/auth-schema";
+
+// Helper function to get redirect URL based on user role
+const getRoleRedirectUrl = (role: UserRole): string => {
+  switch (role) {
+    case 'COLLECTOR':
+      return '/collector';
+    case 'ADMIN':
+    case 'STAFF':
+      return '/admin';
+    default:
+      return '/';
+  }
+};
 
 const Index = () => {
   const { user, isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect unauthenticated users to login
+  // Redirect users to their role-specific dashboard or login
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      navigate('/');
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        navigate('/');
+      } else if (user) {
+        // Redirect authenticated users to their role-specific dashboard
+        const redirectUrl = getRoleRedirectUrl(user.role);
+        navigate(redirectUrl);
+      }
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isLoading, user, navigate]);
 
   // Show loading while checking authentication
   if (isLoading) {

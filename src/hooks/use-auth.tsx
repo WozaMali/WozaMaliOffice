@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, AuthCredentials, AuthResponse, authenticateUser } from '@/lib/auth-schema';
+import { User, AuthCredentials, AuthResponse } from '@/lib/auth-schema';
+import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -16,26 +17,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check if user is authenticated on mount
+  // Check if user is authenticated on mount and listen for auth changes
   useEffect(() => {
     checkAuth();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          await checkAuth();
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
+      }
+    );
+    
+    return () => subscription.unsubscribe();
   }, []);
 
-  const checkAuth = () => {
+  const checkAuth = async () => {
     try {
-      // Check localStorage for saved auth data
-      const savedUser = localStorage.getItem('woza-mali-user');
-      const savedToken = localStorage.getItem('woza-mali-token');
+      setIsLoading(true);
       
-      if (savedUser && savedToken) {
-        const userData = JSON.parse(savedUser);
-        setUser(userData);
+      // Get current Supabase session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (session && session.user) {
+        // Get user profile from profiles table
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profile && !profileError) {
+          const userData: User = {
+            id: profile.id,
+            username: profile.username || profile.email,
+            email: profile.email,
+            role: profile.role,
+            firstName: profile.first_name || '',
+            lastName: profile.last_name || '',
+            isActive: profile.is_active || true,
+            lastLogin: profile.last_login ? new Date(profile.last_login) : new Date(),
+            createdAt: profile.created_at ? new Date(profile.created_at) : new Date(),
+            updatedAt: profile.updated_at ? new Date(profile.updated_at) : new Date(),
+          };
+          setUser(userData);
+        }
       }
     } catch (error) {
       console.error('Error checking authentication:', error);
-      // Clear invalid data
-      localStorage.removeItem('woza-mali-user');
-      localStorage.removeItem('woza-mali-token');
     } finally {
       setIsLoading(false);
     }
@@ -45,22 +77,69 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsLoading(true);
       
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Sign in with Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.username, // Assuming username is email
+        password: credentials.password,
+      });
       
-      const response = authenticateUser(credentials);
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Login failed',
+        };
+      }
       
-      if (response.success && response.user && response.token) {
-        // Save to localStorage
-        localStorage.setItem('woza-mali-user', JSON.stringify(response.user));
-        localStorage.setItem('woza-mali-token', response.token);
+      if (data.user) {
+        // Get user profile from profiles table
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (profileError) {
+          return {
+            success: false,
+            error: 'Failed to load user profile',
+          };
+        }
+        
+        const userData: User = {
+          id: profile.id,
+          username: profile.username || profile.email,
+          email: profile.email,
+          role: profile.role,
+          firstName: profile.first_name || '',
+          lastName: profile.last_name || '',
+          isActive: profile.is_active || true,
+          lastLogin: profile.last_login ? new Date(profile.last_login) : new Date(),
+          createdAt: profile.created_at ? new Date(profile.created_at) : new Date(),
+          updatedAt: profile.updated_at ? new Date(profile.updated_at) : new Date(),
+        };
         
         // Update state
-        setUser(response.user);
+        setUser(userData);
         
-        return response;
+        // Generate redirect path based on role
+        let redirectTo = '/dashboard';
+        if (userData.role === 'COLLECTOR') {
+          redirectTo = '/collector';
+        } else if (userData.role === 'ADMIN' || userData.role === 'STAFF') {
+          redirectTo = '/admin';
+        }
+        
+        return {
+          success: true,
+          user: userData,
+          token: data.session?.access_token,
+          redirectTo,
+        };
       } else {
-        return response;
+        return {
+          success: false,
+          error: 'Login failed - no user data received',
+        };
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -73,19 +152,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = () => {
-    // Clear localStorage
-    localStorage.removeItem('woza-mali-user');
-    localStorage.removeItem('woza-mali-token');
-    
-    // Clear any stored redirect information
-    sessionStorage.removeItem('redirectAfterLogin');
-    
-    // Clear state
-    setUser(null);
-    
-    // Force redirect to login page
-    window.location.href = '/';
+  const logout = async () => {
+    try {
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+      
+      // Clear any stored redirect information
+      sessionStorage.removeItem('redirectAfterLogin');
+      
+      // Clear state
+      setUser(null);
+      
+      // Force redirect to login page
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Still clear state and redirect even if Supabase logout fails
+      setUser(null);
+      window.location.href = '/';
+    }
   };
 
   const value: AuthContextType = {

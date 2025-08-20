@@ -42,7 +42,8 @@ import {
   Leaf,
   X,
   Image as ImageIcon,
-  RefreshCw
+  RefreshCw,
+  LogOut
 } from "lucide-react";
 import { MaterialType, calculateTransactionTotals, formatCurrency, formatWeight, formatPoints } from "@/lib/recycling-schema";
 import { useTheme } from "@/hooks/use-theme";
@@ -124,7 +125,7 @@ interface MaterialPhoto {
 
 export default function CollectorDashboard() {
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { 
     customers, 
     statistics, 
@@ -519,6 +520,15 @@ export default function CollectorDashboard() {
                 <Zap className="h-4 w-4 mr-1" />
                 {realTimeMetrics.personal.streak} Day Streak
               </Badge>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => logout()}
+                className="bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20 hover:text-destructive"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
             </div>
           </div>
         </div>
