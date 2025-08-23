@@ -1,6 +1,6 @@
 import React from "react";
 import { AdminLayout } from "../components/AdminLayout";
-import { DashboardMetrics } from "../components/DashboardMetrics";
+import WorkingDashboard from "../components/WorkingDashboard";
 
 export default function AdminDashboard() {
   return (
@@ -15,7 +15,7 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        <DashboardMetrics />
+        <WorkingDashboard />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Quick Actions */}

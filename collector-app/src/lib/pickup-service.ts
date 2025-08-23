@@ -10,7 +10,7 @@ import type {
 
 export interface CreatePickupData {
   customer_id: string;
-  address_id: string;
+  address_id: string | null;
   lat?: number;
   lng?: number;
   notes?: string;
@@ -42,7 +42,12 @@ export class PickupService {
         .order('started_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching pickups:', error);
+        console.error('Error fetching pickups from Supabase:', {
+          error: error,
+          errorType: typeof error,
+          errorKeys: Object.keys(error),
+          fullError: JSON.stringify(error, null, 2)
+        });
         return [];
       }
 
@@ -82,7 +87,21 @@ export class PickupService {
 
   static async createPickup(pickupData: CreatePickupData, collectorId: string): Promise<string | null> {
     try {
+      console.log('🚀 createPickup function called!');
+      console.log('1. Pickup data:', pickupData);
+      console.log('2. Collector ID:', collectorId);
+      
       // Start transaction
+      console.log('4. Attempting to insert pickup with data:', {
+        customer_id: pickupData.customer_id,
+        collector_id: collectorId,
+        address_id: pickupData.address_id,
+        started_at: new Date().toISOString(),
+        status: 'submitted',
+        lat: pickupData.lat,
+        lng: pickupData.lng,
+      });
+      
       const { data: pickup, error: pickupError } = await supabase
         .from('pickups')
         .insert({
@@ -97,8 +116,23 @@ export class PickupService {
         .select('id')
         .single();
 
+      console.log('5. Supabase response:', { pickup, pickupError });
+
       if (pickupError) {
-        console.error('Error creating pickup:', pickupError);
+        console.error('🚨 PICKUP ERROR DETECTED! 🚨');
+        console.error('Raw pickupError:', pickupError);
+        console.error('pickupError type:', typeof pickupError);
+        console.error('pickupError === null:', pickupError === null);
+        console.error('pickupError === undefined:', pickupError === undefined);
+        console.error('pickupError === {}:', JSON.stringify(pickupError) === '{}');
+        console.error('pickupError keys:', Object.keys(pickupError));
+        console.error('pickupError length:', Object.keys(pickupError).length);
+        console.error('pickupError stringified:', JSON.stringify(pickupError, null, 2));
+        console.error('pickupError message:', pickupError?.message);
+        console.error('pickupError code:', pickupError?.code);
+        console.error('pickupError details:', pickupError?.details);
+        console.error('pickupError hint:', pickupError?.hint);
+        console.error('Full error object:', pickupError);
         return null;
       }
 
@@ -110,12 +144,23 @@ export class PickupService {
         contamination_pct: material.contamination_pct || 0,
       }));
 
+      console.log('3. Pickup items to create:', pickupItems);
+
       const { error: itemsError } = await supabase
         .from('pickup_items')
         .insert(pickupItems);
 
       if (itemsError) {
-        console.error('Error creating pickup items:', itemsError);
+        console.error('Error creating pickup items from Supabase:', {
+          error: itemsError,
+          errorType: typeof itemsError,
+          errorKeys: Object.keys(itemsError),
+          fullError: JSON.stringify(itemsError, null, 2),
+          errorMessage: itemsError?.message || 'No message',
+          errorCode: itemsError?.code || 'No code',
+          errorDetails: itemsError?.details || 'No details',
+          hint: itemsError?.hint || 'No hint'
+        });
         // Rollback pickup creation
         await supabase.from('pickups').delete().eq('id', pickup.id);
         return null;
@@ -181,7 +226,6 @@ export class PickupService {
       const { data, error } = await supabase
         .from('materials')
         .select('*')
-        .eq('is_active', true)
         .order('name');
 
       if (error) {
@@ -230,29 +274,51 @@ export class PickupService {
     }
   }
 
-  static async getCustomers(): Promise<any[]> {
+  static async getUsers(): Promise<any[]> {
     try {
+      console.log('=== STARTING getUsers() ===');
+      console.log('1. Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+      console.log('2. Supabase client exists:', !!supabase);
+      
+      // Test connection first
+      console.log('3. Testing basic connection...');
+      const { data: testData, error: testError } = await supabase
+        .from('profiles')
+        .select('id')
+        .limit(1);
+      
+      console.log('4. Connection test result:', { testData, testError });
+      
+      console.log('5. Fetching member profiles...');
       const { data, error } = await supabase
         .from('profiles')
         .select(`
           id,
           email,
-          first_name,
-          last_name,
-          phone,
-          addresses(*)
+          full_name,
+          phone
         `)
-        .eq('role', 'CUSTOMER')
-        .eq('is_active', true);
+        .eq('role', 'member');
 
+      console.log('6. Main query result:', { data, error });
+      
       if (error) {
-        console.error('Error fetching customers:', error);
+        console.error('Error fetching users from Supabase:', {
+          error: error,
+          errorType: typeof error,
+          errorKeys: Object.keys(error),
+          fullError: JSON.stringify(error, null, 2),
+          errorMessage: error?.message || 'No message',
+          errorCode: error?.code || 'No code',
+          errorDetails: error?.details || 'No details'
+        });
         return [];
       }
 
+      console.log('Successfully fetched users:', data);
       return data || [];
     } catch (error) {
-      console.error('Error fetching customers:', error);
+      console.error('Error fetching users (catch block):', error);
       return [];
     }
   }

@@ -18,9 +18,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider
-          attribute="class"
           defaultTheme="system"
-          enableSystem
+          storageKey="woza-mali-theme"
         >
           <AuthProvider>
             {children}

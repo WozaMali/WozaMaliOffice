@@ -1,8 +1,8 @@
 -- ============================================================================
 -- WOZA MALI OFFICE DATABASE SCHEMA (FIXED VERSION)
 -- ============================================================================
+-- This version handles existing objects gracefully
 -- Run this in your Supabase SQL Editor
--- This version handles existing policies and objects gracefully
 
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -16,20 +16,10 @@ CREATE EXTENSION IF NOT EXISTS "pg_cron";
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
-  username TEXT UNIQUE,
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
+  full_name TEXT,
   phone TEXT,
-  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'STAFF', 'COLLECTOR')),
-  is_active BOOLEAN DEFAULT TRUE,
-  avatar_url TEXT,
-  email_verified BOOLEAN DEFAULT FALSE,
-  phone_verified BOOLEAN DEFAULT FALSE,
-  last_login TIMESTAMP WITH TIME ZONE,
-  login_count INTEGER DEFAULT 0,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'STAFF', 'COLLECTOR', 'CUSTOMER')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create user_permissions table for granular access control
@@ -52,30 +42,22 @@ CREATE TABLE IF NOT EXISTS public.user_permissions (
 CREATE TABLE IF NOT EXISTS public.materials (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   name TEXT NOT NULL UNIQUE,
-  category TEXT NOT NULL,
   unit TEXT NOT NULL DEFAULT 'kg',
-  price_per_unit DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  description TEXT,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  rate_per_kg DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  is_active BOOLEAN DEFAULT TRUE
 );
 
 -- Create addresses table for customer pickup locations
 CREATE TABLE IF NOT EXISTS public.addresses (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  customer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-  street_address TEXT NOT NULL,
-  suburb TEXT,
-  ext_zone_phase TEXT,
+  profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  line1 TEXT NOT NULL,
+  suburb TEXT NOT NULL,
   city TEXT NOT NULL,
   postal_code TEXT,
-  latitude DECIMAL(10,8),
-  longitude DECIMAL(11,8),
-  is_primary BOOLEAN DEFAULT FALSE,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  is_primary BOOLEAN DEFAULT FALSE
 );
 
 -- Create pickups table for scheduled collection requests
@@ -84,14 +66,12 @@ CREATE TABLE IF NOT EXISTS public.pickups (
   customer_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
   collector_id UUID REFERENCES public.profiles(id),
   address_id UUID REFERENCES public.addresses(id) NOT NULL,
-  pickup_date DATE NOT NULL,
-  pickup_time_slot TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'in_progress', 'completed', 'cancelled')),
-  total_weight DECIMAL(8,2),
-  total_value DECIMAL(10,2),
-  notes TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  submitted_at TIMESTAMP WITH TIME ZONE,
+  lat DOUBLE PRECISION,
+  lng DOUBLE PRECISION,
+  status TEXT NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted', 'approved', 'rejected')),
+  approval_note TEXT
 );
 
 -- Create pickup_items table for individual materials in each pickup
@@ -99,71 +79,9 @@ CREATE TABLE IF NOT EXISTS public.pickup_items (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   pickup_id UUID REFERENCES public.pickups(id) ON DELETE CASCADE NOT NULL,
   material_id UUID REFERENCES public.materials(id) NOT NULL,
-  weight DECIMAL(8,2) NOT NULL,
-  unit_price DECIMAL(10,2) NOT NULL,
-  total_price DECIMAL(10,2) NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  kilograms DECIMAL(10,3) CHECK (kilograms >= 0),
+  contamination_pct DECIMAL(5,2) CHECK (contamination_pct BETWEEN 0 AND 100)
 );
-
--- Create pickup_photos table for verification and documentation
-CREATE TABLE IF NOT EXISTS public.pickup_photos (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  pickup_id UUID REFERENCES public.pickups(id) ON DELETE CASCADE NOT NULL,
-  photo_url TEXT NOT NULL,
-  photo_type TEXT CHECK (photo_type IN ('before', 'after', 'verification')),
-  uploaded_by UUID REFERENCES public.profiles(id) NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- ============================================================================
--- FINANCIAL MANAGEMENT TABLES
--- ============================================================================
-
--- Create wallets table for customer balances
-CREATE TABLE IF NOT EXISTS public.wallets (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  user_id UUID REFERENCES public.profiles(id) UNIQUE NOT NULL,
-  balance DECIMAL(10,2) DEFAULT 0.00,
-  total_points INTEGER DEFAULT 0,
-  tier TEXT DEFAULT 'Bronze Recycler' CHECK (tier IN ('Bronze Recycler', 'Silver Recycler', 'Gold Recycler', 'Platinum Recycler', 'Diamond Recycler')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create payments table for wallet transactions
-CREATE TABLE IF NOT EXISTS public.payments (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  wallet_id UUID REFERENCES public.wallets(id) NOT NULL,
-  pickup_id UUID REFERENCES public.pickups(id),
-  amount DECIMAL(10,2) NOT NULL,
-  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('credit', 'debit', 'withdrawal', 'refund')),
-  description TEXT NOT NULL,
-  reference TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'cancelled')),
-  processed_by UUID REFERENCES public.profiles(id),
-  processed_at TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create withdrawals table for customer cash-out requests
-CREATE TABLE IF NOT EXISTS public.withdrawals (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  user_id UUID REFERENCES public.profiles(id) NOT NULL,
-  amount DECIMAL(10,2) NOT NULL,
-  withdrawal_method TEXT NOT NULL CHECK (withdrawal_method IN ('bank_transfer', 'mobile_money', 'cash_pickup')),
-  account_details JSONB,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'processed', 'completed', 'rejected')),
-  approved_by UUID REFERENCES public.profiles(id),
-  approved_at TIMESTAMP WITH TIME ZONE,
-  processed_at TIMESTAMP WITH TIME ZONE,
-  notes TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- ============================================================================
--- OPERATIONAL TABLES
--- ============================================================================
 
 -- Create collector_assignments table for work distribution
 CREATE TABLE IF NOT EXISTS public.collector_assignments (
@@ -212,7 +130,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 -- Create user_activity_log table for audit trail
 CREATE TABLE IF NOT EXISTS public.user_activity_log (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) NOT NULL,
   activity_type TEXT NOT NULL,
   description TEXT,
   metadata JSONB,
@@ -221,200 +139,159 @@ CREATE TABLE IF NOT EXISTS public.user_activity_log (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create system_logs table for administrative actions
+-- Create system_logs table for application events
 CREATE TABLE IF NOT EXISTS public.system_logs (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  admin_id UUID REFERENCES public.profiles(id) NOT NULL,
-  action TEXT NOT NULL,
-  table_name TEXT,
-  record_id UUID,
-  old_values JSONB,
-  new_values JSONB,
-  ip_address INET,
+  log_level TEXT NOT NULL CHECK (log_level IN ('debug', 'info', 'warning', 'error', 'critical')),
+  component TEXT NOT NULL,
+  message TEXT NOT NULL,
+  metadata JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- ============================================================================
--- CONFIGURATION TABLES
+-- VIEWS FOR COLLECTOR DASHBOARD
 -- ============================================================================
 
--- Create app_settings table for system configuration
-CREATE TABLE IF NOT EXISTS public.app_settings (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  setting_key TEXT UNIQUE NOT NULL,
-  setting_value TEXT NOT NULL,
-  setting_type TEXT NOT NULL DEFAULT 'string' CHECK (setting_type IN ('string', 'number', 'boolean', 'json')),
-  description TEXT,
-  is_public BOOLEAN DEFAULT FALSE,
-  updated_by UUID REFERENCES public.profiles(id),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create email_templates table for customizable notifications
-CREATE TABLE IF NOT EXISTS public.email_templates (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  template_name TEXT UNIQUE NOT NULL,
-  subject TEXT NOT NULL,
-  html_content TEXT NOT NULL,
-  text_content TEXT,
-  variables JSONB,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- ============================================================================
--- ROW LEVEL SECURITY (RLS)
--- ============================================================================
-
--- Enable RLS on all tables
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_permissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.addresses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pickups ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pickup_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pickup_photos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.wallets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.withdrawals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.collector_assignments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.collector_schedules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_activity_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.system_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.email_templates ENABLE ROW LEVEL SECURITY;
+-- Create collector dashboard view
+CREATE OR REPLACE VIEW public.collector_dashboard_view AS
+SELECT 
+  p.id,
+  p.customer_id,
+  c.full_name as customer_name,
+  p.address_id,
+  a.line1 as address_line1,
+  a.suburb as address_suburb,
+  a.city as address_city,
+  p.started_at,
+  p.submitted_at,
+  p.status,
+  COALESCE(pi.total_kg, 0) as total_kg,
+  COALESCE(pi.total_value, 0) as total_value,
+  CASE 
+    WHEN p.status = 'approved' THEN 'paid'
+    ELSE 'pending'
+  END as payment_status,
+  p.collector_id,
+  col.full_name as collector_name,
+  0 as total_points -- Placeholder for points system
+FROM public.pickups p
+JOIN public.profiles c ON p.customer_id = c.id
+JOIN public.addresses a ON p.address_id = a.id
+LEFT JOIN public.profiles col ON p.collector_id = col.id
+LEFT JOIN (
+  SELECT 
+    pickup_id,
+    SUM(kilograms) as total_kg,
+    SUM(kilograms * m.rate_per_kg) as total_value
+  FROM public.pickup_items pi
+  JOIN public.materials m ON pi.material_id = m.id
+  GROUP BY pickup_id
+) pi ON p.id = pi.pickup_id
+WHERE p.status IN ('submitted', 'approved', 'rejected');
 
 -- ============================================================================
--- RLS POLICIES (WITH SAFE CREATION)
+-- POLICIES (WITH EXISTING POLICY HANDLING)
 -- ============================================================================
 
--- Profiles policies
+-- Drop existing policies if they exist
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can view own profile') THEN
-    CREATE POLICY "Users can view own profile" ON public.profiles
-      FOR SELECT USING (auth.uid() = id);
+  -- Drop profiles policies
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can view own profile') THEN
+    DROP POLICY "Users can view own profile" ON public.profiles;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Admins can view all profiles') THEN
+    DROP POLICY "Admins can view all profiles" ON public.profiles;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can update own profile') THEN
+    DROP POLICY "Users can update own profile" ON public.profiles;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Admins can update all profiles') THEN
+    DROP POLICY "Admins can update all profiles" ON public.profiles;
+  END IF;
+  
+  -- Drop materials policies
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'materials' AND policyname = 'Authenticated users can view materials') THEN
+    DROP POLICY "Authenticated users can view materials" ON public.materials;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'materials' AND policyname = 'Only admins can manage materials') THEN
+    DROP POLICY "Only admins can manage materials" ON public.materials;
+  END IF;
+  
+  -- Drop pickups policies
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'pickups' AND policyname = 'Users can view own pickups') THEN
+    DROP POLICY "Users can view own pickups" ON public.pickups;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'pickups' AND policyname = 'Collectors can view assigned pickups') THEN
+    DROP POLICY "Collectors can view assigned pickups" ON public.pickups;
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'pickups' AND policyname = 'Admins and staff can view all pickups') THEN
+    DROP POLICY "Admins and staff can view all pickups" ON public.pickups;
   END IF;
 END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Admins can view all profiles') THEN
+-- Enable RLS on tables
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pickups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.addresses ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+CREATE POLICY "Users can view own profile" ON public.profiles
+  FOR SELECT USING (auth.uid() = id);
+
     CREATE POLICY "Admins can view all profiles" ON public.profiles
       FOR SELECT USING (
         EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
       );
-  END IF;
-END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can update own profile') THEN
     CREATE POLICY "Users can update own profile" ON public.profiles
       FOR UPDATE USING (auth.uid() = id);
-  END IF;
-END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Admins can update all profiles') THEN
     CREATE POLICY "Admins can update all profiles" ON public.profiles
       FOR UPDATE USING (
         EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
       );
-  END IF;
-END $$;
 
--- Materials policies
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'materials' AND policyname = 'Authenticated users can view materials') THEN
+-- Materials policies (read-only for all authenticated users)
     CREATE POLICY "Authenticated users can view materials" ON public.materials
       FOR SELECT USING (auth.role() = 'authenticated');
-  END IF;
-END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'materials' AND policyname = 'Only admins can manage materials') THEN
     CREATE POLICY "Only admins can manage materials" ON public.materials
       FOR ALL USING (
         EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
       );
-  END IF;
-END $$;
 
 -- Pickups policies
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'pickups' AND policyname = 'Users can view own pickups') THEN
     CREATE POLICY "Users can view own pickups" ON public.pickups
       FOR SELECT USING (customer_id = auth.uid());
-  END IF;
-END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'pickups' AND policyname = 'Collectors can view assigned pickups') THEN
     CREATE POLICY "Collectors can view assigned pickups" ON public.pickups
       FOR SELECT USING (
         EXISTS (SELECT 1 FROM public.collector_assignments WHERE pickup_id = pickups.id AND collector_id = auth.uid())
       );
-  END IF;
-END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'pickups' AND policyname = 'Admins and staff can view all pickups') THEN
     CREATE POLICY "Admins and staff can view all pickups" ON public.pickups
       FOR SELECT USING (
         EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'STAFF'))
       );
-  END IF;
-END $$;
 
--- Wallets policies
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'wallets' AND policyname = 'Users can view own wallet') THEN
-    CREATE POLICY "Users can view own wallet" ON public.wallets
-      FOR SELECT USING (user_id = auth.uid());
-  END IF;
-END $$;
+-- Addresses policies
+CREATE POLICY "Users can view own addresses" ON public.addresses
+  FOR SELECT USING (profile_id = auth.uid());
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'wallets' AND policyname = 'Admins can view all wallets') THEN
-    CREATE POLICY "Admins can view all wallets" ON public.wallets
-      FOR SELECT USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'ADMIN')
-      );
-  END IF;
-END $$;
-
--- Withdrawals policies
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'withdrawals' AND policyname = 'Users can view own withdrawals') THEN
-    CREATE POLICY "Users can view own withdrawals" ON public.withdrawals
-      FOR SELECT USING (user_id = auth.uid());
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'withdrawals' AND policyname = 'Admins and staff can view all withdrawals') THEN
-    CREATE POLICY "Admins and staff can view all withdrawals" ON public.withdrawals
-      FOR SELECT USING (
-        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('ADMIN', 'STAFF'))
-      );
-  END IF;
-END $$;
+CREATE POLICY "Users can manage own addresses" ON public.addresses
+  FOR ALL USING (profile_id = auth.uid());
 
 -- ============================================================================
--- FUNCTIONS (WITH SAFE CREATION)
+-- FUNCTIONS
 -- ============================================================================
 
 -- Function to handle new user registration
@@ -425,261 +302,55 @@ BEGIN
   INSERT INTO public.profiles (
     id, 
     email, 
-    first_name,
-    last_name,
-    email_verified
+    full_name,
+    role
   )
   VALUES (
     NEW.id, 
     NEW.email, 
-    COALESCE(NEW.raw_user_meta_data->>'first_name', 'Unknown'),
-    COALESCE(NEW.raw_user_meta_data->>'last_name', 'User'),
-    COALESCE(NEW.email_confirmed_at IS NOT NULL, false)
-  );
-  
-  -- Log user registration activity
-  INSERT INTO public.user_activity_log (
-    user_id,
-    activity_type,
-    description,
-    metadata
-  )
-  VALUES (
-    NEW.id,
-    'user_registration',
-    'User registered successfully',
-    jsonb_build_object(
-      'email', NEW.email, 
-      'provider', COALESCE(NEW.raw_app_meta_data->>'provider', 'email')
-    )
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'Unknown User'),
+    'CUSTOMER'
   );
   
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Function to handle user login
-CREATE OR REPLACE FUNCTION public.handle_user_login()
-RETURNS TRIGGER AS $$
-BEGIN
-  -- Update last login and login count
-  UPDATE public.profiles 
-  SET 
-    last_login = NOW(),
-    login_count = login_count + 1,
-    updated_at = NOW()
-  WHERE id = NEW.id;
-  
-  -- Log login activity
-  INSERT INTO public.user_activity_log (
-    user_id,
-    activity_type,
-    description,
-    metadata
-  )
-  VALUES (
-    NEW.id,
-    'user_login',
-    'User logged in successfully',
-    jsonb_build_object('login_time', NOW())
-  );
-  
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Function to calculate pickup total
-CREATE OR REPLACE FUNCTION public.calculate_pickup_total(pickup_uuid UUID)
-RETURNS DECIMAL(10,2) AS $$
-DECLARE
-  total DECIMAL(10,2);
-BEGIN
-  SELECT COALESCE(SUM(total_price), 0.00)
-  INTO total
-  FROM public.pickup_items
-  WHERE pickup_id = pickup_uuid;
-  
-  RETURN total;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Function to update wallet balance
-CREATE OR REPLACE FUNCTION public.update_wallet_balance(wallet_uuid UUID, amount_change DECIMAL(10,2))
-RETURNS VOID AS $$
-BEGIN
-  UPDATE public.wallets
-  SET 
-    balance = balance + amount_change,
-    updated_at = NOW()
-  WHERE id = wallet_uuid;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Function to update updated_at timestamp
-CREATE OR REPLACE FUNCTION public.update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
 -- ============================================================================
--- TRIGGERS (WITH SAFE CREATION)
+-- TRIGGERS
 -- ============================================================================
 
--- Trigger to automatically create profile
+-- Create trigger for new user registration
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Trigger to handle user login
-CREATE OR REPLACE TRIGGER on_auth_user_login
-  AFTER UPDATE ON auth.users
-  FOR EACH ROW
-  WHEN (OLD.last_sign_in_at IS DISTINCT FROM NEW.last_sign_in_at)
-  EXECUTE FUNCTION public.handle_user_login();
-
--- Triggers for updated_at
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_profiles_updated_at') THEN
-    CREATE TRIGGER update_profiles_updated_at
-      BEFORE UPDATE ON public.profiles
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_materials_updated_at') THEN
-    CREATE TRIGGER update_materials_updated_at
-      BEFORE UPDATE ON public.materials
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_pickups_updated_at') THEN
-    CREATE TRIGGER update_pickups_updated_at
-      BEFORE UPDATE ON public.pickups
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_wallets_updated_at') THEN
-    CREATE TRIGGER update_wallets_updated_at
-      BEFORE UPDATE ON public.wallets
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_withdrawals_updated_at') THEN
-    CREATE TRIGGER update_withdrawals_updated_at
-      BEFORE UPDATE ON public.withdrawals
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_collector_schedules_updated_at') THEN
-    CREATE TRIGGER update_collector_schedules_updated_at
-      BEFORE UPDATE ON public.collector_schedules
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_app_settings_updated_at') THEN
-    CREATE TRIGGER update_app_settings_updated_at
-      BEFORE UPDATE ON public.app_settings
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_email_templates_updated_at') THEN
-    CREATE TRIGGER update_email_templates_updated_at
-      BEFORE UPDATE ON public.email_templates
-      FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-  END IF;
-END $$;
-
 -- ============================================================================
--- INDEXES (WITH SAFE CREATION)
+-- INITIAL DATA
 -- ============================================================================
 
--- Performance indexes
-CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
-CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
-CREATE INDEX IF NOT EXISTS idx_profiles_status ON public.profiles(status);
-CREATE INDEX IF NOT EXISTS idx_pickups_customer_id ON public.pickups(customer_id);
-CREATE INDEX IF NOT EXISTS idx_pickups_collector_id ON public.pickups(collector_id);
-CREATE INDEX IF NOT EXISTS idx_pickups_status ON public.pickups(status);
-CREATE INDEX IF NOT EXISTS idx_pickups_date ON public.pickups(pickup_date);
-CREATE INDEX IF NOT EXISTS idx_pickup_items_pickup_id ON public.pickup_items(pickup_id);
-CREATE INDEX IF NOT EXISTS idx_wallets_user_id ON public.wallets(user_id);
-CREATE INDEX IF NOT EXISTS idx_payments_wallet_id ON public.payments(wallet_id);
-CREATE INDEX IF NOT EXISTS idx_withdrawals_user_id ON public.withdrawals(user_id);
-CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON public.withdrawals(status);
-CREATE INDEX IF NOT EXISTS idx_collector_assignments_collector_id ON public.collector_assignments(collector_id);
-CREATE INDEX IF NOT EXISTS idx_collector_assignments_pickup_id ON public.collector_assignments(pickup_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON public.notifications(is_read);
-CREATE INDEX IF NOT EXISTS idx_user_activity_log_user_id ON public.user_activity_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_activity_log_created ON public.user_activity_log(created_at);
+-- Insert default admin user if not exists
+INSERT INTO public.profiles (id, email, full_name, role)
+VALUES (
+  '00000000-0000-0000-0000-000000000001',
+  'admin@wozamali.com',
+  'System Administrator',
+  'ADMIN'
+) ON CONFLICT (id) DO NOTHING;
 
--- ============================================================================
--- SAMPLE DATA (WITH SAFE INSERTION)
--- ============================================================================
-
--- Insert default materials
-INSERT INTO public.materials (name, category, unit, price_per_unit, description) VALUES
-  ('Plastic Bottles', 'Plastic', 'kg', 2.50, 'Clean plastic bottles and containers'),
-  ('Paper & Cardboard', 'Paper', 'kg', 1.80, 'Clean paper, cardboard, and cartons'),
-  ('Glass Bottles', 'Glass', 'kg', 1.20, 'Clean glass bottles and jars'),
-  ('Aluminum Cans', 'Metal', 'kg', 8.00, 'Clean aluminum beverage cans'),
-  ('Steel Cans', 'Metal', 'kg', 3.50, 'Clean steel food cans'),
-  ('Electronics', 'E-Waste', 'kg', 15.00, 'Small electronic devices and components')
+-- Insert default materials if not exist
+INSERT INTO public.materials (name, unit, rate_per_kg, is_active)
+VALUES 
+  ('PET Bottles', 'kg', 1.50, true),
+  ('Aluminum Cans', 'kg', 1.20, true),
+  ('Glass', 'kg', 0.80, true),
+  ('Paper', 'kg', 0.60, true),
+  ('Cardboard', 'kg', 0.40, true)
 ON CONFLICT (name) DO NOTHING;
-
--- Insert default app settings
-INSERT INTO public.app_settings (setting_key, setting_value, setting_type, description, is_public) VALUES
-  ('company_name', 'Woza Mali', 'string', 'Company name for the application', true),
-  ('max_pickup_weight', '100', 'number', 'Maximum weight per pickup in kg', false),
-  ('pickup_time_slots', '["09:00-11:00", "11:00-13:00", "13:00-15:00", "15:00-17:00"]', 'json', 'Available pickup time slots', true),
-  ('min_withdrawal_amount', '50.00', 'number', 'Minimum withdrawal amount in local currency', true),
-  ('system_maintenance_mode', 'false', 'boolean', 'System maintenance mode flag', false)
-ON CONFLICT (setting_key) DO NOTHING;
-
--- Insert default email templates
-INSERT INTO public.email_templates (template_name, subject, html_content, text_content, variables) VALUES
-  ('pickup_confirmation', 'Pickup Confirmed - Woza Mali', 
-   '<h2>Pickup Confirmed!</h2><p>Your pickup has been confirmed for {{pickup_date}} at {{pickup_time}}.</p><p>Address: {{address}}</p>',
-   'Pickup Confirmed!\n\nYour pickup has been confirmed for {{pickup_date}} at {{pickup_time}}.\n\nAddress: {{address}}',
-   '{"pickup_date": "string", "pickup_time": "string", "address": "string"}'),
-  ('withdrawal_approved', 'Withdrawal Approved - Woza Mali', 
-   '<h2>Withdrawal Approved!</h2><p>Your withdrawal of {{amount}} has been approved and will be processed within 24-48 hours.</p>',
-   'Withdrawal Approved!\n\nYour withdrawal of {{amount}} has been approved and will be processed within 24-48 hours.',
-   '{"amount": "string"}')
-ON CONFLICT (template_name) DO NOTHING;
 
 -- ============================================================================
 -- COMPLETION MESSAGE
 -- ============================================================================
 
--- Schema setup complete!
--- Next steps:
--- 1. Create your first admin user through Supabase Auth
--- 2. Update the user's role to 'ADMIN' in the profiles table
--- 3. Test the system with sample data
--- 4. Configure additional settings as needed
+SELECT 'Schema setup completed successfully! All tables, policies, and functions have been created.' as status;

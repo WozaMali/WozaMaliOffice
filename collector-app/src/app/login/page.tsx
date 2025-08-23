@@ -8,9 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, User, Lock, AlertCircle } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/hooks/use-theme";
+import { Moon, Sun } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [credentials, setCredentials] = useState({
@@ -44,18 +47,30 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/30 to-primary/5 p-4">
+      {/* Theme Toggle Button */}
+      <Button
+        variant="outline"
+        size="icon"
+        className="absolute top-4 right-4 bg-card/80 backdrop-blur-sm border-border"
+        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+      >
+        <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+        <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+        <span className="sr-only">Toggle theme</span>
+      </Button>
+      
+      <Card className="w-full max-w-md bg-card/80 backdrop-blur-sm border-border">
         <CardHeader className="text-center">
           <div className="w-16 h-16 mx-auto mb-4">
             <img 
-              src="/w yellow.png" 
+              src={theme === 'dark' ? '/w white.png' : '/w yellow.png'} 
               alt="Woza Mali Logo" 
               className="w-full h-full object-contain"
             />
           </div>
-          <CardTitle className="text-2xl font-bold">Collector Login</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-2xl font-bold text-foreground">Collector Login</CardTitle>
+          <CardDescription className="text-muted-foreground">
             Access your recycling collection dashboard
           </CardDescription>
         </CardHeader>

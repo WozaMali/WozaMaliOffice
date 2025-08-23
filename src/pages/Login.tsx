@@ -22,15 +22,18 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { defaultCredentials, getRoleDisplayName, getRoleColor, UserRole } from "@/lib/auth-schema";
+import { supabase } from "@/lib/supabase";
 
 // Helper function to get redirect URL based on user role
-const getRoleRedirectUrl = (role: UserRole): string => {
+const getRoleRedirectUrl = (role: string): string => {
   switch (role) {
     case 'COLLECTOR':
       return '/collector';
     case 'ADMIN':
     case 'STAFF':
       return '/admin';
+    case 'CUSTOMER':
+      return '/dashboard';
     default:
       return '/';
   }
@@ -38,18 +41,18 @@ const getRoleRedirectUrl = (role: UserRole): string => {
 
 export default function Login() {
   const router = useRouter();
-  const { login, isLoading, isAuthenticated, user } = useAuth();
+  const { login, isLoading, user, profile } = useAuth();
   const { theme } = useTheme();
 
   // Redirect already authenticated users to their role-specific dashboard
-  if (isAuthenticated && user) {
-    const redirectUrl = getRoleRedirectUrl(user.role);
+  if (user && profile) {
+    const redirectUrl = getRoleRedirectUrl(profile.role);
     router.push(redirectUrl);
     return null;
   }
   
   const [formData, setFormData] = useState({
-    username: '',
+    email: '',
     password: '',
     rememberMe: false,
   });
@@ -69,23 +72,25 @@ export default function Login() {
     setError(null);
     setSuccess(null);
 
-    if (!formData.username || !formData.password) {
+    if (!formData.email || !formData.password) {
       setError('Please fill in all fields');
       return;
     }
 
     try {
-      const response = await login({
-        username: formData.username,
-        password: formData.password,
-      });
+      const response = await login(formData.email, formData.password);
 
-      if (response.success && response.redirectTo) {
-        setSuccess(`Welcome! Redirecting to ${getRoleDisplayName(response.user!.role)} portal...`);
+      if (response.success) {
+        setSuccess('Login successful! Redirecting...');
         
         // Redirect after a short delay
         setTimeout(() => {
-          router.push(response.redirectTo!);
+          if (profile) {
+            const redirectUrl = getRoleRedirectUrl(profile.role);
+            router.push(redirectUrl);
+          } else {
+            router.push('/');
+          }
         }, 1500);
       } else {
         setError(response.error || 'Login failed. Please try again.');
@@ -135,14 +140,14 @@ export default function Login() {
             <form onSubmit={handleSubmit} className="space-y-4">
                              {/* Email Field */}
                <div className="space-y-2">
-                 <Label htmlFor="username">Email</Label>
+                 <Label htmlFor="email">Email</Label>
                  <div className="relative">
                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                    <Input
-                     id="username"
+                     id="email"
                      type="email"
-                     value={formData.username}
-                     onChange={(e) => handleInputChange('username', e.target.value)}
+                     value={formData.email}
+                     onChange={(e) => handleInputChange('email', e.target.value)}
                      placeholder="Enter your email"
                      className="pl-10"
                      disabled={isLoading}
@@ -229,6 +234,28 @@ export default function Login() {
                     Sign In
                   </>
                 )}
+              </Button>
+
+              {/* Test Connection Button */}
+              <Button 
+                type="button" 
+                variant="outline"
+                className="w-full" 
+                size="lg"
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.from('profiles').select('count').limit(1);
+                    if (error) {
+                      alert(`Supabase test failed: ${error.message}`);
+                    } else {
+                      alert(`Supabase test successful: ${JSON.stringify(data)}`);
+                    }
+                  } catch (err: any) {
+                    alert(`Supabase test error: ${err.message}`);
+                  }
+                }}
+              >
+                Test Supabase Connection
               </Button>
             </form>
 

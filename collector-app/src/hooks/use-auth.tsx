@@ -1,7 +1,15 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AuthService, type AuthUser } from '@/lib/auth-service';
+import { supabase } from '@/lib/supabase';
+
+interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  phone?: string;
+}
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -16,15 +24,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Check for existing session on mount
   useEffect(() => {
-    // Check for existing user session
     checkUser();
+    
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          await checkUser();
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const checkUser = async () => {
     try {
-      const currentUser = await AuthService.getCurrentUser();
-      setUser(currentUser);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        // Get user profile from profiles table
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role, phone')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile && !error) {
+          setUser({
+            id: profile.id,
+            email: profile.email,
+            name: profile.full_name,
+            role: profile.role,
+            phone: profile.phone
+          });
+        }
+      }
     } catch (error) {
       console.error('Error checking user:', error);
     } finally {
@@ -34,28 +73,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const userData = await AuthService.signIn(email, password);
-      if (userData) {
-        setUser(userData);
+      setIsLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        console.error('Login error:', error);
+        return false;
+      }
+
+      if (data.user) {
+        await checkUser();
         return true;
       }
       return false;
     } catch (error) {
       console.error('Login error:', error);
       return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = async () => {
     try {
-      await AuthService.signOut();
+      await supabase.auth.signOut();
       setUser(null);
-      window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
-      // Force logout even if there's an error
-      setUser(null);
-      window.location.href = '/login';
     }
   };
 

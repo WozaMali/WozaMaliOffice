@@ -14,34 +14,36 @@ import { useRouter } from "next/navigation";
 import { UserRole } from "@/lib/auth-schema";
 
 // Helper function to get redirect URL based on user role
-const getRoleRedirectUrl = (role: UserRole): string => {
+const getRoleRedirectUrl = (role: string): string => {
   switch (role) {
     case 'COLLECTOR':
       return '/collector';
     case 'ADMIN':
     case 'STAFF':
       return '/admin';
+    case 'CUSTOMER':
+      return '/dashboard';
     default:
       return '/';
   }
 };
 
 const Index = () => {
-  const { user, isAuthenticated, isLoading } = useAuth();
+  const { user, profile, isLoading } = useAuth();
   const router = useRouter();
 
   // Redirect users to their role-specific dashboard or login
   useEffect(() => {
     if (!isLoading) {
-      if (!isAuthenticated) {
-        router.push('/');
-      } else if (user) {
+      if (!user || !profile) {
+        router.push('/login');
+      } else if (user && profile) {
         // Redirect authenticated users to their role-specific dashboard
-        const redirectUrl = getRoleRedirectUrl(user.role);
+        const redirectUrl = getRoleRedirectUrl(profile.role);
         router.push(redirectUrl);
       }
     }
-  }, [isAuthenticated, isLoading, user, router]);
+  }, [user, profile, isLoading, router]);
 
   // Show loading while checking authentication
   if (isLoading) {
@@ -56,7 +58,7 @@ const Index = () => {
   }
 
   // Don't render anything if not authenticated (will redirect)
-  if (!isAuthenticated) {
+  if (!user || !profile) {
     return null;
   }
 
@@ -81,7 +83,7 @@ const Index = () => {
               <Button variant="outline" asChild>
                 <a href="/calculator">Recycling Calculator</a>
               </Button>
-              {isAuthenticated ? (
+              {user && profile ? (
                 <UserProfile />
               ) : (
                 <>
