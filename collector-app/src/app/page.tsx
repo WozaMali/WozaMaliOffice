@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { 
   Package, 
   Target, 
@@ -12,11 +13,20 @@ import {
   Users,
   BarChart3,
   Loader2,
-  TrendingUp
+  TrendingUp,
+  X,
+  Plus,
+  Search,
+  Camera,
+  Trash2,
+  Settings
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import Link from "next/link";
+
+// Customer data will be loaded from API
+const mockCustomers: any[] = [];
 
 export default function CollectorDashboard() {
   const { theme } = useTheme();
@@ -25,9 +35,21 @@ export default function CollectorDashboard() {
   const [stats, setStats] = useState({
     totalCollections: 0,
     totalKg: 0,
-    totalPoints: 0,
-    totalEarnings: 0
+    totalPoints: 0
   });
+  const [showLiveCollection, setShowLiveCollection] = useState(false);
+  const [selectedMaterial, setSelectedMaterial] = useState('aluminium');
+  const [weight, setWeight] = useState(0);
+  
+  // New state for customer search and photo capture
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredCustomers, setFilteredCustomers] = useState(mockCustomers);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [capturedPhotos, setCapturedPhotos] = useState([]);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
 
   // Load basic stats on component mount
   useEffect(() => {
@@ -35,6 +57,20 @@ export default function CollectorDashboard() {
       loadBasicStats();
     }
   }, [user]);
+
+  // Filter customers based on search term
+  useEffect(() => {
+    if (searchTerm) {
+      const filtered = mockCustomers.filter(customer =>
+        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.phone.includes(searchTerm) ||
+        customer.address.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredCustomers(filtered);
+    } else {
+      setFilteredCustomers(mockCustomers);
+    }
+  }, [searchTerm]);
 
   // Redirect unauthenticated users to login
   useEffect(() => {
@@ -53,14 +89,13 @@ export default function CollectorDashboard() {
   const loadBasicStats = async () => {
     try {
       setIsLoading(true);
-      // Load basic stats here
-      const mockStats = {
-        totalCollections: 156,
-        totalKg: 2347.5,
-        totalPoints: 3456,
-        totalEarnings: 2345.67
+      // TODO: Load stats from API
+      const emptyStats = {
+        totalCollections: 0,
+        totalKg: 0,
+        totalPoints: 0
       };
-      setStats(mockStats);
+      setStats(emptyStats);
     } catch (error) {
       console.error('Error loading stats:', error);
     } finally {
@@ -68,23 +103,97 @@ export default function CollectorDashboard() {
     }
   };
 
+  const getMaterialType = () => {
+    return selectedMaterial === 'aluminium' ? 'Aluminium Cans' : 'Plastic Bottles';
+  };
+
+  // Camera functionality
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } // Use back camera on mobile
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setIsCameraOpen(true);
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      alert('Unable to access camera. Please check permissions.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      const context = canvas.getContext('2d');
+      
+      if (!context) return;
+      
+      // Set canvas dimensions to match video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      // Draw video frame to canvas
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Convert to blob and create URL
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const photoUrl = URL.createObjectURL(blob);
+          setCapturedPhotos(prev => [...prev, photoUrl]);
+          stopCamera();
+        }
+      }, 'image/jpeg', 0.8);
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setCapturedPhotos(prev => {
+      const newPhotos = prev.filter((_, i) => i !== index);
+      return newPhotos;
+    });
+  };
+
+  const selectCustomer = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setSearchTerm(customer.name);
+    setFilteredCustomers([]);
+  };
+
+  const clearCustomerSelection = () => {
+    setSelectedCustomer(null);
+    setSearchTerm('');
+    setFilteredCustomers(mockCustomers);
+  };
+
   // Show loading while checking authentication
   if (!user || isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gray-900">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <header className="bg-gray-800 border-b border-gray-700">
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 flex items-center justify-center">
                 <img 
                   src="/W yellow.png" 
                   alt="Woza Mali Logo" 
@@ -92,17 +201,17 @@ export default function CollectorDashboard() {
                 />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900 dark:text-white">Woza Mali</h1>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Collector Portal</p>
+                <h1 className="text-xl font-bold text-white">Woza Mali</h1>
+                <p className="text-sm text-gray-300">Collector Portal</p>
               </div>
             </div>
             
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                <p className="text-sm font-medium text-white">
                   {user?.email || 'Collector'}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">COLLECTOR</p>
+                <p className="text-xs text-orange-400 font-semibold">COLLECTOR</p>
               </div>
             </div>
           </div>
@@ -120,200 +229,364 @@ export default function CollectorDashboard() {
               className="h-16 w-auto"
             />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Welcome back, Collector!
+          <h2 className="text-3xl font-bold text-white mb-2">
+            Welcome back, {user?.name || user?.email?.split('@')[0] || 'Collector'}!
           </h2>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-gray-300">
             Manage your recycling collections and track your performance
           </p>
         </div>
 
-        {/* Quick Actions - Always Visible */}
+        {/* Quick Actions - Simplified Small Buttons */}
         <div className="mb-8">
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 text-center">
+          <h3 className="text-xl font-semibold text-white mb-4 text-center">
             Quick Actions
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="bg-gradient-to-br from-amber-500 to-yellow-500 text-white shadow-xl shadow-amber-500/25 hover:shadow-2xl hover:shadow-amber-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-lg font-medium">Live Collections</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <div className="text-3xl font-bold mb-2">Active</div>
-                <p className="text-sm opacity-90">View ongoing pickups</p>
-                <Button asChild className="mt-3 w-full bg-white text-amber-600 hover:bg-gray-100">
-                  <Link href="/pickups">
-                    <Play className="h-4 w-4 mr-2" />
-                    Manage
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-xl shadow-emerald-500/25 hover:shadow-2xl hover:shadow-emerald-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-lg font-medium">New Pickup</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <div className="text-3xl font-bold mb-2">Start</div>
-                <p className="text-sm opacity-90">Create collection</p>
-                <Button asChild className="mt-3 w-full bg-white text-emerald-600 hover:bg-gray-100">
-                  <Link href="/pickups">
-                    <Package className="h-4 w-4 mr-2" />
-                    Begin
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-purple-500 to-indigo-500 text-white shadow-xl shadow-purple-500/25 hover:shadow-2xl hover:shadow-purple-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-lg font-medium">Add Customer</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <div className="text-3xl font-bold mb-2">Register</div>
-                <p className="text-sm opacity-90">New customer</p>
-                <Button asChild className="mt-3 w-full bg-white text-purple-600 hover:bg-gray-100">
-                  <Link href="/customers">
-                    <Users className="h-4 w-4 mr-2" />
-                    Add
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-rose-500 to-pink-500 text-white shadow-xl shadow-rose-500/25 hover:shadow-2xl hover:shadow-rose-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
-              <CardHeader className="text-center pb-2">
-                <CardTitle className="text-lg font-medium">View Stats</CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <div className="text-3xl font-bold mb-2">Analytics</div>
-                <p className="text-sm opacity-90">Performance data</p>
-                <Button asChild className="mt-3 w-full bg-white text-rose-600 hover:bg-gray-100">
-                  <Link href="/analytics">
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                    View
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <Button 
+              onClick={() => setShowLiveCollection(true)}
+              className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-black px-3 py-1.5 h-12 text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+            >
+              Live Collection
+            </Button>
+            
+            <Button 
+              asChild
+              className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black px-3 py-1.5 h-12 text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+            >
+              <Link href="/pickups">
+                New Pickup
+              </Link>
+            </Button>
+            
+            <Button 
+              asChild
+              className="bg-gradient-to-r from-orange-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-black px-3 py-1.5 h-12 text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+            >
+              <Link href="/customers">
+                Customer
+              </Link>
+            </Button>
           </div>
         </div>
 
         {/* Quick Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="bg-gray-800 border-gray-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium opacity-90 flex items-center gap-2">
-                <Package className="h-4 w-4" />
+              <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <Package className="h-4 w-4 text-orange-400" />
                 Total Collections
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{stats.totalCollections}</div>
-              <p className="text-xs opacity-90 mt-1">Lifetime total</p>
+              <div className="text-4xl font-bold text-orange-400">{stats.totalCollections}</div>
+              <p className="text-xs text-gray-400 mt-1">Lifetime total</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl shadow-green-500/25 hover:shadow-2xl hover:shadow-green-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
+          <Card className="bg-gray-800 border-gray-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium opacity-90 flex items-center gap-2">
-                <Target className="h-4 w-4" />
+              <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <Target className="h-4 w-4 text-yellow-400" />
                 Total Kg Collected
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{stats.totalKg.toFixed(1)} kg</div>
-              <p className="text-xs opacity-90 mt-1">Lifetime total</p>
+              <div className="text-4xl font-bold text-yellow-400">{stats.totalKg.toFixed(1)} kg</div>
+              <p className="text-xs text-gray-400 mt-1">Lifetime total</p>
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-xl shadow-purple-500/25 hover:shadow-2xl hover:shadow-purple-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
+          <Card className="bg-gray-800 border-gray-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium opacity-90 flex items-center gap-2">
-                <Leaf className="h-4 w-4" />
-                Total Points
+              <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                <Leaf className="h-4 w-4 text-orange-400" />
+                Collection Points
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{stats.totalPoints.toLocaleString()}</div>
-              <p className="text-xs opacity-90 mt-1">Lifetime total</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-yellow-500 to-amber-500 text-white shadow-xl shadow-yellow-500/25 hover:shadow-2xl hover:shadow-yellow-500/30 transition-all duration-300 hover:-translate-y-1 border-0">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium opacity-90 flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Total Earnings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold">R{stats.totalEarnings.toFixed(2)}</div>
-              <p className="text-xs opacity-90 mt-1">Lifetime total</p>
+              <div className="text-4xl font-bold text-orange-400">{stats.totalPoints.toLocaleString()}</div>
+              <p className="text-xs text-gray-400 mt-1">Lifetime total</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Recent Activity Section */}
         <div className="mb-8">
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+          <h3 className="text-xl font-semibold text-white mb-4">
             Recent Activity
           </h3>
           <div className="grid gap-4">
-            <Card className="hover:shadow-lg transition-shadow duration-200">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <div>
-                      <CardTitle className="text-base">Collection Completed</CardTitle>
-                      <CardDescription>John Doe - 25.5 kg collected</CardDescription>
-                    </div>
-                  </div>
-                  <span className="text-sm text-gray-500">2 hours ago</span>
+            <Card className="bg-gray-800 border-gray-700 text-white">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center mb-4">
+                  <BarChart3 className="h-6 w-6 text-gray-400" />
                 </div>
-              </CardHeader>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-shadow duration-200">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    <div>
-                      <CardTitle className="text-base">New Customer Added</CardTitle>
-                      <CardDescription>Jane Smith registered</CardDescription>
-                    </div>
-                  </div>
-                  <span className="text-sm text-gray-500">1 day ago</span>
-                </div>
-              </CardHeader>
-            </Card>
-
-            <Card className="hover:shadow-lg transition-shadow duration-200">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <div>
-                      <CardTitle className="text-base">Pickup Scheduled</CardTitle>
-                      <CardDescription>Bob Johnson - Tomorrow 10:00 AM</CardDescription>
-                    </div>
-                  </div>
-                  <span className="text-sm text-gray-500">2 days ago</span>
-                </div>
-              </CardHeader>
+                <h3 className="text-lg font-semibold mb-2 text-white">No recent activity</h3>
+                <p className="text-gray-300 text-center">
+                  Your collection activities will appear here
+                </p>
+              </CardContent>
             </Card>
           </div>
         </div>
       </main>
 
-      {/* Bottom Navigation Bar - Mobile Optimized */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 md:hidden">
+      {/* Live Collection Popup */}
+      {showLiveCollection && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gray-600">
+            <div className="flex items-center justify-between p-6 border-b border-gray-600">
+              <h3 className="text-xl font-semibold text-white">Record Collection</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLiveCollection(false)}
+                className="h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="p-6">
+              {/* Customer Search Section */}
+              <div className="mb-6">
+                <h4 className="text-lg font-medium text-white mb-4">Customer Search</h4>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input 
+                    type="text" 
+                    placeholder="Search customers by name, phone, or address..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-white placeholder-gray-400"
+                  />
+                </div>
+                
+                {/* Search Results */}
+                {searchTerm && filteredCustomers.length > 0 && (
+                  <div className="mt-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg border border-gray-600">
+                    {filteredCustomers.map((customer) => (
+                      <div
+                        key={customer.id}
+                        onClick={() => selectCustomer(customer)}
+                        className="p-3 hover:bg-gray-600 cursor-pointer border-b border-gray-600 last:border-b-0"
+                      >
+                        <div className="font-medium text-white">{customer.name}</div>
+                        <div className="text-sm text-gray-300">{customer.phone}</div>
+                        <div className="text-xs text-gray-400">{customer.address}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Selected Customer Display */}
+                {selectedCustomer && (
+                  <div className="mt-3 p-3 bg-orange-500/20 border border-orange-500/30 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-white">Selected: {selectedCustomer.name}</div>
+                        <div className="text-sm text-orange-300">{selectedCustomer.phone}</div>
+                        <div className="text-xs text-orange-200">{selectedCustomer.address}</div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearCustomerSelection}
+                        className="text-orange-300 hover:text-white hover:bg-orange-500/30"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Material Selection Tabs */}
+              <div className="mb-6">
+                <h4 className="text-lg font-medium text-white mb-4">Select Materials</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div 
+                    className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                      selectedMaterial === 'aluminium' 
+                        ? 'border-orange-500 bg-orange-500/10' 
+                        : 'border-gray-600 hover:border-orange-400 bg-gray-700'
+                    }`}
+                    onClick={() => setSelectedMaterial('aluminium')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h5 className="font-medium text-white">Aluminium Cans</h5>
+                        <p className="text-sm text-gray-300">Aluminium Cans</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-orange-400 text-lg">Aluminium</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                      selectedMaterial === 'plastic' 
+                        ? 'border-yellow-500 bg-yellow-500/10' 
+                        : 'border-gray-600 hover:border-yellow-400 bg-gray-700'
+                    }`}
+                    onClick={() => setSelectedMaterial('plastic')}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h5 className="font-medium text-white">Plastic Bottles</h5>
+                        <p className="text-sm text-gray-300">Plastic Bottles</p>
+                        <p className="text-xs text-blue-400 font-medium">Donated to Green Scholar Fund</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-yellow-400 text-lg">Plastic</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Weight Input Section */}
+              <div className="mb-6">
+                <h4 className="text-lg font-medium text-white mb-4">Weight Measurement</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Weight Input */}
+                  <div className="text-center">
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Weight (kg)</label>
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      placeholder="0.00"
+                      value={weight}
+                      onChange={(e) => setWeight(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-center text-lg font-medium text-white placeholder-gray-400"
+                    />
+                  </div>
+
+                  {/* Photo Capture Section */}
+                  <div className="text-center">
+                    <h5 className="text-sm font-medium text-white mb-3">Photo Evidence</h5>
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      {capturedPhotos.map((photo, index) => (
+                        <div key={index} className="relative">
+                          <img 
+                            src={photo} 
+                            alt={`Collection photo ${index + 1}`}
+                            className="w-full h-20 object-cover rounded-lg border border-gray-600"
+                          />
+                          <button
+                            onClick={() => removePhoto(index)}
+                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <Button
+                      onClick={startCamera}
+                      className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white"
+                    >
+                      <Camera className="h-4 w-4 mr-2" />
+                      Take Photo
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Collection Summary */}
+              <div className="mb-6 p-4 bg-gray-700 rounded-lg">
+                <h4 className="text-lg font-medium text-white mb-3">Collection Summary</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-400">Customer:</p>
+                    <p className="font-medium text-white">
+                      {selectedCustomer ? selectedCustomer.name : 'Not selected'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Material Type:</p>
+                    <p className="font-medium text-white">
+                      {selectedMaterial === 'aluminium' ? 'Aluminium Cans' : 'Plastic Bottles'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Weight Recorded:</p>
+                    <p className="font-bold text-orange-400 text-lg">{weight.toFixed(2)} kg</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Photos Taken:</p>
+                    <p className="font-medium text-white">{capturedPhotos.length} photos</p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                <Button className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Record Collection
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  className="w-full border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                  onClick={() => setShowLiveCollection(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Camera Modal */}
+      {isCameraOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-semibold text-white mb-2">Take Photo</h3>
+              <p className="text-sm text-gray-300">Position the recyclables in frame</p>
+            </div>
+            
+            <div className="relative mb-4">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-full rounded-lg border border-gray-600"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+            
+            <div className="flex gap-3">
+              <Button
+                onClick={capturePhoto}
+                className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                Capture
+              </Button>
+              <Button
+                onClick={stopCamera}
+                variant="outline"
+                className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom Navigation Bar - Mobile Optimized - DARK GREY + ORANGE */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 z-50 md:hidden">
         <div className="flex items-center justify-around py-2">
           {/* Overview Tab */}
-          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-orange-500 text-white">
             <BarChart3 className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Overview</span>
           </div>
@@ -321,7 +594,7 @@ export default function CollectorDashboard() {
           {/* Pickups Tab */}
           <Link
             href="/pickups"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
           >
             <Package className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Pickups</span>
@@ -330,7 +603,7 @@ export default function CollectorDashboard() {
           {/* Customers Tab */}
           <Link
             href="/customers"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
           >
             <Users className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Customers</span>
@@ -339,10 +612,19 @@ export default function CollectorDashboard() {
           {/* Analytics Tab */}
           <Link
             href="/analytics"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
           >
-            <BarChart3 className="h-6 w-6 mb-1" />
+            <TrendingUp className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Analytics</span>
+          </Link>
+
+          {/* Settings Tab */}
+          <Link
+            href="/settings"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
+          >
+            <Settings className="h-6 w-6 mb-1" />
+            <span className="text-xs font-medium">Settings</span>
           </Link>
         </div>
       </nav>

@@ -176,37 +176,37 @@ export default function CollectorPickupsPage() {
   // Show loading while checking authentication
   if (!user || isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
+    <div className="min-h-screen bg-gray-900 p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link href="/" className="p-2 hover:bg-accent rounded-lg">
+          <Link href="/" className="p-2 hover:bg-gray-800 rounded-lg text-gray-300 hover:text-white transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">Pickups</h1>
-            <p className="text-muted-foreground">Manage your collection pickups</p>
+            <h1 className="text-2xl font-bold text-white">Pickups</h1>
+            <p className="text-gray-300">Manage your collection pickups</p>
           </div>
         </div>
         
         <Dialog open={isNewPickupOpen} onOpenChange={setIsNewPickupOpen}>
           <DialogTrigger asChild>
-            <Button className="flex items-center gap-2">
+            <Button className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white shadow-lg">
               <Plus className="h-4 w-4" />
               New Pickup
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-600 text-white">
             <DialogHeader>
               <DialogTitle>Create New Collection Pickup</DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-gray-300">
                 Document a new collection with photos, materials, and details
               </DialogDescription>
             </DialogHeader>
@@ -215,12 +215,12 @@ export default function CollectorPickupsPage() {
               {/* Customer & Location Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="customerId">Customer</Label>
+                  <Label htmlFor="customerId" className="text-gray-300">Customer</Label>
                   <Select value={newPickupForm.customerId} onValueChange={(value) => setNewPickupForm(prev => ({ ...prev, customerId: value }))}>
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
                       <SelectValue placeholder="Select customer" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-gray-700 border-gray-600">
                       <SelectItem value="1">John Doe - 123 Main St</SelectItem>
                       <SelectItem value="2">Jane Smith - 456 Oak Ave</SelectItem>
                       <SelectItem value="3">Bob Johnson - 789 Pine Rd</SelectItem>
@@ -229,20 +229,21 @@ export default function CollectorPickupsPage() {
                 </div>
                 
                 <div>
-                  <Label htmlFor="scheduledDate">Scheduled Date</Label>
+                  <Label htmlFor="scheduledDate" className="text-gray-300">Scheduled Date</Label>
                   <Input 
                     type="date" 
                     id="scheduledDate"
                     value={newPickupForm.scheduledDate}
                     onChange={(e) => setNewPickupForm(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                    className="bg-gray-700 border-gray-600 text-white"
                   />
                 </div>
               </div>
 
               {/* Photo Documentation Section */}
               <div>
-                <Label className="text-base font-medium">Photo Documentation</Label>
-                <p className="text-sm text-muted-foreground mb-3">
+                <Label className="text-base font-medium text-white">Photo Documentation</Label>
+                <p className="text-sm text-gray-300 mb-3">
                   Take photos of the materials being collected
                 </p>
                 
@@ -252,7 +253,7 @@ export default function CollectorPickupsPage() {
                       <img 
                         src={photo} 
                         alt={`Collection photo ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border"
+                        className="w-full h-24 object-cover rounded-lg border border-gray-600"
                       />
                       <button
                         onClick={() => setCapturedPhotos(prev => prev.filter((_, i) => i !== index))}
@@ -265,7 +266,7 @@ export default function CollectorPickupsPage() {
                   
                   <button
                     onClick={() => setIsCameraOpen(true)}
-                    className="w-full h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors"
+                    className="w-full h-24 border-2 border-dashed border-gray-600 rounded-lg flex flex-col items-center justify-center text-gray-400 hover:border-orange-400 hover:text-orange-400 transition-colors bg-gray-700"
                   >
                     <Camera className="h-6 w-6 mb-1" />
                     <span className="text-xs">Add Photo</span>
@@ -276,7 +277,7 @@ export default function CollectorPickupsPage() {
               {/* Materials Section */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <Label className="text-base font-medium">Materials Collected</Label>
+                  <Label className="text-base font-medium text-white">Materials Collected</Label>
                   <Button
                     type="button"
                     variant="outline"
@@ -285,6 +286,7 @@ export default function CollectorPickupsPage() {
                       ...prev,
                       materials: [...prev.materials, { materialId: '', kg: 0, contamination: 0 }]
                     }))}
+                    className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
                   >
                     <Plus className="h-4 w-4 mr-1" />
                     Add Material
@@ -293,9 +295,9 @@ export default function CollectorPickupsPage() {
                 
                 <div className="space-y-3">
                   {newPickupForm.materials.map((material, index) => (
-                    <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 border rounded-lg">
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-3 border border-gray-600 rounded-lg bg-gray-700">
                       <div>
-                        <Label>Material Type</Label>
+                        <Label className="text-gray-300">Material Type</Label>
                         <Select 
                           value={material.materialId} 
                           onValueChange={(value) => {
@@ -304,10 +306,10 @@ export default function CollectorPickupsPage() {
                             setNewPickupForm(prev => ({ ...prev, materials: updatedMaterials }));
                           }}
                         >
-                          <SelectTrigger>
+                          <SelectTrigger className="bg-gray-600 border-gray-500 text-white">
                             <SelectValue placeholder="Select material" />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="bg-gray-600 border-gray-500">
                             <SelectItem value="paper">Paper & Cardboard</SelectItem>
                             <SelectItem value="plastic">Plastic</SelectItem>
                             <SelectItem value="glass">Glass</SelectItem>
@@ -319,7 +321,7 @@ export default function CollectorPickupsPage() {
                       </div>
                       
                       <div>
-                        <Label>Weight (kg)</Label>
+                        <Label className="text-gray-300">Weight (kg)</Label>
                         <Input
                           type="number"
                           step="0.1"
@@ -330,11 +332,12 @@ export default function CollectorPickupsPage() {
                             setNewPickupForm(prev => ({ ...prev, materials: updatedMaterials }));
                           }}
                           placeholder="0.0"
+                          className="bg-gray-600 border-gray-500 text-white"
                         />
                       </div>
                       
                       <div>
-                        <Label>Contamination (%)</Label>
+                        <Label className="text-gray-300">Contamination (%)</Label>
                         <Input
                           type="number"
                           min="0"
@@ -346,6 +349,7 @@ export default function CollectorPickupsPage() {
                             setNewPickupForm(prev => ({ ...prev, materials: updatedMaterials }));
                           }}
                           placeholder="0"
+                          className="bg-gray-600 border-gray-500 text-white"
                         />
                       </div>
                       
@@ -358,7 +362,7 @@ export default function CollectorPickupsPage() {
                             const updatedMaterials = newPickupForm.materials.filter((_, i) => i !== index);
                             setNewPickupForm(prev => ({ ...prev, materials: updatedMaterials }));
                           }}
-                          className="w-full"
+                          className="w-full border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
                         >
                           Remove
                         </Button>
@@ -371,7 +375,7 @@ export default function CollectorPickupsPage() {
               {/* Additional Details */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="estimatedWeight">Estimated Total Weight (kg)</Label>
+                  <Label htmlFor="estimatedWeight" className="text-gray-300">Estimated Total Weight (kg)</Label>
                   <Input
                     type="number"
                     step="0.1"
@@ -379,15 +383,16 @@ export default function CollectorPickupsPage() {
                     value={newPickupForm.estimatedWeight}
                     onChange={(e) => setNewPickupForm(prev => ({ ...prev, estimatedWeight: parseFloat(e.target.value) || 0 }))}
                     placeholder="0.0"
+                    className="bg-gray-700 border-gray-600 text-white"
                   />
                 </div>
                 
                 <div>
-                  <Label htmlFor="location">Location</Label>
+                  <Label htmlFor="location" className="text-gray-300">Location</Label>
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full justify-start"
+                    className="w-full justify-start border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
                     onClick={() => {
                       // Get current location
                       if (navigator.geolocation) {
@@ -410,21 +415,22 @@ export default function CollectorPickupsPage() {
               </div>
               
               <div>
-                <Label htmlFor="notes">Additional Notes</Label>
+                <Label htmlFor="notes" className="text-gray-300">Additional Notes</Label>
                 <Textarea 
                   id="notes"
                   value={newPickupForm.notes}
                   onChange={(e) => setNewPickupForm(prev => ({ ...prev, notes: e.target.value }))}
                   placeholder="Special instructions, customer requests, or additional details..."
                   rows={3}
+                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
                 />
               </div>
               
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button variant="outline" onClick={() => setIsNewPickupOpen(false)}>
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-600">
+                <Button variant="outline" onClick={() => setIsNewPickupOpen(false)} className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white">
                   Cancel
                 </Button>
-                <Button onClick={handleCreatePickup} className="flex items-center gap-2">
+                <Button onClick={handleCreatePickup} className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white">
                   <Package className="h-4 w-4" />
                   Create Collection
                 </Button>
@@ -437,14 +443,14 @@ export default function CollectorPickupsPage() {
       {/* Pickups List */}
       <div className="grid gap-4">
         {pickups.length === 0 ? (
-          <Card>
+          <Card className="bg-gray-800 border-gray-700 text-white">
             <CardContent className="flex flex-col items-center justify-center py-12">
-              <Package className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No pickups yet</h3>
-              <p className="text-muted-foreground text-center mb-4">
+              <Package className="h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-semibold mb-2 text-white">No pickups yet</h3>
+              <p className="text-gray-300 text-center mb-4">
                 Create your first pickup to start collecting recyclables
               </p>
-              <Button onClick={() => setIsNewPickupOpen(true)}>
+              <Button onClick={() => setIsNewPickupOpen(true)} className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white">
                 <Plus className="h-4 w-4 mr-2" />
                 Create Pickup
               </Button>
@@ -452,19 +458,19 @@ export default function CollectorPickupsPage() {
           </Card>
         ) : (
           pickups.map((pickup) => (
-            <Card key={pickup.pickup_id}>
+            <Card key={pickup.pickup_id} className="bg-gray-800 border-gray-700 text-white hover:shadow-lg transition-shadow duration-200">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <CardTitle className="flex items-center gap-2 text-white">
+                      <MapPin className="h-4 w-4 text-orange-400" />
                       Pickup #{pickup.pickup_id}
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-gray-300">
                       {pickup.customer_name} • {pickup.line1}, {pickup.suburb}, {pickup.city}
                     </CardDescription>
                   </div>
-                  <Badge variant={pickup.status === 'completed' ? 'default' : 'secondary'}>
+                  <Badge variant={pickup.status === 'completed' ? 'default' : 'secondary'} className="bg-orange-500 text-white">
                     {pickup.status}
                   </Badge>
                 </div>
@@ -472,10 +478,10 @@ export default function CollectorPickupsPage() {
               <CardContent>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="font-medium">Date:</span> {pickup.started_at}
+                    <span className="font-medium text-gray-300">Date:</span> {pickup.started_at}
                   </div>
                   <div>
-                    <span className="font-medium">Materials:</span> {pickup.materials_breakdown.length}
+                    <span className="font-medium text-gray-300">Materials:</span> {pickup.materials_breakdown.length}
                   </div>
                 </div>
               </CardContent>
@@ -484,20 +490,20 @@ export default function CollectorPickupsPage() {
         )}
       </div>
 
-      {/* Bottom Navigation Bar - Mobile Optimized */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-50 md:hidden">
+      {/* Bottom Navigation Bar - Mobile Optimized - DARK GREY + ORANGE */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 z-50 md:hidden">
         <div className="flex items-center justify-around py-2">
           {/* Overview Tab */}
           <Link
             href="/"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
           >
             <BarChart3 className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Overview</span>
           </Link>
 
           {/* Pickups Tab */}
-          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-orange-500 text-white">
             <Package className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Pickups</span>
           </div>
@@ -505,7 +511,7 @@ export default function CollectorPickupsPage() {
           {/* Customers Tab */}
           <Link
             href="/customers"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
           >
             <Users className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Customers</span>
@@ -514,10 +520,19 @@ export default function CollectorPickupsPage() {
           {/* Analytics Tab */}
           <Link
             href="/analytics"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
           >
             <TrendingUp className="h-6 w-6 mb-1" />
             <span className="text-xs font-medium">Analytics</span>
+          </Link>
+
+          {/* Settings Tab */}
+          <Link
+            href="/settings"
+            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
+          >
+            <Settings className="h-6 w-6 mb-1" />
+            <span className="text-xs font-medium">Settings</span>
           </Link>
         </div>
       </nav>
