@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/hooks/use-auth";
 import { ThemeProvider } from "@/hooks/use-theme";
-import { Toaster } from "sonner";
+import { AuthProvider } from "@/hooks/use-auth";
+import { Toaster } from "@/components/ui/sonner";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Woza Mali - Collector Dashboard",
-  description: "Recycling collection management dashboard for collectors",
+  title: "Woza Mali - Collector Portal",
+  description: "Recycling collection management system for collectors",
 };
 
 export default function RootLayout({
@@ -16,7 +19,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased">
+      <body className={inter.className}>
         <ThemeProvider
           defaultTheme="system"
           storageKey="woza-mali-theme"

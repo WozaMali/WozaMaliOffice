@@ -23,9 +23,9 @@ export class ApiEndpoints {
   // Generic response wrapper
   private createResponse<T>(
     success: boolean, 
+    endpoint: string,
     data?: T, 
-    error?: string, 
-    endpoint: string
+    error?: string
   ): ApiResponse<T> {
     return {
       success,
@@ -45,33 +45,33 @@ export class ApiEndpoints {
     date_to?: string;
     limit?: number;
     offset?: number;
-  }): Promise<ApiResponse<any[]>> {
+  }): Promise<ApiResponse<any[] | undefined>> {
     try {
       const result = await unifiedDataService.getUnifiedPickups(filters);
       
       if (result.error) {
-        return this.createResponse(false, undefined, result.error, '/api/pickups');
+        return this.createResponse(false, '/api/pickups', undefined, result.error);
       }
       
-      return this.createResponse(true, result.data, undefined, '/api/pickups');
+      return this.createResponse(true, '/api/pickups', result.data);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, '/api/pickups');
+      return this.createResponse(false, '/api/pickups', undefined, error.message);
     }
   }
 
   // Get pickup by ID
-  async getPickupById(id: string): Promise<ApiResponse<any>> {
+  async getPickupById(id: string): Promise<ApiResponse<any | undefined>> {
     try {
       const result = await unifiedDataService.getUnifiedPickups({ limit: 1 });
       const pickup = result.data.find(p => p.id === id);
       
       if (!pickup) {
-        return this.createResponse(false, undefined, 'Pickup not found', `/api/pickups/${id}`);
+        return this.createResponse(false, `/api/pickups/${id}`, undefined, 'Pickup not found');
       }
       
-      return this.createResponse(true, pickup, undefined, `/api/pickups/${id}`);
+      return this.createResponse(true, `/api/pickups/${id}`, pickup);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, `/api/pickups/${id}`);
+      return this.createResponse(false, `/api/pickups/${id}`, undefined, error.message);
     }
   }
 
@@ -80,33 +80,33 @@ export class ApiEndpoints {
     is_active?: boolean;
     limit?: number;
     offset?: number;
-  }): Promise<ApiResponse<any[]>> {
+  }): Promise<ApiResponse<any[] | undefined>> {
     try {
       const result = await unifiedDataService.getUnifiedCustomers(filters);
       
       if (result.error) {
-        return this.createResponse(false, undefined, result.error, '/api/customers');
+        return this.createResponse(false, '/api/customers', undefined, result.error);
       }
       
-      return this.createResponse(true, result.data, undefined, '/api/customers');
+      return this.createResponse(true, '/api/customers', result.data);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, '/api/customers');
+      return this.createResponse(false, '/api/customers', undefined, error.message);
     }
   }
 
   // Get customer by ID
-  async getCustomerById(id: string): Promise<ApiResponse<any>> {
+  async getCustomerById(id: string): Promise<ApiResponse<any | undefined>> {
     try {
       const result = await unifiedDataService.getUnifiedCustomers({ limit: 1 });
       const customer = result.data.find(c => c.id === id);
       
       if (!customer) {
-        return this.createResponse(false, undefined, 'Customer not found', `/api/customers/${id}`);
+        return this.createResponse(false, `/api/customers/${id}`, undefined, 'Customer not found');
       }
       
-      return this.createResponse(true, customer, undefined, `/api/customers/${id}`);
+      return this.createResponse(true, `/api/customers/${id}`, customer);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, `/api/customers/${id}`);
+      return this.createResponse(false, `/api/customers/${id}`, undefined, error.message);
     }
   }
 
@@ -116,53 +116,53 @@ export class ApiEndpoints {
     is_available?: boolean;
     limit?: number;
     offset?: number;
-  }): Promise<ApiResponse<any[]>> {
+  }): Promise<ApiResponse<any[] | undefined>> {
     try {
       const result = await unifiedDataService.getUnifiedCollectors(filters);
       
       if (result.error) {
-        return this.createResponse(false, undefined, result.error, '/api/collectors');
+        return this.createResponse(false, '/api/collectors', undefined, result.error);
       }
       
-      return this.createResponse(true, result.data, undefined, '/api/collectors');
+      return this.createResponse(true, '/api/collectors', result.data);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, '/api/collectors');
+      return this.createResponse(false, '/api/collectors', undefined, error.message);
     }
   }
 
   // Get collector by ID
-  async getCollectorById(id: string): Promise<ApiResponse<any>> {
+  async getCollectorById(id: string): Promise<ApiResponse<any | undefined>> {
     try {
       const result = await unifiedDataService.getUnifiedCollectors({ limit: 1 });
       const collector = result.data.find(c => c.id === id);
       
       if (!collector) {
-        return this.createResponse(false, undefined, 'Collector not found', `/api/collectors/${id}`);
+        return this.createResponse(false, `/api/collectors/${id}`, undefined, 'Collector not found');
       }
       
-      return this.createResponse(true, collector, undefined, `/api/collectors/${id}`);
+      return this.createResponse(true, `/api/collectors/${id}`, collector);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, `/api/collectors/${id}`);
+      return this.createResponse(false, `/api/collectors/${id}`, undefined, error.message);
     }
   }
 
   // Get system statistics
-  async getSystemStats(): Promise<ApiResponse<any>> {
+  async getSystemStats(): Promise<ApiResponse<any | undefined>> {
     try {
       const result = await unifiedDataService.getUnifiedSystemStats();
       
       if (result.error) {
-        return this.createResponse(false, undefined, result.error, '/api/system/stats');
+        return this.createResponse(false, '/api/system/stats', undefined, result.error);
       }
       
-      return this.createResponse(true, result.data, undefined, '/api/system/stats');
+      return this.createResponse(true, '/api/system/stats', result.data);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, '/api/system/stats');
+      return this.createResponse(false, '/api/system/stats', undefined, error.message);
     }
   }
 
   // Get dashboard data (combined view)
-  async getDashboardData(role: 'ADMIN' | 'COLLECTOR', userId?: string): Promise<ApiResponse<any>> {
+  async getDashboardData(role: 'ADMIN' | 'COLLECTOR', userId?: string): Promise<ApiResponse<any | undefined>> {
     try {
       const [pickupsResult, customersResult, collectorsResult, statsResult] = await Promise.all([
         unifiedDataService.getUnifiedPickups({
@@ -187,14 +187,14 @@ export class ApiEndpoints {
         timestamp: new Date().toISOString()
       };
 
-      return this.createResponse(true, dashboardData, undefined, '/api/dashboard');
+      return this.createResponse(true, '/api/dashboard', dashboardData);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, '/api/dashboard');
+      return this.createResponse(false, '/api/dashboard', undefined, error.message);
     }
   }
 
   // Search functionality
-  async search(query: string, type: 'pickups' | 'customers' | 'collectors' | 'all'): Promise<ApiResponse<any>> {
+  async search(query: string, type: 'pickups' | 'customers' | 'collectors' | 'all'): Promise<ApiResponse<any | undefined>> {
     try {
       let results: any = {};
 
@@ -230,14 +230,14 @@ export class ApiEndpoints {
         }
       }
 
-      return this.createResponse(true, results, undefined, `/api/search?q=${query}&type=${type}`);
+      return this.createResponse(true, `/api/search?q=${query}&type=${type}`, results);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, `/api/search?q=${query}&type=${type}`);
+      return this.createResponse(false, `/api/search?q=${query}&type=${type}`, undefined, error.message);
     }
   }
 
   // Get analytics data
-  async getAnalytics(timeRange: 'day' | 'week' | 'month' | 'year' = 'month'): Promise<ApiResponse<any>> {
+  async getAnalytics(timeRange: 'day' | 'week' | 'month' | 'year' = 'month'): Promise<ApiResponse<any | undefined>> {
     try {
       const statsResult = await unifiedDataService.getUnifiedSystemStats();
       
@@ -271,14 +271,14 @@ export class ApiEndpoints {
         generatedAt: new Date().toISOString()
       };
 
-      return this.createResponse(true, analyticsData, undefined, `/api/analytics?range=${timeRange}`);
+      return this.createResponse(true, `/api/analytics?range=${timeRange}`, analyticsData);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, `/api/analytics?range=${timeRange}`);
+      return this.createResponse(false, `/api/analytics?range=${timeRange}`, undefined, error.message);
     }
   }
 
   // Health check endpoint
-  async healthCheck(): Promise<ApiResponse<any>> {
+  async healthCheck(): Promise<ApiResponse<any | undefined>> {
     try {
       const statsResult = await unifiedDataService.getUnifiedSystemStats();
       
@@ -290,17 +290,12 @@ export class ApiEndpoints {
         uptime: process.uptime ? Math.floor(process.uptime()) : 0
       };
 
-      return this.createResponse(true, healthData, undefined, '/api/health');
+      return this.createResponse(true, '/api/health', healthData);
     } catch (error: any) {
-      return this.createResponse(false, undefined, error.message, '/api/health');
+      return this.createResponse(false, '/api/health', undefined, error.message);
     }
   }
 }
 
 // Export singleton instance
 export const apiEndpoints = ApiEndpoints.getInstance();
-
-// Export types for external use
-export type {
-  ApiResponse
-};

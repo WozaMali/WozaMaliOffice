@@ -598,7 +598,7 @@ export class UnifiedDataService {
     onCollectorChange?: (payload: any) => void;
     onSystemChange?: (payload: any) => void;
   }) {
-    const channels = [];
+    const channels: any[] = [];
 
     // Pickups channel
     if (callbacks.onPickupChange) {
@@ -618,7 +618,7 @@ export class UnifiedDataService {
         .channel('unified_customers_changes')
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: 'profiles' }, 
-          (payload) => {
+          (payload: any) => {
             if (payload.new?.role === 'CUSTOMER' || payload.old?.role === 'CUSTOMER') {
               callbacks.onCustomerChange!(payload);
             }
@@ -634,7 +634,7 @@ export class UnifiedDataService {
         .channel('unified_collectors_changes')
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: 'profiles' }, 
-          (payload) => {
+          (payload: any) => {
             if (payload.new?.role === 'COLLECTOR' || payload.old?.role === 'COLLECTOR') {
               callbacks.onCollectorChange!(payload);
             }

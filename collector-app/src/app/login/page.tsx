@@ -1,144 +1,291 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, User, Lock, AlertCircle } from "lucide-react";
+import { 
+  Eye, 
+  EyeOff, 
+  Lock, 
+  User, 
+  Loader2,
+  AlertCircle,
+  Recycle
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
-import { Moon, Sun } from "lucide-react";
 
-export default function LoginPage() {
-  const { login } = useAuth();
-  const { theme, setTheme } = useTheme();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [credentials, setCredentials] = useState({
-    email: "",
-    password: ""
+export default function CollectorLoginPage() {
+  const router = useRouter();
+  const { login, isLoading, user, profile } = useAuth();
+  const { theme } = useTheme();
+  
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    rememberMe: false,
   });
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // Redirect already authenticated collectors to dashboard
+  useEffect(() => {
+    if (user && profile && profile.role === 'COLLECTOR') {
+      router.push('/');
+    }
+  }, [user, profile, router]);
+
+  // Redirect non-collectors away
+  useEffect(() => {
+    if (user && profile && profile.role !== 'COLLECTOR') {
+      router.push('/unauthorized');
+    }
+  }, [user, profile, router]);
+
+  // Don't render the form if user is already authenticated or not a collector
+  if (user && profile) {
+    if (profile.role === 'COLLECTOR') {
+      return null; // Will redirect to dashboard
+    } else {
+      return null; // Will redirect to unauthorized
+    }
+  }
+
+  const handleInputChange = (field: keyof typeof formData, value: string | boolean) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear errors when user starts typing
+    if (error) setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setError("");
+    setError(null);
+    setSuccess(null);
+
+    if (!formData.email || !formData.password) {
+      setError('Please fill in all fields');
+      return;
+    }
 
     try {
-      if (credentials.email && credentials.password) {
-        // Use the auth context login function
-        const success = await login(credentials.email, credentials.password);
-        if (success) {
-          // Redirect to dashboard
-          window.location.href = '/';
-        } else {
-          setError("Invalid credentials. Please check your email and password.");
-        }
+      const response = await login(formData.email, formData.password);
+
+      if (response.success) {
+        setSuccess('Login successful! Redirecting to collector dashboard...');
+        
+        // Redirect after a short delay
+        setTimeout(() => {
+          if (profile && profile.role === 'COLLECTOR') {
+            router.push('/');
+          } else {
+            setError('Access denied. This portal is for collectors only.');
+          }
+        }, 1500);
       } else {
-        setError("Please enter both email and password");
+        setError(response.error || 'Login failed. Please try again.');
       }
-    } catch (err) {
-      setError("Login failed. Please try again.");
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      setError('An unexpected error occurred. Please try again.');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/30 to-primary/5 p-4">
-      {/* Theme Toggle Button */}
-      <Button
-        variant="outline"
-        size="icon"
-        className="absolute top-4 right-4 bg-card/80 backdrop-blur-sm border-border"
-        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-      >
-        <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-        <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-        <span className="sr-only">Toggle theme</span>
-      </Button>
-      
-      <Card className="w-full max-w-md bg-card/80 backdrop-blur-sm border-border">
-        <CardHeader className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4">
-            <img 
-              src={theme === 'dark' ? '/w white.png' : '/w yellow.png'} 
-              alt="Woza Mali Logo" 
-              className="w-full h-full object-contain"
-            />
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <div className="w-20 h-20 mx-auto bg-green-600 rounded-full flex items-center justify-center shadow-lg">
+            <Recycle className="h-10 w-10 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold text-foreground">Collector Login</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Access your recycling collection dashboard
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={credentials.email}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, email: e.target.value }))}
-                  className="pl-10"
-                  disabled={isLoading}
-                  required
-                />
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Woza Mali</h1>
+          <p className="text-lg text-gray-600 dark:text-gray-300">Collector Portal</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to access your recycling dashboard</p>
+        </div>
+
+        {/* Login Form */}
+        <Card className="shadow-xl border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+          <CardHeader className="text-center space-y-1 pb-6">
+            <CardTitle className="flex items-center justify-center gap-2 text-xl">
+              <Lock className="h-5 w-5 text-green-600" />
+              Collector Login
+            </CardTitle>
+            <CardDescription>
+              Access your recycling collection dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Email Field */}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    placeholder="Enter your collector email"
+                    className="pl-10 h-11 border-gray-200 focus:border-green-500 focus:ring-green-500"
+                    disabled={isLoading}
+                  />
+                </div>
               </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={credentials.password}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, password: e.target.value }))}
-                  className="pl-10"
-                  disabled={isLoading}
-                  required
-                />
+
+              {/* Password Field */}
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    placeholder="Enter your password"
+                    className="pl-10 pr-10 h-11 border-gray-200 focus:border-green-500 focus:ring-green-500"
+                    disabled={isLoading}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                    disabled={isLoading}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-            
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign In"
+
+              {/* Remember Me */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="rememberMe"
+                  checked={formData.rememberMe}
+                  onCheckedChange={(checked) => 
+                    handleInputChange('rememberMe', checked === true)
+                  }
+                  disabled={isLoading}
+                  className="text-green-600 focus:ring-green-500"
+                />
+                <Label htmlFor="rememberMe" className="text-sm text-gray-600 dark:text-gray-300">
+                  Remember me on this device
+                </Label>
+              </div>
+
+              {/* Error/Success Messages */}
+              {error && (
+                <Alert variant="destructive" className="border-red-200 bg-red-50">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-red-800">{error}</AlertDescription>
+                </Alert>
               )}
-            </Button>
-          </form>
-          
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Need help? Contact your administrator</p>
-            <p className="mt-2">
-              <a href="#" className="text-primary hover:underline">
-                Forgot password?
-              </a>
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+
+              {success && (
+                <Alert className="border-green-200 bg-green-50 text-green-800">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Submit Button */}
+              <Button 
+                type="submit" 
+                className="w-full h-11 bg-green-600 hover:bg-green-700 focus:ring-green-500" 
+                size="lg"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    <Lock className="mr-2 h-4 w-4" />
+                    Access Collector Dashboard
+                  </>
+                )}
+              </Button>
+            </form>
+
+            {/* Demo Credentials for Collectors */}
+            <Card className="bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm text-green-800 dark:text-green-200">Demo Collector Accounts</CardTitle>
+                <CardDescription className="text-xs text-green-600 dark:text-green-300">
+                  Use these accounts to test the collector portal
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                {/* Original Demo Account */}
+                <div className="p-2 rounded bg-white dark:bg-green-800/30 border border-green-200 dark:border-green-700">
+                  <div className="text-xs font-medium text-green-800 dark:text-green-200 mb-1">Demo Account 1:</div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-green-800 dark:text-green-200">Email:</span>
+                    <code className="text-green-600 dark:text-green-300">col001@wozamali.com</code>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="font-medium text-green-800 dark:text-green-200">Password:</span>
+                    <code className="text-green-600 dark:text-green-300">collector123</code>
+                  </div>
+                </div>
+                
+                {/* Dumisani's Account */}
+                <div className="p-2 rounded bg-white dark:bg-green-800/30 border border-green-200 dark:border-green-700">
+                  <div className="text-xs font-medium text-green-800 dark:text-green-200 mb-1">Demo Account 2:</div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-green-800 dark:text-green-200">Email:</span>
+                    <code className="text-green-600 dark:text-green-300">dumisani@wozamali.co.za</code>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="font-medium text-green-800 dark:text-green-200">Password:</span>
+                    <code className="text-green-600 dark:text-green-300">Dumisani123</code>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Help Section */}
+            <div className="text-center space-y-2">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Having trouble signing in?
+              </p>
+              <div className="flex justify-center gap-4 text-xs">
+                <Button variant="link" className="text-green-600 hover:text-green-700 p-0 h-auto">
+                  Reset Password
+                </Button>
+                <Button variant="link" className="text-green-600 hover:text-green-700 p-0 h-auto">
+                  Contact Support
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Footer */}
+        <div className="text-center">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            © 2024 Woza Mali. All rights reserved.
+          </p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            Secure recycling collection management system
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -13,7 +13,8 @@ interface AuthUser {
 
 interface AuthContextType {
   user: AuthUser | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  profile: AuthUser | null; // Added profile to match main app interface
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -55,13 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (profile && !error) {
-          setUser({
+          const userData = {
             id: profile.id,
             email: profile.email,
             name: profile.full_name,
             role: profile.role,
             phone: profile.phone
-          });
+          };
+          setUser(userData);
         }
       }
     } catch (error) {
@@ -71,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -81,17 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Login error:', error);
-        return false;
+        return { success: false, error: error.message };
       }
 
       if (data.user) {
         await checkUser();
-        return true;
+        return { success: true };
       }
-      return false;
+      return { success: false, error: 'Login failed' };
     } catch (error) {
       console.error('Login error:', error);
-      return false;
+      return { success: false, error: 'An unexpected error occurred' };
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, profile: user, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

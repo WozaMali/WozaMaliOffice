@@ -1,11 +1,9 @@
-import { Monitor, Moon, Sun } from "lucide-react"
+"use client";
+
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Moon, Sun, Monitor } from "lucide-react"
 import { useTheme } from "@/hooks/use-theme"
 
 export function ThemeSwitcher() {
@@ -23,15 +21,15 @@ export function ThemeSwitcher() {
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => setTheme("light")}>
           <Sun className="mr-2 h-4 w-4" />
-          <span>Light</span>
+          Light
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("dark")}>
           <Moon className="mr-2 h-4 w-4" />
-          <span>Dark</span>
+          Dark
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("system")}>
           <Monitor className="mr-2 h-4 w-4" />
-          <span>System</span>
+          System
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

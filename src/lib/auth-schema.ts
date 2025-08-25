@@ -2,7 +2,7 @@
 // AUTHENTICATION SCHEMA
 // ============================================================================
 
-export type UserRole = 'ADMIN' | 'STAFF' | 'COLLECTOR';
+export type UserRole = 'ADMIN' | 'STAFF' | 'COLLECTOR' | 'CUSTOMER';
 
 export interface User {
   id: string;
@@ -283,6 +283,7 @@ export function getRoleDisplayName(role: UserRole): string {
     case 'ADMIN': return 'Administrator';
     case 'STAFF': return 'Staff Member';
     case 'COLLECTOR': return 'Collector';
+    case 'CUSTOMER': return 'Customer';
     default: return 'Unknown';
   }
 }
@@ -293,6 +294,7 @@ export function getRoleColor(role: UserRole): string {
     case 'ADMIN': return 'text-red-600 bg-red-50';
     case 'STAFF': return 'text-blue-600 bg-blue-50';
     case 'COLLECTOR': return 'text-green-600 bg-green-50';
+    case 'CUSTOMER': return 'text-purple-600 bg-purple-50';
     default: return 'text-gray-600 bg-gray-50';
   }
 }

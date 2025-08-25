@@ -1,156 +1,202 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
 import { 
-  BarChart3, 
+  Building2, 
   Users, 
-  CreditCard, 
-  Gift,
-  TreePine,
-  Calendar,
-  Settings,
+  Recycle, 
+  DollarSign, 
+  BarChart3, 
+  Settings, 
+  LogOut,
   Menu,
   X,
-  LogOut,
-  TrendingUp,
-  Package
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { useAuth } from "@/hooks/use-auth";
+  Home,
+  User,
+  Package,
+  CreditCard,
+  Award,
+  Cog
+} from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
-  currentPage: string;
+  currentPage?: string;
 }
 
-const navigation = [
-  { name: 'Dashboard', href: '/admin', icon: BarChart3, page: 'dashboard' },
-  { name: 'Users', href: '/admin/users', icon: Users, page: 'users' },
-  { name: 'Withdrawals', href: '/admin/withdrawals', icon: CreditCard, page: 'withdrawals' },
-  { name: 'Rewards', href: '/admin/rewards', icon: Gift, page: 'rewards' },
-  { name: 'Green Scholar Fund', href: '/admin/fund', icon: TreePine, page: 'fund' },
-        { name: 'Collections', href: '/admin/collections', icon: Calendar, page: 'collections' },
-      { name: 'Pickups', href: '/admin/pickups', icon: Package, page: 'pickups' },
-      { name: 'Analytics', href: '/admin/analytics', icon: TrendingUp, page: 'analytics' },
-      { name: 'Site Config', href: '/admin/config', icon: Settings, page: 'config' },
+const navigationItems = [
+  { name: 'Dashboard', href: '/admin', icon: Home, current: true },
+  { name: 'Users', href: '/admin/users', icon: Users, current: false },
+  { name: 'Collections', href: '/admin/collections', icon: Recycle, current: false },
+  { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, current: false },
+  { name: 'Fund Management', href: '/admin/fund', icon: DollarSign, current: false },
+  { name: 'Rewards', href: '/admin/rewards', icon: Award, current: false },
+  { name: 'Withdrawals', href: '/admin/withdrawals', icon: CreditCard, current: false },
+  { name: 'Configuration', href: '/admin/config', icon: Cog, current: false },
 ];
 
-export function AdminLayout({ children, currentPage }: AdminLayoutProps) {
+export default function AdminLayout({ children, currentPage }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { logout } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const { user, profile, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    // Check if user is admin
+    if (profile && profile.role !== 'ADMIN' && profile.role !== 'admin') {
+      router.push('/?error=unauthorized');
+    }
+  }, [profile, router]);
+
+  const handleLogout = async () => {
+    setIsLoading(true);
+    try {
+      await logout();
+      router.push('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleNavigation = (href: string) => {
+    router.push(href);
+    setSidebarOpen(false);
+  };
+
+  if (!user || !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (profile.role !== 'ADMIN' && profile.role !== 'admin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <X className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+          <p className="text-gray-600 mb-4">You don't have permission to access the admin area.</p>
+          <Button onClick={() => router.push('/')} variant="outline">
+            Return to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div className={cn(
-        "fixed inset-y-0 left-0 z-50 w-72 transform bg-card border-r border-border shadow-elegant transition-transform duration-300 ease-smooth",
-        sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      )}>
-        <div className="flex h-full flex-col">
-          {/* Logo and brand */}
-          <div className="flex items-center justify-between px-6 py-6 border-b border-border">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-lg">W</span>
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">Woza Mali</h2>
-                <p className="text-sm text-muted-foreground">Admin Portal</p>
-              </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Mobile sidebar */}
+      <div className={`fixed inset-0 z-50 lg:hidden ${sidebarOpen ? 'block' : 'hidden'}`}>
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
+          <div className="flex h-16 items-center justify-between px-4 border-b">
+            <div className="flex items-center">
+              <img src="/w yellow.png" alt="Logo" className="h-8 w-8 mr-2" />
+              <span className="text-lg font-semibold text-gray-900">Admin Panel</span>
             </div>
             <Button
               variant="ghost"
               size="sm"
-              className="lg:hidden"
               onClick={() => setSidebarOpen(false)}
             >
-              <X className="h-5 w-5" />
+              <X className="h-6 w-6" />
             </Button>
           </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {navigation.map((item) => {
-              const isActive = currentPage === item.page;
-              return (
-                <a
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                  )}
-                >
-                  <item.icon className="h-5 w-5" />
-                  <span>{item.name}</span>
-                </a>
-              );
-            })}
-          </nav>
-
-          {/* User info and logout */}
-          <div className="p-4 border-t border-border">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-accent rounded-full flex items-center justify-center">
-                  <span className="text-accent-foreground font-medium text-sm">A</span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">Admin User</p>
-                  <p className="text-xs text-muted-foreground">Super Admin</p>
-                </div>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => logout()}
-                className="hover:bg-destructive/10 hover:text-destructive"
+          <nav className="flex-1 space-y-1 px-2 py-4">
+            {navigationItems.map((item) => (
+              <Button
+                key={item.name}
+                variant="ghost"
+                className={`w-full justify-start ${
+                  currentPage === item.href ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                onClick={() => handleNavigation(item.href)}
               >
-                <LogOut className="h-4 w-4" />
+                <item.icon className="mr-3 h-5 w-5" />
+                {item.name}
               </Button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Desktop sidebar */}
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+        <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
+          <div className="flex h-16 items-center px-4 border-b">
+            <div className="flex items-center">
+              <img src="/w yellow.png" alt="Logo" className="h-8 w-8 mr-2" />
+              <span className="text-lg font-semibold text-gray-900">Admin Panel</span>
             </div>
           </div>
+          <nav className="flex-1 space-y-1 px-2 py-4">
+            {navigationItems.map((item) => (
+              <Button
+                key={item.name}
+                variant="ghost"
+                className={`w-full justify-start ${
+                  currentPage === item.href ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+                onClick={() => handleNavigation(item.href)}
+              >
+                <item.icon className="mr-3 h-5 w-5" />
+                {item.name}
+              </Button>
+            ))}
+          </nav>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="lg:ml-72">
-        {/* Top header */}
-        <header className="bg-card border-b border-border px-6 py-4">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
-            <h1 className="text-xl font-semibold text-foreground capitalize">
-              {currentPage === 'dashboard' ? 'Admin Dashboard' : currentPage}
-            </h1>
-            <div className="flex items-center space-x-2">
-              <div className="text-sm text-muted-foreground">
-                Recycling Made Simple
+      <div className="lg:pl-64">
+        {/* Top bar */}
+        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+          <Button
+            variant="ghost"
+            className="lg:hidden"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-6 w-6" />
+          </Button>
+
+          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
+            <div className="flex flex-1"></div>
+            <div className="flex items-center gap-x-4 lg:gap-x-6">
+              <div className="flex items-center gap-x-2">
+                <div className="text-sm text-gray-700">
+                  <span className="font-medium">{profile.full_name}</span>
+                  <span className="text-gray-500 ml-2">({profile.email})</span>
+                </div>
               </div>
+              <Button
+                variant="ghost"
+                onClick={handleLogout}
+                disabled={isLoading}
+                className="text-gray-700 hover:text-gray-900"
+              >
+                <LogOut className="h-5 w-5 mr-2" />
+                {isLoading ? 'Signing out...' : 'Sign out'}
+              </Button>
             </div>
           </div>
-        </header>
+        </div>
 
         {/* Page content */}
-        <main className="p-6">
-          {children}
+        <main className="py-6">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>

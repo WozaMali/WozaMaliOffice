@@ -3,21 +3,37 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://your-project.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key'
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+console.log('🔌 Creating Supabase client with:');
+console.log('🔌 URL:', supabaseUrl);
+console.log('🔌 Key length:', supabaseAnonKey?.length || 0);
+
+if (!supabaseUrl || supabaseUrl === 'https://your-project.supabase.co') {
+  console.error('❌ NEXT_PUBLIC_SUPABASE_URL is not set or invalid');
+}
+
+if (!supabaseAnonKey || supabaseAnonKey === 'your-anon-key') {
+  console.error('❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is not set or invalid');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+});
+
+console.log('✅ Supabase client created successfully');
 
 // Database types matching your new schema
 export interface Profile {
   id: string
   email: string
-  username?: string
-  first_name?: string
-  last_name?: string
+  full_name?: string
   phone?: string
-  role: 'CUSTOMER' | 'COLLECTOR' | 'ADMIN' | 'STAFF'
+  role: 'customer' | 'collector' | 'admin'
   is_active: boolean
-  last_login?: string
   created_at: string
-  updated_at: string
 }
 
 export interface Address {

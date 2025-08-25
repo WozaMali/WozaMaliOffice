@@ -1,10 +1,5 @@
-import RecyclingCalculatorPage from "@/pages/RecyclingCalculatorPage";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { RecyclingCalculator } from "../../src/components/RecyclingCalculator";
 
 export default function CalculatorPage() {
-  return (
-    <ProtectedRoute>
-      <RecyclingCalculatorPage />
-    </ProtectedRoute>
-  );
+  return <RecyclingCalculator />;
 }

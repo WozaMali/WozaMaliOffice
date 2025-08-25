@@ -1,10 +1,8 @@
-import AdminDashboard from "@/pages/AdminDashboard";
-import { AdminRoute } from "@/components/ProtectedRoute";
+import AdminDashboardClient from './AdminDashboardClient';
 
-export default function AdminPage() {
-  return (
-    <AdminRoute>
-      <AdminDashboard />
-    </AdminRoute>
-  );
+// Force dynamic rendering to prevent SSR issues
+export const dynamic = 'force-dynamic';
+
+export default function AdminDashboard() {
+  return <AdminDashboardClient />;
 }
