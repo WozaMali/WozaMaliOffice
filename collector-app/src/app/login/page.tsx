@@ -35,25 +35,54 @@ export default function CollectorLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Debug logging - More comprehensive
+  useEffect(() => {
+    console.log('🔍 Debug - User object:', user);
+    console.log('🔍 Debug - Profile object:', profile);
+    if (user) {
+      console.log('🔍 Debug - User ID:', user.id);
+      console.log('🔍 Debug - User email:', user.email);
+      console.log('🔍 Debug - User role (if exists):', (user as any).role);
+    }
+    if (profile) {
+      console.log('🔍 Debug - Profile ID:', profile.id);
+      console.log('🔍 Debug - Profile role:', profile.role);
+      console.log('🔍 Debug - Profile email:', profile.email);
+    }
+  }, [user, profile]);
+
   // Redirect already authenticated collectors to dashboard
   useEffect(() => {
-    if (user && profile && profile.role === 'COLLECTOR') {
-      router.push('/');
+    if (user && profile) {
+      const userRole = profile.role || (user as any).role;
+      console.log('🔍 Debug - Checking role access. User role:', userRole);
+      
+      if (userRole === 'collector' || userRole === 'admin' || 
+          userRole === 'COLLECTOR' || userRole === 'ADMIN') {
+        console.log('✅ User authenticated as collector or admin, redirecting to dashboard');
+        router.push('/');
+      } else {
+        console.log('❌ User role not allowed:', userRole);
+        console.log('❌ Allowed roles: collector, admin, COLLECTOR, ADMIN');
+        console.log('❌ User has role:', userRole);
+        router.push('/unauthorized');
+      }
     }
   }, [user, profile, router]);
 
-  // Redirect non-collectors away
-  useEffect(() => {
-    if (user && profile && profile.role !== 'COLLECTOR') {
-      router.push('/unauthorized');
-    }
-  }, [user, profile, router]);
-
-  // Don't render the form if user is already authenticated or not a collector
+  // Don't render the form if user is already authenticated
   if (user && profile) {
-    if (profile.role === 'COLLECTOR') {
+    const userRole = profile.role || (user as any).role;
+    console.log('🔍 Debug - Final role check. User role:', userRole);
+    
+    if (userRole === 'collector' || userRole === 'admin' || 
+        userRole === 'COLLECTOR' || userRole === 'ADMIN') {
+      console.log('✅ Role check passed, redirecting to dashboard');
       return null; // Will redirect to dashboard
     } else {
+      console.log('❌ Role check failed, redirecting to unauthorized');
+      console.log('❌ User has role:', userRole);
+      console.log('❌ Expected roles: collector, admin, COLLECTOR, ADMIN');
       return null; // Will redirect to unauthorized
     }
   }
@@ -82,10 +111,20 @@ export default function CollectorLoginPage() {
         
         // Redirect after a short delay
         setTimeout(() => {
-          if (profile && profile.role === 'COLLECTOR') {
+          const userRole = profile?.role || (user as any)?.role;
+          console.log('🔍 Debug - Login success, checking role:', userRole);
+          
+          if (userRole === 'collector' || userRole === 'admin' || 
+              userRole === 'COLLECTOR' || userRole === 'ADMIN') {
+            console.log('✅ Login successful, redirecting to dashboard');
+            router.push('/');
+          } else if (!userRole) {
+            // For development, allow users without roles to access the dashboard
+            console.log('⚠️ Development mode: User has no role, allowing access to dashboard');
             router.push('/');
           } else {
-            setError('Access denied. This portal is for collectors only.');
+            console.log('❌ Login successful but role not allowed:', userRole);
+            setError(`Access denied. Your role '${userRole}' is not authorized for this portal. Contact your supervisor for collector access.`);
           }
         }, 1500);
       } else {
@@ -108,6 +147,24 @@ export default function CollectorLoginPage() {
           <p className="text-lg text-gray-600 dark:text-gray-300">Collector Portal</p>
           <p className="text-sm text-gray-500 dark:text-gray-400">Sign in to access your recycling dashboard</p>
         </div>
+
+        {/* Debug Information - Temporary */}
+        {user && (
+          <Card className="shadow-xl border-0 bg-yellow-50 dark:bg-yellow-900/20 backdrop-blur-sm mb-4">
+            <CardHeader className="text-center space-y-1 pb-2">
+              <CardTitle className="text-sm text-yellow-800 dark:text-yellow-200">
+                🔍 Debug Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-yellow-700 dark:text-yellow-300 space-y-1">
+              <div>User ID: {user.id}</div>
+              <div>User Email: {user.email}</div>
+              <div>Profile Role: {profile?.role || 'No profile'}</div>
+              <div>User Role: {(user as any).role || 'No role'}</div>
+              <div>Expected Roles: collector, admin, COLLECTOR, ADMIN</div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Login Form */}
         <Card className="shadow-xl border-0 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">

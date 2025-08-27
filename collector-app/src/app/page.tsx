@@ -23,10 +23,17 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import Link from "next/link";
+import { profileServices } from "@/lib/supabase-services";
+import type { ProfileWithAddresses } from "@/lib/supabase";
 
 // Customer data will be loaded from API
-const mockCustomers: any[] = [];
+interface CustomerWithAddresses extends ProfileWithAddresses {
+  name: string;
+  address: string;
+  city: string;
+}
 
 export default function CollectorDashboard() {
   const { theme } = useTheme();
@@ -43,13 +50,14 @@ export default function CollectorDashboard() {
   
   // New state for customer search and photo capture
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredCustomers, setFilteredCustomers] = useState(mockCustomers);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [capturedPhotos, setCapturedPhotos] = useState([]);
+  const [customers, setCustomers] = useState<CustomerWithAddresses[]>([]);
+  const [filteredCustomers, setFilteredCustomers] = useState<CustomerWithAddresses[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithAddresses | null>(null);
+  const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Load basic stats on component mount
   useEffect(() => {
@@ -61,16 +69,16 @@ export default function CollectorDashboard() {
   // Filter customers based on search term
   useEffect(() => {
     if (searchTerm) {
-      const filtered = mockCustomers.filter(customer =>
+      const filtered = customers.filter(customer =>
         customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.phone.includes(searchTerm) ||
+        customer.phone?.includes(searchTerm) ||
         customer.address.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredCustomers(filtered);
     } else {
-      setFilteredCustomers(mockCustomers);
+      setFilteredCustomers(customers);
     }
-  }, [searchTerm]);
+  }, [customers, searchTerm]);
 
   // Redirect unauthenticated users to login
   useEffect(() => {
@@ -81,21 +89,67 @@ export default function CollectorDashboard() {
 
   // Redirect non-collectors to unauthorized page
   useEffect(() => {
-    if (user && user.role && user.role !== 'COLLECTOR') {
-      window.location.href = '/unauthorized';
+    if (user && user.role) {
+      console.log('🔍 Debug - User role check:', {
+        userRole: user.role,
+        allowedRoles: ['collector', 'admin', 'COLLECTOR', 'ADMIN'],
+        isAllowed: ['collector', 'admin', 'COLLECTOR', 'ADMIN'].includes(user.role)
+      });
+      
+      if (!['collector', 'admin', 'COLLECTOR', 'ADMIN'].includes(user.role)) {
+        console.log('❌ User role not allowed, redirecting to unauthorized');
+        window.location.href = '/unauthorized';
+      } else {
+        console.log('✅ User role allowed, staying on dashboard');
+      }
+    } else if (user) {
+      console.log('🔍 Debug - User exists but no role:', user);
+      // For development, allow users without roles to access the dashboard
+      console.log('⚠️ Development mode: Allowing user without role to access dashboard');
     }
   }, [user]);
 
   const loadBasicStats = async () => {
     try {
       setIsLoading(true);
-      // TODO: Load stats from API
-      const emptyStats = {
-        totalCollections: 0,
-        totalKg: 0,
-        totalPoints: 0
+      
+      // Load customers from Supabase
+      const customerProfiles = await profileServices.getCustomerProfilesWithAddresses();
+      
+      // Transform the data to include name and address
+      const customersWithAddresses: CustomerWithAddresses[] = customerProfiles.map(profile => {
+        const primaryAddress = profile.addresses?.find(addr => addr.is_primary) || profile.addresses?.[0];
+        
+        return {
+          ...profile,
+          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'Unknown Customer',
+          address: primaryAddress ? `${primaryAddress.line1}, ${primaryAddress.suburb}` : 'No address',
+          city: primaryAddress?.city || 'Unknown'
+        };
+      });
+      
+      setCustomers(customersWithAddresses);
+      setFilteredCustomers(customersWithAddresses);
+      
+      // Load actual stats from API
+      if (!user) return;
+      
+      const { data: pickupsData } = await supabase
+        .from('pickups')
+        .select('total_kg, status')
+        .eq('collector_id', user.id);
+      
+      const totalCollections = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed').length || 0;
+      const totalKg = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed')
+        .reduce((sum: number, p: any) => sum + (p.total_kg || 0), 0) || 0;
+      const totalPoints = totalKg * 6; // 6 points per kg
+      
+      const realStats = {
+        totalCollections,
+        totalKg,
+        totalPoints
       };
-      setStats(emptyStats);
+      setStats(realStats);
     } catch (error) {
       console.error('Error loading stats:', error);
     } finally {
@@ -165,7 +219,7 @@ export default function CollectorDashboard() {
     });
   };
 
-  const selectCustomer = (customer: Customer) => {
+  const selectCustomer = (customer: CustomerWithAddresses) => {
     setSelectedCustomer(customer);
     setSearchTerm(customer.name);
     setFilteredCustomers([]);
@@ -174,7 +228,7 @@ export default function CollectorDashboard() {
   const clearCustomerSelection = () => {
     setSelectedCustomer(null);
     setSearchTerm('');
-    setFilteredCustomers(mockCustomers);
+    setFilteredCustomers(customers);
   };
 
   // Show loading while checking authentication

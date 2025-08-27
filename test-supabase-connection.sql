@@ -1,64 +1,57 @@
--- ============================================================================
--- TEST SUPABASE CONNECTION AND DATA
--- ============================================================================
--- Run this in your Supabase SQL Editor to debug the connection issues
+-- Simple test to check database connectivity and table structure
+-- Run this in Supabase SQL Editor to verify everything is working
 
--- Test 1: Check if profiles table has data
-SELECT 'Profiles Test:' as test_name;
+-- Test 1: Check if we can connect and see tables
+SELECT 'Database connection test:' as info;
+SELECT current_database() as database_name, current_user as current_user;
+
+-- Test 2: Check if profiles table exists
+SELECT 'Checking if profiles table exists:' as info;
 SELECT 
-  COUNT(*) as total_profiles,
-  COUNT(CASE WHEN role = 'member' THEN 1 END) as member_users,
-  COUNT(CASE WHEN role = 'collector' THEN 1 END) as collector_users,
-  COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_users
-FROM public.profiles;
+  table_name,
+  table_type
+FROM information_schema.tables 
+WHERE table_name = 'profiles';
 
--- Test 2: Check if collector_dashboard_view exists and has data
-SELECT 'Dashboard View Test:' as test_name;
+-- Test 3: Check profiles table structure
+SELECT 'Profiles table structure:' as info;
 SELECT 
-  CASE 
-    WHEN EXISTS (SELECT 1 FROM information_schema.views WHERE view_name = 'collector_dashboard_view') 
-    THEN 'View exists' 
-    ELSE 'View does not exist' 
-  END as view_status;
+  column_name,
+  data_type,
+  is_nullable
+FROM information_schema.columns 
+WHERE table_name = 'profiles'
+ORDER BY ordinal_position;
 
--- If view exists, check its data
-SELECT 'Dashboard View Data:' as test_name;
-SELECT COUNT(*) as total_rows FROM public.collector_dashboard_view;
+-- Test 4: Check if there are any profiles at all
+SELECT 'Checking profiles table content:' as info;
+SELECT COUNT(*) as total_profiles FROM profiles;
 
--- Test 3: Check if pickups table has data
-SELECT 'Pickups Test:' as test_name;
+-- Test 5: Check what roles exist (if any profiles exist)
+SELECT 'Checking existing roles:' as info;
 SELECT 
-  COUNT(*) as total_pickups,
-  COUNT(CASE WHEN status = 'submitted' THEN 1 END) as submitted_pickups,
-  COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_pickups,
-  COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_pickups
-FROM public.pickups;
+  role,
+  COUNT(*) as count
+FROM profiles 
+GROUP BY role
+ORDER BY role;
 
--- Test 4: Check if materials table has data
-SELECT 'Materials Test:' as test_name;
+-- Test 6: Check if addresses table exists
+SELECT 'Checking if addresses table exists:' as info;
 SELECT 
-  COUNT(*) as total_materials,
-  COUNT(CASE WHEN is_active = true THEN 1 END) as active_materials
-FROM public.materials;
+  table_name,
+  table_type
+FROM information_schema.tables 
+WHERE table_name = 'addresses';
 
--- Test 5: Check if addresses table has data
-SELECT 'Addresses Test:' as test_name;
+-- Test 7: Check if we can do a simple join
+SELECT 'Testing profiles + addresses join:' as info;
 SELECT 
-  COUNT(*) as total_addresses,
-  COUNT(CASE WHEN profile_id IS NOT NULL THEN 1 END) as linked_addresses
-FROM public.addresses;
-
--- Test 6: Check RLS policies
-SELECT 'RLS Policy Test:' as test_name;
-SELECT 
-  schemaname,
-  tablename,
-  policyname,
-  permissive,
-  roles,
-  cmd,
-  qual
-FROM pg_policies 
-WHERE schemaname = 'public' 
-  AND tablename IN ('profiles', 'pickups', 'materials', 'addresses')
-ORDER BY tablename, policyname;
+  p.id,
+  p.email,
+  p.role,
+  COUNT(a.id) as address_count
+FROM profiles p
+LEFT JOIN addresses a ON p.id = a.profile_id
+GROUP BY p.id, p.email, p.role
+LIMIT 5;

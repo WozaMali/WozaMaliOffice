@@ -68,7 +68,9 @@ export default function CollectorSettingsPage() {
 
   // Redirect non-collectors to unauthorized page
   useEffect(() => {
-    if (user && user.role && user.role !== 'COLLECTOR') {
+    if (user && user.role && 
+        user.role !== 'collector' && user.role !== 'admin' &&
+        user.role !== 'COLLECTOR' && user.role !== 'ADMIN') {
       window.location.href = '/unauthorized';
     }
   }, [user]);

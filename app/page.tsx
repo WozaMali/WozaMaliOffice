@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Building2, Users } from 'lucide-react';
-import SharedLogin from '@/components/SharedLogin';
 
 export default function HomePage() {
   const [selectedRole, setSelectedRole] = useState<'admin' | 'collector' | null>(null);
@@ -25,13 +24,13 @@ export default function HomePage() {
   };
 
   if (selectedRole) {
-    return (
-      <SharedLogin 
-        appContext={selectedRole} 
-        title={`Woza Mali - ${selectedRole === 'admin' ? 'Admin' : 'Collector'} Access`}
-        description={`${selectedRole === 'admin' ? 'Administrator' : 'Collector'} Portal - Authorized Personnel Only`}
-      />
-    );
+    // Redirect to appropriate login page based on role selection
+    if (selectedRole === 'admin') {
+      window.location.href = '/admin-login';
+    } else if (selectedRole === 'collector') {
+      window.location.href = '/collector-login';
+    }
+    return null; // Return null while redirecting
   }
 
   return (
@@ -114,6 +113,54 @@ export default function HomePage() {
             >
               <Users className="w-4 h-4 mr-2" />
               Collector Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Direct Login Access */}
+      <div className="max-w-2xl mx-auto mb-8">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+          <p className="text-green-800 font-medium mb-3">Direct Access to Login Pages</p>
+          <div className="flex gap-3 justify-center">
+            <Button
+              onClick={() => window.location.href = '/admin-login'}
+              variant="outline"
+              className="border-blue-600 text-blue-700 hover:bg-blue-50"
+            >
+              <Building2 className="w-4 h-4 mr-2" />
+              Admin Login
+            </Button>
+            <Button
+              onClick={() => window.location.href = '/collector-login'}
+              variant="outline"
+              className="border-orange-600 text-orange-700 hover:bg-orange-50"
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Collector Login
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Debug Link */}
+      <div className="max-w-2xl mx-auto mb-8">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+          <p className="text-yellow-800 font-medium mb-3">Having Login Issues?</p>
+          <div className="flex gap-3 justify-center">
+            <Button
+              onClick={() => window.location.href = '/debug-auth'}
+              variant="outline"
+              className="border-yellow-600 text-yellow-700 hover:bg-yellow-50"
+            >
+              Debug Authentication
+            </Button>
+            <Button
+              onClick={() => window.location.href = '/test-connection'}
+              variant="outline"
+              className="border-yellow-600 text-yellow-700 hover:bg-yellow-50"
+            >
+              Test Connection
             </Button>
           </div>
         </div>

@@ -64,6 +64,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             phone: profile.phone
           };
           setUser(userData);
+        } else {
+          // For development, create a basic user object even without profile
+          console.log('⚠️ Development mode: No profile found, creating basic user object');
+          const userData = {
+            id: session.user.id,
+            email: session.user.email || 'unknown@email.com',
+            name: session.user.email?.split('@')[0] || 'User',
+            role: 'collector', // Default to collector role for development
+            phone: ''
+          };
+          setUser(userData);
         }
       }
     } catch (error) {

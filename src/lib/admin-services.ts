@@ -95,18 +95,74 @@ export async function updateUserRole(userId: string, role: string, isActive: boo
 // ============================================================================
 
 export async function getPickups(): Promise<Pickup[]> {
-  const { data, error } = await supabase
-    .from('pickups')
-    .select(`
-      *,
-      customer:profiles!pickups_customer_id_fkey(full_name, email, phone),
-      collector:profiles!pickups_collector_id_fkey(full_name, email, phone),
-      address:addresses(line1, suburb, city, postal_code)
-    `)
-    .order('created_at', { ascending: false });
+  console.log('🔍 Fetching pickups from Supabase...');
+  
+  try {
+    // Fetch pickups with simple query
+    const { data: pickupsData, error } = await supabase
+      .from('pickups')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      console.error('❌ Error fetching pickups:', error);
+      throw error;
+    }
+
+    // Fetch customer profiles separately
+    const customerIds = Array.from(new Set(pickupsData?.map(p => p.customer_id).filter(Boolean) || []));
+    const { data: customerProfiles } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email, phone')
+      .in('id', customerIds);
+
+    // Fetch collector profiles separately
+    const collectorIds = Array.from(new Set(pickupsData?.map(p => p.collector_id).filter(Boolean) || []));
+    const { data: collectorProfiles } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email, phone')
+      .in('id', collectorIds);
+
+    // Fetch addresses separately
+    const addressIds = Array.from(new Set(pickupsData?.map(p => p.address_id).filter(Boolean) || []));
+    const { data: addresses } = await supabase
+      .from('addresses')
+      .select('id, line1, suburb, city, postal_code')
+      .in('id', addressIds);
+
+    // Transform the data
+    const transformedPickups = (pickupsData || []).map(pickup => {
+      const customer = customerProfiles?.find(p => p.id === pickup.customer_id);
+      const collector = collectorProfiles?.find(p => p.id === pickup.collector_id);
+      const address = addresses?.find(a => a.id === pickup.address_id);
+
+      return {
+        ...pickup,
+        customer: customer ? {
+          full_name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+          email: customer.email,
+          phone: customer.phone
+        } : null,
+        collector: collector ? {
+          full_name: `${collector.first_name || ''} ${collector.last_name || ''}`.trim(),
+          email: collector.email,
+          phone: collector.phone
+        } : null,
+        address: address ? {
+          line1: address.line1,
+          suburb: address.suburb,
+          city: address.city,
+          postal_code: address.postal_code
+        } : null
+      };
+    });
+
+    console.log('✅ Pickups fetched successfully:', transformedPickups.length, 'pickups found');
+    return transformedPickups;
+  } catch (error) {
+    console.error('❌ Exception in getPickups:', error);
+    throw error;
+  }
 }
 
 export function subscribeToPickups(callback: RealtimeCallback<Pickup>) {
@@ -136,20 +192,59 @@ export async function updatePickupStatus(pickupId: string, status: string, appro
 // ============================================================================
 
 export async function getPayments(): Promise<Payment[]> {
-  const { data, error } = await supabase
-    .from('payments')
-    .select(`
-      *,
-      pickup:pickups(
-        customer:profiles!pickups_customer_id_fkey(full_name, email, phone),
-        total_kg,
-        total_value
-      )
-    `)
-    .order('created_at', { ascending: false });
+  console.log('🔍 Fetching payments from Supabase...');
+  
+  try {
+    // Fetch payments with simple query
+    const { data: paymentsData, error } = await supabase
+      .from('payments')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      console.error('❌ Error fetching payments:', error);
+      throw error;
+    }
+
+    // Fetch pickup details separately
+    const pickupIds = Array.from(new Set(paymentsData?.map(p => p.pickup_id).filter(Boolean) || []));
+    const { data: pickups } = await supabase
+      .from('pickups')
+      .select('id, total_kg, total_value')
+      .in('id', pickupIds);
+
+    // Fetch customer profiles for the pickups
+    const customerIds = Array.from(new Set(pickups?.map(p => p.customer_id).filter(Boolean) || []));
+    const { data: customerProfiles } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, email, phone')
+      .in('id', customerIds);
+
+    // Transform the data
+    const transformedPayments = (paymentsData || []).map(payment => {
+      const pickup = pickups?.find(p => p.id === payment.pickup_id);
+      const customer = customerProfiles?.find(p => p.id === pickup?.customer_id);
+
+      return {
+        ...payment,
+        pickup: pickup ? {
+          customer: customer ? {
+            full_name: `${customer.first_name || ''} ${customer.last_name || ''}`.trim(),
+            email: customer.email,
+            phone: customer.phone
+          } : null,
+          total_kg: pickup.total_kg,
+          total_value: pickup.total_value
+        } : null
+      };
+    });
+
+    console.log('✅ Payments fetched successfully:', transformedPayments.length, 'payments found');
+    return transformedPayments;
+  } catch (error) {
+    console.error('❌ Exception in getPayments:', error);
+    throw error;
+  }
 }
 
 export function subscribeToPayments(callback: RealtimeCallback<Payment>) {

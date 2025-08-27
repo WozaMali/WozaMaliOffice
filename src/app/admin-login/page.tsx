@@ -35,14 +35,14 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Redirect already authenticated admins/staff to admin dashboard
-  if (user && profile && (profile.role === 'ADMIN' || profile.role === 'STAFF')) {
+  // Redirect already authenticated admins to admin dashboard
+  if (user && profile && profile.role === 'admin') {
     router.push('/admin');
     return null;
   }
 
-  // Redirect collectors away from admin portal
-  if (user && profile && profile.role === 'COLLECTOR') {
+  // Redirect non-admins away from admin portal
+  if (user && profile && profile.role !== 'admin') {
     router.push('/unauthorized');
     return null;
   }
@@ -71,10 +71,10 @@ export default function AdminLoginPage() {
         
         // Redirect after a short delay
         setTimeout(() => {
-          if (profile && (profile.role === 'ADMIN' || profile.role === 'STAFF')) {
+          if (profile && profile.role === 'admin') {
             router.push('/admin');
           } else {
-            setError('Access denied. This portal is for admin and staff only.');
+            setError('Access denied. This portal is for administrators only.');
           }
         }, 1500);
       } else {
@@ -214,9 +214,9 @@ export default function AdminLoginPage() {
             {/* Demo Credentials for Admins */}
             <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm text-blue-800 dark:text-blue-200">Demo Admin Accounts</CardTitle>
+                <CardTitle className="text-sm text-blue-800 dark:text-blue-200">Demo Admin Account</CardTitle>
                 <CardDescription className="text-xs text-blue-600 dark:text-blue-300">
-                  Use these accounts to test the admin portal
+                  Use this account to test the admin portal
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 text-xs">
@@ -228,16 +228,6 @@ export default function AdminLoginPage() {
                   <div className="flex items-center justify-between mt-1">
                     <span className="font-medium text-blue-800 dark:text-blue-200">Password:</span>
                     <code className="text-blue-600 dark:text-blue-300">admin123</code>
-                  </div>
-                </div>
-                <div className="p-2 rounded bg-white dark:bg-blue-800/30 border border-blue-200 dark:border-blue-700">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-blue-800 dark:text-blue-200">Staff:</span>
-                    <code className="text-blue-600 dark:text-blue-300">manager@wozamali.com</code>
-                  </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="font-medium text-blue-800 dark:text-blue-200">Password:</span>
-                    <code className="text-blue-600 dark:text-blue-300">staff123</code>
                   </div>
                 </div>
               </CardContent>

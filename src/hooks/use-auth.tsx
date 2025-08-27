@@ -9,20 +9,10 @@ export interface Profile {
   id: string;
   email: string;
   full_name: string;
-  avatar_url?: string;
   phone?: string;
-  address?: string;
-  city?: string;
-  province?: string;
-  postal_code?: string;
-  date_of_birth?: string;
-  gender?: string;
-  emergency_contact?: string;
-  is_verified: boolean;
-  is_active: boolean;
   role: string;
+  is_active: boolean;
   created_at: string;
-  updated_at: string;
 }
 
 export interface AuthContextType {
@@ -41,7 +31,26 @@ export interface AuthContextType {
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+// Debug Supabase configuration
+console.log('useAuth: Supabase URL:', supabaseUrl ? 'Configured' : 'MISSING');
+console.log('useAuth: Supabase Key:', supabaseAnonKey ? 'Configured' : 'MISSING');
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('useAuth: Missing Supabase environment variables!');
+}
+
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+// Test Supabase connection
+supabase.auth.getSession().then(({ data, error }) => {
+  if (error) {
+    console.error('useAuth: Initial Supabase connection test failed:', error);
+  } else {
+    console.log('useAuth: Initial Supabase connection test successful');
+  }
+}).catch(err => {
+  console.error('useAuth: Initial Supabase connection test error:', err);
+});
 
 // Create Auth Context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -198,28 +207,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Effect to handle auth state changes
   useEffect(() => {
-    const fetchUser = async () => {
+    console.log('useAuth: Starting auth state check');
+    
+    const checkUser = async () => {
       try {
+        console.log('useAuth: Fetching user session...');
         // Get current session
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('useAuth: Session error:', error);
+        }
         
         if (session?.user) {
+          console.log('useAuth: User session found:', session.user.id);
           setUser(session.user);
           const userProfile = await fetchProfile(session.user.id);
           setProfile(userProfile);
+        } else {
+          console.log('useAuth: No user session found');
         }
       } catch (err) {
-        console.error('Error fetching user:', err);
+        console.error('useAuth: Error fetching user:', err);
       } finally {
+        console.log('useAuth: Setting isLoading to false');
         setIsLoading(false);
       }
     };
 
-    fetchUser();
+    checkUser();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('useAuth: Auth state change:', event, session?.user?.id);
         if (session?.user) {
           setUser(session.user);
           const userProfile = await fetchProfile(session.user.id);
@@ -232,7 +253,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value: AuthContextType = {

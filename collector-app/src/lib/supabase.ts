@@ -23,7 +23,7 @@ export interface Profile {
   first_name?: string
   last_name?: string
   phone?: string
-  role: 'CUSTOMER' | 'COLLECTOR' | 'ADMIN' | 'STAFF'
+  role: 'customer' | 'collector' | 'admin'
   is_active: boolean
   last_login?: string
   created_at: string

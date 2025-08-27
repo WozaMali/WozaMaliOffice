@@ -1,42 +1,43 @@
--- ============================================================================
--- SIMPLE DATABASE DIAGNOSTIC SCRIPT
--- ============================================================================
--- Run this in your Supabase SQL Editor to diagnose the current state
+-- Simple diagnostic script - should work in any PostgreSQL version
+-- Run this in Supabase SQL Editor to check basic connectivity
 
--- Check if tables exist
-SELECT 'profiles' as table_name, 
-       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'profiles') 
-            THEN 'EXISTS' ELSE 'MISSING' END as status
-UNION ALL
-SELECT 'materials' as table_name, 
-       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'materials') 
-            THEN 'EXISTS' ELSE 'MISSING' END as status
-UNION ALL
-SELECT 'pickups' as table_name, 
-       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'pickups') 
-            THEN 'EXISTS' ELSE 'MISSING' END as status
-UNION ALL
-SELECT 'wallets' as table_name, 
-       CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'wallets') 
-            THEN 'EXISTS' ELSE 'MISSING' END as status;
+-- Test 1: Basic connection
+SELECT 'Connection test' as test, 'OK' as status;
 
--- Check profiles table structure
+-- Test 2: Check if profiles table exists
 SELECT 
-  column_name, 
-  data_type, 
-  is_nullable
-FROM information_schema.columns 
-WHERE table_name = 'profiles'
-ORDER BY ordinal_position;
+  'Profiles table exists' as test,
+  CASE 
+    WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'profiles') 
+    THEN 'YES' 
+    ELSE 'NO' 
+  END as status;
 
--- Check pickups table structure (if it exists)
+-- Test 3: Count profiles
 SELECT 
-  column_name, 
-  data_type, 
-  is_nullable
-FROM information_schema.columns 
-WHERE table_name = 'pickups'
-ORDER BY ordinal_position;
+  'Total profiles' as test,
+  COUNT(*)::text as status
+FROM profiles;
 
--- Check current user
-SELECT current_user, current_database();
+-- Test 4: Check roles
+SELECT 
+  'Available roles' as test,
+  string_agg(role, ', ') as status
+FROM (
+  SELECT DISTINCT role FROM profiles
+) roles;
+
+-- Test 5: Check if addresses table exists
+SELECT 
+  'Addresses table exists' as test,
+  CASE 
+    WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'addresses') 
+    THEN 'YES' 
+    ELSE 'NO' 
+  END as status;
+
+-- Test 6: Count addresses
+SELECT 
+  'Total addresses' as test,
+  COUNT(*)::text as status
+FROM addresses;

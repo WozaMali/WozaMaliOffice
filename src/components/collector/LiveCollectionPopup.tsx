@@ -24,7 +24,10 @@ import {
   X,
   Loader2
 } from 'lucide-react';
-import { searchCustomersByAddress, CustomerSearchResult } from '../../lib/customer-services';
+import { searchCustomersByAddress, searchCustomersComprehensive, CustomerSearchResult } from '../../lib/customer-services';
+import { submitLiveCollection, CollectionMaterial } from '../../lib/collection-services';
+import { getMaterialId } from '../../lib/material-services';
+import { supabase } from '@/lib/supabase';
 
 interface Material {
   id: string;
@@ -33,6 +36,8 @@ interface Material {
   contamination_pct: number;
   rate_per_kg: number;
   isDonation?: boolean;
+  material_id?: string; // Database material ID
+  notes?: string; // Add missing notes property
 }
 
 interface LiveCollectionData {
@@ -193,21 +198,113 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
     setIsSubmitting(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('🚀 Submitting live collection to database...');
+
+      // Get current user (collector) ID
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('Collector not authenticated. Please log in again.');
+      }
+
+      // Prepare materials with database IDs
+      const collectionMaterials: CollectionMaterial[] = [];
+      for (const material of materials) {
+        if (material.name && material.kilograms > 0) {
+          const materialId = await getMaterialId(material.name);
+          if (!materialId) {
+            throw new Error(`Material "${material.name}" not found in database. Please contact admin.`);
+          }
+
+          collectionMaterials.push({
+            material_id: materialId,
+            kilograms: material.kilograms,
+            contamination_pct: material.contamination_pct,
+            notes: material.notes || undefined
+          });
+        }
+      }
+
+      if (collectionMaterials.length === 0) {
+        throw new Error('No valid materials to submit. Please check material names and weights.');
+      }
+
+      // Submit the collection
+      const result = await submitLiveCollection({
+        customer_id: selectedCustomer.profile_id,
+        materials: collectionMaterials,
+        notes: formData.notes,
+        scale_photo: scalePhoto || undefined,
+        recyclables_photo: recyclablesPhoto || undefined
+      }, user.id);
+
+      // Show success message with details
+      const successMessage = `🎉 Collection submitted successfully!
       
-      console.log('✅ Live collection submitted:', {
-        customer: selectedCustomer,
-        materials,
-        photos: { scale: scalePhoto, recyclables: recyclablesPhoto },
-        totals: calculateTotals()
+📊 Collection Summary:
+• Total Weight: ${result.total_kg}kg
+• Total Value: R${result.total_value.toFixed(2)}
+• Points Earned: ${result.points_earned}
+• CO2 Saved: ${result.environmental_impact.co2_saved}kg
+• Water Saved: ${result.environmental_impact.water_saved}L
+• Trees Equivalent: ${result.environmental_impact.trees_equivalent}
+
+💰 Fund Allocation:
+• Green Scholar Fund: R${result.fund_allocation.green_scholar_fund.toFixed(2)}
+  - PET/Plastic: 100% to Green Scholar Fund
+  - Other materials: 70% to Green Scholar Fund
+• Customer Wallet: R${result.fund_allocation.user_wallet.toFixed(2)}
+  - Aluminium: 100% to Customer Wallet
+  - Other materials: 30% to Customer Wallet
+
+🌱 Environmental Impact:
+• CO2 emissions reduced by ${result.environmental_impact.co2_saved}kg
+• Water consumption reduced by ${result.environmental_impact.water_saved}L
+• Equivalent to planting ${result.environmental_impact.trees_equivalent} trees!`;
+
+      console.log('🔄 Resetting form state and closing popup...');
+      
+      // Reset form state first
+      setFormData({
+        customerName: '',
+        address: '',
+        notes: ''
       });
+      setMaterials([]);
+      setSelectedCustomer(null);
+      setSearchResults([]);
+      setSearchError(null);
+      setScalePhoto(null);
+      setRecyclablesPhoto(null);
       
-      alert('Live collection submitted successfully!');
+      // Close the popup immediately
+      console.log('🔄 Calling onClose()...');
       onClose();
-    } catch (error) {
+      
+      // Add additional close attempts with delays
+      setTimeout(() => {
+        console.log('🔄 Second close attempt...');
+        onClose();
+      }, 200);
+      
+      setTimeout(() => {
+        console.log('🔄 Third close attempt...');
+        onClose();
+      }, 500);
+      
+      // Show success message after popup is closed
+      setTimeout(() => {
+        console.log('✅ Collection submitted successfully!');
+        console.log('📊 Collection Summary:', {
+          total_kg: result.total_kg,
+          total_value: result.total_value,
+          points_earned: result.points_earned,
+          environmental_impact: result.environmental_impact,
+          fund_allocation: result.fund_allocation
+        });
+      }, 100);
+    } catch (error: any) {
       console.error('❌ Error submitting collection:', error);
-      alert('Failed to submit collection. Please try again.');
+      alert(`Failed to submit collection: ${error.message || 'Unknown error occurred'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -266,6 +363,92 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                         )}
                       </Button>
                     </div>
+                    
+                    {/* Show All Customers Button */}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={async () => {
+                        try {
+                          setIsSearching(true);
+                          setSearchError(null);
+                          console.log('🔍 Loading all customers...');
+                          
+                          // Use comprehensive search with empty term to get all customers
+                          const results = await searchCustomersComprehensive('');
+                          setSearchResults(results);
+                          
+                          if (results.length === 0) {
+                            setSearchError('No customers found in the system');
+                          } else {
+                            console.log(`✅ Loaded ${results.length} customers`);
+                          }
+                        } catch (error: any) {
+                          console.error('❌ Error loading all customers:', error);
+                          setSearchError(error.message || 'Failed to load customers');
+                          setSearchResults([]);
+                        } finally {
+                          setIsSearching(false);
+                        }
+                      }}
+                      className="mt-2 text-xs"
+                    >
+                      Show All Customers
+                    </Button>
+                    
+                    {/* Debug button to check database state */}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={async () => {
+                        try {
+                          console.log('🔍 Debug: Checking database state...');
+                          
+                          // Check if we can access profiles table
+                          const { data: profiles, error: profilesError } = await supabase
+                            .from('profiles')
+                            .select('id, full_name, role, is_active')
+                            .eq('role', 'customer')
+                            .eq('is_active', true)
+                            .limit(5);
+                          
+                          console.log('🔍 Profiles check:', { data: profiles, error: profilesError });
+                          
+                          // Check if we can access addresses table
+                          const { data: addresses, error: addressesError } = await supabase
+                            .from('addresses')
+                            .select('id, profile_id, line1, suburb, city')
+                            .limit(5);
+                          
+                          console.log('🔍 Addresses check:', { data: addresses, error: addressesError });
+                          
+                          // Check the relationship
+                          if (profiles && addresses && profiles.length > 0 && addresses.length > 0) {
+                            const { data: testJoin, error: joinError } = await supabase
+                              .from('addresses')
+                              .select(`
+                                id,
+                                profile_id,
+                                line1,
+                                suburb,
+                                city,
+                                profiles!inner(id, full_name)
+                              `)
+                              .limit(1);
+                            
+                            console.log('🔍 Join test:', { data: testJoin, error: joinError });
+                          }
+                          
+                          alert('Check console for database debug info');
+                        } catch (error) {
+                          console.error('❌ Debug error:', error);
+                          alert('Debug failed - check console');
+                        }
+                      }}
+                      className="mt-2 text-xs ml-2"
+                    >
+                      Debug DB State
+                    </Button>
                   </div>
 
                   {/* Search Results */}
@@ -275,13 +458,24 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                     </div>
                   )}
 
-                  {searchResults.length > 0 && (
+                  {/* Loading State */}
+                  {isSearching && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                        <p className="text-blue-700 text-sm">Searching for customers...</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Search Results */}
+                  {!isSearching && searchResults.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-gray-700">Found Customers:</p>
                       {searchResults.map((customer) => (
                         <div 
                           key={customer.id}
-                          className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                          className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors duration-150"
                           onClick={() => selectCustomer(customer)}
                         >
                           <p className="font-medium text-gray-900">{customer.full_name}</p>
@@ -291,6 +485,13 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* No Results Message */}
+                  {!isSearching && searchResults.length === 0 && !searchError && formData.address.trim() && (
+                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                      <p className="text-gray-600 text-sm">No customers found. Try searching with a different term or click "Show All Customers".</p>
                     </div>
                   )}
 
@@ -503,12 +704,14 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                     </div>
                   </div>
                   
-                  <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                    <p className="text-sm text-orange-800">
-                      <strong>Note:</strong> PET materials (R1.50/kg) are donated to the Green Scholar Fund. 
-                      Aluminium materials (R18.55/kg) go to the customer's wallet.
-                    </p>
-                  </div>
+                                     <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                     <p className="text-sm text-orange-800">
+                       <strong>Fund Allocation:</strong><br/>
+                       • Aluminium (R18.55/kg): 100% to Customer Wallet<br/>
+                       • PET/Plastic (R1.50/kg): 100% to Green Scholar Fund<br/>
+                       • Other materials: 70% Green Scholar Fund, 30% Customer Wallet
+                     </p>
+                   </div>
                 </CardContent>
               </Card>
             </div>
@@ -531,6 +734,14 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
               )}
               Submit Collection
             </Button>
+          </div>
+          
+          {/* Note about submission requirements */}
+          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-sm text-green-800">
+              <strong>Ready to Submit:</strong> You can submit a collection once you've selected a customer and added at least one material. 
+              Photos are optional and not required for submission.
+            </p>
           </div>
         </div>
       </div>

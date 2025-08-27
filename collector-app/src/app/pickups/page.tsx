@@ -35,12 +35,14 @@ import {
   ArrowLeft,
   BarChart3,
   Users,
-  TrendingUp
+  TrendingUp,
+  Settings
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { PickupService, type CreatePickupData } from "@/lib/pickup-service";
 import type { CollectorDashboardView, Material } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -80,7 +82,9 @@ export default function CollectorPickupsPage() {
 
   // Redirect non-collectors to unauthorized page
   useEffect(() => {
-    if (user && user.role && user.role !== 'COLLECTOR') {
+    if (user && user.role && 
+        user.role !== 'collector' && user.role !== 'admin' &&
+        user.role !== 'COLLECTOR' && user.role !== 'ADMIN') {
       window.location.href = '/unauthorized';
     }
   }, [user]);
@@ -88,78 +92,100 @@ export default function CollectorPickupsPage() {
   const loadPickupsData = async () => {
     try {
       setIsLoading(true);
-      // Mock data for now
-      const mockPickups = [
-        {
-          pickup_id: '1',
-          status: 'completed',
-          started_at: '2024-01-15T10:00:00Z',
-          total_kg: 25.5,
-          total_value: 45.50,
-          customer_name: 'John Doe',
-          customer_email: 'john@example.com',
-          customer_phone: '+27 123 456 789',
-          line1: '123 Main St',
-          suburb: 'City Center',
-          city: 'Cape Town',
-          postal_code: '8001',
+      
+      if (!user) return;
+      
+      // Get real pickups data from Supabase
+      const { data: pickupsData, error } = await supabase
+        .from('pickups')
+        .select(`
+          *,
+          customer:profiles!pickups_customer_id_fkey(first_name, last_name, email, phone),
+          address:addresses(line1, suburb, city, postal_code),
+          pickup_items(material_id, kilograms)
+        `)
+        .eq('collector_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pickups:', error);
+        return;
+      }
+
+      // Transform real data to match expected structure
+      const transformedPickups = (pickupsData || []).map((pickup: any) => {
+        const customer = pickup.customer as any;
+        const address = pickup.address as any;
+        const pickupItems = pickup.pickup_items as any[] || [];
+        
+        // Calculate environmental impact (simplified calculations)
+        const totalKg = pickup.total_kg || 0;
+        const co2_saved = totalKg * 0.5; // 0.5 kg CO2 saved per kg recycled
+        const water_saved = totalKg * 3.5; // 3.5 liters water saved per kg recycled
+        const landfill_saved = totalKg;
+        const trees_equivalent = totalKg * 0.045; // 0.045 trees equivalent per kg
+        
+        // Calculate fund allocation (70% to user wallet, 30% to green fund)
+        const totalValue = totalKg * 5; // R5 per kg
+        const green_scholar_fund = totalValue * 0.3;
+        const user_wallet = totalValue * 0.7;
+        
+        // Calculate points (6 points per kg)
+        const total_points = totalKg * 6;
+        
+        // Transform materials breakdown
+        const materials_breakdown = pickupItems.map(item => {
+          const materialKg = item.kilograms || 0;
+          const rate_per_kg = 2.0; // Default rate
+          const value = materialKg * rate_per_kg;
+          const points = materialKg * 6;
+          
+          return {
+            material_name: 'Mixed Materials', // TODO: Get from materials table
+            weight_kg: materialKg,
+            rate_per_kg,
+            value,
+            points,
+            impact: {
+              co2_saved: materialKg * 0.5,
+              water_saved: materialKg * 3.5,
+              landfill_saved: materialKg,
+              trees_equivalent: materialKg * 0.045
+            }
+          };
+        });
+
+        return {
+          pickup_id: pickup.id,
+          status: pickup.status,
+          started_at: pickup.started_at || pickup.created_at,
+          total_kg: totalKg,
+          total_value: totalValue,
+          customer_name: customer ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() : 'Unknown Customer',
+          customer_email: customer?.email || 'No email',
+          customer_phone: customer?.phone || 'No phone',
+          line1: address?.line1 || 'No address',
+          suburb: address?.suburb || '',
+          city: address?.city || '',
+          postal_code: address?.postal_code || '',
           environmental_impact: {
-            co2_saved: 12.75,
-            water_saved: 89.25,
-            landfill_saved: 25.5,
-            trees_equivalent: 1.16
+            co2_saved,
+            water_saved,
+            landfill_saved,
+            trees_equivalent
           },
           fund_allocation: {
-            green_scholar_fund: 13.65,
-            user_wallet: 31.85,
-            total_value: 45.50
+            green_scholar_fund,
+            user_wallet,
+            total_value: totalValue
           },
-          total_points: 150,
-          materials_breakdown: [
-            {
-              material_name: 'Paper & Cardboard',
-              weight_kg: 15.0,
-              rate_per_kg: 1.20,
-              value: 18.00,
-              points: 90,
-              impact: {
-                co2_saved: 7.5,
-                water_saved: 52.5,
-                landfill_saved: 15.0,
-                trees_equivalent: 0.68
-              }
-            },
-            {
-              material_name: 'Plastic',
-              weight_kg: 8.5,
-              rate_per_kg: 2.50,
-              value: 21.25,
-              points: 42.5,
-              impact: {
-                co2_saved: 4.25,
-                water_saved: 29.75,
-                landfill_saved: 8.5,
-                trees_equivalent: 0.39
-              }
-            },
-            {
-              material_name: 'Glass',
-              weight_kg: 2.0,
-              rate_per_kg: 3.10,
-              value: 6.20,
-              points: 17.5,
-              impact: {
-                co2_saved: 1.0,
-                water_saved: 7.0,
-                landfill_saved: 2.0,
-                trees_equivalent: 0.09
-              }
-            }
-          ],
-          photo_count: 3
-        }
-      ];
-      setPickups(mockPickups);
+          total_points,
+          materials_breakdown,
+          photo_count: 0 // TODO: Get from pickup_photos table
+        };
+      });
+
+      setPickups(transformedPickups);
     } catch (error) {
       console.error('Error loading pickups:', error);
     } finally {

@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
 export default function CollectorAnalyticsPage() {
@@ -64,7 +65,9 @@ export default function CollectorAnalyticsPage() {
 
   // Redirect non-collectors to unauthorized page
   useEffect(() => {
-    if (user && user.role && user.role !== 'COLLECTOR') {
+    if (user && user.role && 
+        user.role !== 'collector' && user.role !== 'admin' &&
+        user.role !== 'COLLECTOR' && user.role !== 'ADMIN') {
       window.location.href = '/unauthorized';
     }
   }, [user]);
@@ -72,22 +75,66 @@ export default function CollectorAnalyticsPage() {
   const loadAnalyticsData = async () => {
     try {
       setIsLoading(true);
-      // Mock data for now
-      const mockStats = {
-        totalCollections: 156,
-        totalKg: 2347.5,
-        totalPoints: 3456,
-        totalEarnings: 2345.67,
-        monthlyCollections: 23,
-        monthlyKg: 345.2,
-        monthlyPoints: 456,
-        monthlyEarnings: 345.67,
-        weeklyCollections: 5,
-        weeklyKg: 78.9,
-        weeklyPoints: 123,
-        weeklyEarnings: 98.76
+      
+      if (!user) return;
+      
+      // Get real analytics data from Supabase
+      const { data: pickups, error } = await supabase
+        .from('pickups')
+        .select('*')
+        .eq('collector_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pickups:', error);
+        return;
+      }
+
+      // Calculate real statistics
+      const now = new Date();
+      const currentWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      const totalCollections = pickups.filter(p => p.status === 'approved' || p.status === 'completed').length;
+      const totalKg = pickups
+        .filter(p => p.status === 'approved' || p.status === 'completed')
+        .reduce((sum, p) => sum + (p.total_kg || 0), 0);
+      const totalEarnings = totalKg * 5; // R5 per kg
+
+      const monthlyCollections = pickups.filter(p => 
+        new Date(p.created_at) >= currentMonth && 
+        (p.status === 'approved' || p.status === 'completed')
+      ).length;
+      const monthlyKg = pickups
+        .filter(p => new Date(p.created_at) >= currentMonth && (p.status === 'approved' || p.status === 'completed'))
+        .reduce((sum, p) => sum + (p.total_kg || 0), 0);
+      const monthlyEarnings = monthlyKg * 5;
+
+      const weeklyCollections = pickups.filter(p => 
+        new Date(p.created_at) >= currentWeek && 
+        (p.status === 'approved' || p.status === 'completed')
+      ).length;
+      const weeklyKg = pickups
+        .filter(p => new Date(p.created_at) >= currentWeek && (p.status === 'approved' || p.status === 'completed'))
+        .reduce((sum, p) => sum + (p.total_kg || 0), 0);
+      const weeklyEarnings = weeklyKg * 5;
+
+      const realStats = {
+        totalCollections,
+        totalKg,
+        totalPoints: totalCollections * 10, // 10 points per collection
+        totalEarnings,
+        monthlyCollections,
+        monthlyKg,
+        monthlyPoints: monthlyCollections * 10,
+        monthlyEarnings,
+        weeklyCollections,
+        weeklyKg,
+        weeklyPoints: weeklyCollections * 10,
+        weeklyEarnings
       };
-      setStats(mockStats);
+
+      setStats(realStats);
     } catch (error) {
       console.error('Error loading analytics:', error);
     } finally {

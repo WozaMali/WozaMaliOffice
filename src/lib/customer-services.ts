@@ -37,50 +37,218 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
       return [];
     }
 
-    // Search in addresses table and join with profiles
-    const { data, error } = await supabase
-      .from('addresses')
-      .select(`
-        id,
-        profile_id,
-        line1,
-        suburb,
-        city,
-        postal_code,
-        profiles!inner(
+    // Try the nested select approach first (should work now that foreign key is fixed)
+    try {
+      console.log('🔄 Attempting nested select approach...');
+      const { data, error } = await supabase
+        .from('addresses')
+        .select(`
           id,
-          full_name,
-          phone,
-          email,
-          is_active
-        )
-      `)
-      .or(`line1.ilike.%${address}%,suburb.ilike.%${address}%,city.ilike.%${address}%`)
-      .eq('profiles.is_active', true)
-      .limit(10);
+          profile_id,
+          line1,
+          suburb,
+          city,
+          postal_code,
+          profiles!inner(
+            id,
+            full_name,
+            phone,
+            email,
+            is_active
+          )
+        `)
+        .or(`line1.ilike.%${address}%,suburb.ilike.%${address}%,city.ilike.%${address}%`)
+        .eq('profiles.is_active', true)
+        .limit(20);
 
-    if (error) {
-      console.error('❌ Error searching customers:', error);
-      throw error;
+      if (error) {
+        console.log('⚠️ Nested select failed, falling back to manual join:', error);
+        throw error;
+      }
+
+      // Transform the data to match our interface
+      const customers: CustomerSearchResult[] = data?.map(item => ({
+        id: item.id,
+        profile_id: item.profile_id,
+        full_name: item.profiles?.full_name || 'Unknown',
+        phone: item.profiles?.phone || '',
+        email: item.profiles?.email || '',
+        address: `${item.line1}, ${item.suburb}, ${item.city}`,
+        suburb: item.suburb,
+        city: item.city,
+        postal_code: item.postal_code,
+      })) || [];
+
+      console.log('✅ Found customers using nested select:', customers.length);
+      return customers;
+    } catch (nestedError) {
+      console.log('🔄 Using fallback manual join approach...');
+      
+      // Fallback: Use separate queries and combine manually
+      const { data: addresses, error: addressesError } = await supabase
+        .from('addresses')
+        .select('id, profile_id, line1, suburb, city, postal_code')
+        .or(`line1.ilike.%${address}%,suburb.ilike.%${address}%,city.ilike.%${address}%`)
+        .limit(50);
+
+      if (addressesError) {
+        console.error('❌ Error fetching addresses:', addressesError);
+        throw addressesError;
+      }
+
+      if (!addresses || addresses.length === 0) {
+        console.log('⚠️ No addresses found matching search term');
+        return [];
+      }
+
+      // Get unique profile IDs from the addresses
+      const profileIds = [...new Set(addresses.map(addr => addr.profile_id))];
+
+      // Fetch profiles for these IDs
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone, email, is_active')
+        .in('id', profileIds)
+        .eq('role', 'customer')
+        .eq('is_active', true);
+
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      // Create a map of profile data for quick lookup
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+      // Combine addresses with profile data
+      const customers: CustomerSearchResult[] = addresses
+        .filter(addr => profileMap.has(addr.profile_id))
+        .map(addr => {
+          const profile = profileMap.get(addr.profile_id)!;
+          return {
+            id: addr.id,
+            profile_id: addr.profile_id,
+            full_name: profile.full_name || 'Unknown',
+            phone: profile.phone || '',
+            email: profile.email || '',
+            address: `${addr.line1}, ${addr.suburb}, ${addr.city}`,
+            suburb: addr.suburb,
+            city: addr.city,
+            postal_code: addr.postal_code,
+          };
+        });
+
+      console.log('✅ Found customers using fallback approach:', customers.length);
+      return customers;
     }
-
-    // Transform the data to match our interface
-    const customers: CustomerSearchResult[] = data?.map(item => ({
-      id: item.id,
-      profile_id: item.profile_id,
-      full_name: item.profiles?.full_name || 'Unknown',
-      phone: item.profiles?.phone || '',
-      email: item.profiles?.email || '',
-      address: `${item.line1}, ${item.suburb}, ${item.city}`,
-      suburb: item.suburb,
-      city: item.city,
-      postal_code: item.postal_code,
-    })) || [];
-
-    console.log('✅ Found customers:', customers.length);
-    return customers;
   } catch (error) {
     console.error('❌ Error in searchCustomersByAddress:', error);
+    throw error;
+  }
+}
+
+// Enhanced search function that can find customers by multiple criteria
+export async function searchCustomersComprehensive(searchTerm: string): Promise<CustomerSearchResult[]> {
+  try {
+    console.log('🔍 Comprehensive customer search:', searchTerm);
+    
+    if (!searchTerm.trim()) {
+      return [];
+    }
+
+    // Search in profiles table first (by name, email, phone)
+    const { data: profilesByName, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, phone, email, is_active')
+      .eq('role', 'customer')
+      .eq('is_active', true)
+      .or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
+      .limit(20);
+
+    if (profilesError) {
+      console.error('❌ Error searching profiles:', profilesError);
+      throw profilesError;
+    }
+
+    // Search in addresses table
+    const { data: addresses, error: addressesError } = await supabase
+      .from('addresses')
+      .select('id, profile_id, line1, suburb, city, postal_code')
+      .or(`line1.ilike.%${searchTerm}%,suburb.ilike.%${searchTerm}%,city.ilike.%${searchTerm}%`)
+      .limit(30);
+
+    if (addressesError) {
+      console.error('❌ Error searching addresses:', addressesError);
+      throw addressesError;
+    }
+
+    // Combine results
+    const allProfileIds = new Set([
+      ...(profilesByName?.map(p => p.id) || []),
+      ...(addresses?.map(a => a.profile_id) || [])
+    ]);
+
+    // Fetch all relevant profiles
+    const { data: allProfiles, error: allProfilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, phone, email, is_active')
+      .in('id', Array.from(allProfileIds))
+      .eq('role', 'customer')
+      .eq('is_active', true);
+
+    if (allProfilesError) {
+      console.error('❌ Error fetching all profiles:', allProfilesError);
+      throw allProfilesError;
+    }
+
+    // Create profile map
+    const profileMap = new Map(allProfiles?.map(p => [p.id, p]) || []);
+
+    // Build results
+    const results: CustomerSearchResult[] = [];
+
+    // Add results from name/email/phone search
+    profilesByName?.forEach(profile => {
+      results.push({
+        id: profile.id,
+        profile_id: profile.id,
+        full_name: profile.full_name || 'Unknown',
+        phone: profile.phone || '',
+        email: profile.email || '',
+        address: 'Address not specified',
+        suburb: '',
+        city: '',
+        postal_code: '',
+      });
+    });
+
+    // Add results from address search
+    addresses?.forEach(addr => {
+      const profile = profileMap.get(addr.profile_id);
+      if (profile && !results.find(r => r.profile_id === addr.profile_id)) {
+        results.push({
+          id: addr.id,
+          profile_id: addr.profile_id,
+          full_name: profile.full_name || 'Unknown',
+          phone: profile.phone || '',
+          email: profile.email || '',
+          address: `${addr.line1}, ${addr.suburb}, ${addr.city}`,
+          suburb: addr.suburb,
+          city: addr.city,
+          postal_code: addr.postal_code,
+        });
+      }
+    });
+
+    // Remove duplicates and limit results
+    const uniqueResults = results.filter((result, index, self) => 
+      index === self.findIndex(r => r.profile_id === result.profile_id)
+    ).slice(0, 20);
+
+    console.log('✅ Comprehensive search found customers:', uniqueResults.length);
+    return uniqueResults;
+  } catch (error) {
+    console.error('❌ Error in comprehensive search:', error);
     throw error;
   }
 }

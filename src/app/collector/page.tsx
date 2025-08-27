@@ -1,8 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/use-auth";
 import { 
   Truck, 
   Recycle, 
@@ -17,67 +21,131 @@ import {
   TrendingUp,
   Navigation,
   Phone,
-  Mail
+  Mail,
+  Loader2
 } from "lucide-react";
 
 export default function CollectorPage() {
-  // Mock data for demonstration
-  const mockCollectorStats = {
-    totalCollections: 156,
-    totalKgCollected: 2840,
-    totalEarnings: 14200,
-    averageRating: 4.8,
-    activePickups: 3,
-    completedToday: 2,
+  const { user, profile } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [collectorStats, setCollectorStats] = useState({
+    totalCollections: 0,
+    totalKgCollected: 0,
+    totalEarnings: 0,
+    averageRating: 0,
+    activePickups: 0,
+    completedToday: 0,
     monthlyGoal: 80,
-    monthlyProgress: 65
-  };
+    monthlyProgress: 0
+  });
+  const [activePickups, setActivePickups] = useState<any[]>([]);
+  const [recentCollections, setRecentCollections] = useState<any[]>([]);
 
-  const mockActivePickups = [
-    { 
-      id: 1, 
-      customer: "Sarah Johnson", 
-      address: "123 Oak Street, Cape Town", 
-      phone: "+27 82 123 4567",
-      email: "sarah.j@email.com",
-      status: "in_progress", 
-      scheduledTime: "14:00", 
-      estimatedKg: 18.5,
-      materials: ["Paper", "Plastic", "Glass"],
-      notes: "Large collection, bring extra bags"
-    },
-    { 
-      id: 2, 
-      customer: "Mike Thompson", 
-      address: "456 Pine Avenue, Johannesburg", 
-      phone: "+27 83 234 5678",
-      email: "mike.t@email.com",
-      status: "pending", 
-      scheduledTime: "15:30", 
-      estimatedKg: 12.0,
-      materials: ["Paper", "Cardboard"],
-      notes: "Small collection, quick pickup"
-    },
-    { 
-      id: 3, 
-      customer: "Lisa Chen", 
-      address: "789 Elm Road, Durban", 
-      phone: "+27 84 345 6789",
-      email: "lisa.c@email.com",
-      status: "scheduled", 
-      scheduledTime: "16:00", 
-      estimatedKg: 25.0,
-      materials: ["Paper", "Plastic", "Metal", "Glass"],
-      notes: "Very organized, separated by type"
+  // Load real data from Supabase
+  useEffect(() => {
+    if (user) {
+      loadCollectorData();
     }
-  ];
+  }, [user]);
 
-  const mockRecentCollections = [
-    { id: 1, customer: "John Doe", address: "321 Main St, Cape Town", kg: 15.5, earnings: 77.50, rating: 5, date: "2024-01-15" },
-    { id: 2, customer: "Jane Smith", address: "654 Oak Ave, Johannesburg", kg: 8.2, earnings: 41.00, rating: 4, date: "2024-01-15" },
-    { id: 3, customer: "Bob Wilson", address: "987 Pine Rd, Durban", kg: 22.1, earnings: 110.50, rating: 5, date: "2024-01-14" },
-    { id: 4, customer: "Alice Brown", address: "147 Elm St, Pretoria", kg: 12.0, earnings: 60.00, rating: 4, date: "2024-01-14" }
-  ];
+  const loadCollectorData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get collector's pickups
+      const { data: pickups, error } = await supabase
+        .from('pickups')
+        .select(`
+          *,
+          customer:profiles!pickups_customer_id_fkey(first_name, last_name, email, phone),
+          address:addresses(line1, suburb, city)
+        `)
+        .eq('collector_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pickups:', error);
+        return;
+      }
+
+      // Transform pickups data
+      const transformedPickups = (pickups || []).map(pickup => {
+        const customer = pickup.customer as any;
+        const address = pickup.address as any;
+        
+        return {
+          id: pickup.id,
+          customer: customer ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim() : 'Unknown Customer',
+          address: address ? `${address.line1}, ${address.suburb}, ${address.city}` : 'No address',
+          phone: customer?.phone || 'No phone',
+          email: customer?.email || 'No email',
+          status: pickup.status,
+          scheduledTime: new Date(pickup.started_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          estimatedKg: pickup.total_kg || 0,
+          materials: ['Paper', 'Plastic', 'Glass'], // TODO: Get from pickup_items
+          notes: pickup.approval_note || 'No notes'
+        };
+      });
+
+      setActivePickups(transformedPickups.filter(p => p.status === 'submitted' || p.status === 'in_progress'));
+      // Transform recent collections to match the expected structure
+      const recentCollectionsData = transformedPickups
+        .filter(p => p.status === 'approved' || p.status === 'completed')
+        .slice(0, 5)
+        .map(pickup => ({
+          id: pickup.id,
+          customer: pickup.customer,
+          address: pickup.address,
+          kg: pickup.estimatedKg,
+          earnings: (pickup.estimatedKg || 0) * 5, // R5 per kg
+          rating: 5, // TODO: Implement rating system
+          date: pickup.created_at || pickup.submitted_at
+        }));
+      
+      setRecentCollections(recentCollectionsData);
+
+      // Calculate real statistics
+      const totalCollections = transformedPickups.filter(p => p.status === 'approved' || p.status === 'completed').length;
+      const totalKgCollected = transformedPickups
+        .filter(p => p.status === 'approved' || p.status === 'completed')
+        .reduce((sum, p) => sum + (p.estimatedKg || 0), 0);
+      const totalEarnings = totalKgCollected * 5; // R5 per kg
+      
+      // Calculate today's collections
+      const today = new Date().toDateString();
+      const completedToday = transformedPickups.filter(p => 
+        (p.status === 'approved' || p.status === 'completed') && 
+        new Date(p.created_at).toDateString() === today
+      ).length;
+
+      // Calculate monthly progress
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+      const monthlyCollections = transformedPickups.filter(p => {
+        const pickupDate = new Date(p.created_at);
+        return (p.status === 'approved' || p.status === 'completed') &&
+               pickupDate.getMonth() === currentMonth &&
+               pickupDate.getFullYear() === currentYear;
+      });
+      const monthlyProgress = monthlyCollections.length;
+
+      setCollectorStats({
+        totalCollections,
+        totalKgCollected,
+        totalEarnings,
+        averageRating: 4.8, // TODO: Implement rating system
+        activePickups: transformedPickups.filter(p => p.status === 'submitted' || p.status === 'in_progress').length,
+        completedToday,
+        monthlyGoal: 80,
+        monthlyProgress
+      });
+
+    } catch (error) {
+      console.error('Error loading collector data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -116,14 +184,29 @@ export default function CollectorPage() {
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground mb-2">Collector Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, Dumisani! Ready to make a difference today?</p>
-        <div className="flex items-center gap-2 mt-2">
-          <Badge variant="outline" className="text-green-600 border-green-600">
-            Status: Active & Available
-          </Badge>
-          <span className="text-sm text-muted-foreground">
-            Last updated: {new Date().toLocaleString()}
-          </span>
+        <p className="text-muted-foreground">Welcome back, {profile?.full_name || 'Collector'}! Ready to make a difference today?</p>
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-green-600 border-green-600">
+              Status: Active & Available
+            </Badge>
+            <span className="text-sm text-muted-foreground">
+              Last updated: {new Date().toLocaleString()}
+            </span>
+          </div>
+          <Button 
+            onClick={loadCollectorData} 
+            disabled={isLoading}
+            variant="outline"
+            size="sm"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Activity className="h-4 w-4 mr-2" />
+            )}
+            Refresh Data
+          </Button>
         </div>
       </div>
 
@@ -139,9 +222,9 @@ export default function CollectorPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground mb-1">
-              {formatNumber(mockCollectorStats.totalCollections)}
-            </div>
+                            <div className="text-2xl font-bold text-foreground mb-1">
+                  {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatNumber(collectorStats.totalCollections)}
+                </div>
             <p className="text-xs text-muted-foreground">
               Collections completed
             </p>
@@ -158,9 +241,9 @@ export default function CollectorPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground mb-1">
-              {formatWeight(mockCollectorStats.totalKgCollected)}
-            </div>
+                            <div className="text-2xl font-bold text-foreground mb-1">
+                  {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatWeight(collectorStats.totalKgCollected)}
+                </div>
             <p className="text-xs text-muted-foreground">
               Waste diverted
             </p>
@@ -177,9 +260,9 @@ export default function CollectorPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground mb-1">
-              {formatCurrency(mockCollectorStats.totalEarnings)}
-            </div>
+                            <div className="text-2xl font-bold text-foreground mb-1">
+                  {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : formatCurrency(collectorStats.totalEarnings)}
+                </div>
             <p className="text-xs text-muted-foreground">
               This month
             </p>
@@ -197,10 +280,10 @@ export default function CollectorPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground mb-1">
-              {mockCollectorStats.averageRating}
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : collectorStats.averageRating}
             </div>
             <p className="text-xs text-muted-foreground">
-              {getRatingStars(mockCollectorStats.averageRating)}
+              {isLoading ? <Loader2 className="h-6 w-6 animate-spin" /> : getRatingStars(collectorStats.averageRating)}
             </p>
           </CardContent>
         </Card>
@@ -213,12 +296,22 @@ export default function CollectorPage() {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Truck className="h-5 w-5 text-primary" />
-              <span>Active Pickups ({mockCollectorStats.activePickups})</span>
+              <span>Active Pickups ({isLoading ? '...' : collectorStats.activePickups})</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockActivePickups.map((pickup) => (
+              {isLoading ? (
+                <div className="flex justify-center items-center h-32">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : activePickups.length === 0 ? (
+                <div className="text-center text-muted-foreground py-8">
+                  <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No active pickups at the moment</p>
+                </div>
+              ) : (
+                activePickups.map((pickup) => (
                 <div key={pickup.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-2">
@@ -318,16 +411,16 @@ export default function CollectorPage() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span>Completed:</span>
-                  <span className="font-medium">{mockCollectorStats.completedToday}</span>
+                  <span className="font-medium">{isLoading ? '...' : collectorStats.completedToday}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Monthly Goal:</span>
-                  <span className="font-medium">{mockCollectorStats.monthlyProgress}/{mockCollectorStats.monthlyGoal}</span>
+                  <span className="font-medium">{isLoading ? '...' : collectorStats.monthlyProgress}/{collectorStats.monthlyGoal}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className="bg-primary h-2 rounded-full" 
-                    style={{ width: `${(mockCollectorStats.monthlyProgress / mockCollectorStats.monthlyGoal) * 100}%` }}
+                    style={{ width: `${isLoading ? 0 : (collectorStats.monthlyProgress / collectorStats.monthlyGoal) * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -346,7 +439,17 @@ export default function CollectorPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {mockRecentCollections.map((collection) => (
+            {isLoading ? (
+              <div className="flex justify-center items-center h-32">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : recentCollections.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <Recycle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No recent collections yet</p>
+              </div>
+            ) : (
+              recentCollections.map((collection) => (
               <div key={collection.id} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-2">
@@ -384,8 +487,8 @@ export default function CollectorPage() {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
         </CardContent>
       </Card>
 
