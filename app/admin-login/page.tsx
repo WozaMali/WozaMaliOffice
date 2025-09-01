@@ -27,24 +27,13 @@ export default function AdminLoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [forceShowForm, setForceShowForm] = useState(false);
   
   const { login, isLoading: authLoading, user, profile } = useAuth();
 
-  // Force show form after 3 seconds to prevent infinite loading
+  // If user is already logged in and has admin role, redirect to admin dashboard
   useEffect(() => {
-    const timer = setTimeout(() => {
-      console.log('AdminLogin: Force showing login form after timeout');
-      setForceShowForm(true);
-    }, 3000);
-    
-    return () => clearTimeout(timer);
-  }, []);
-
-  // If user is already logged in, redirect to admin dashboard
-  useEffect(() => {
-    if (user && profile) {
-      console.log('AdminLogin: User already logged in, redirecting to admin dashboard');
+    if (user && profile && profile.role === 'admin') {
+      console.log('AdminLogin: Admin user already logged in, redirecting to admin dashboard');
       router.push('/admin');
     }
   }, [user, profile, router]);
@@ -62,17 +51,23 @@ export default function AdminLoginPage() {
       console.log('AdminLogin: Login result:', result);
       
       if (result.success) {
-        setSuccess('Login successful! Redirecting to admin dashboard...');
-        console.log('AdminLogin: Login successful, setting redirect timer...');
-        
-        // Redirect after a short delay
-        setTimeout(() => {
-          console.log('AdminLogin: Redirecting to admin dashboard...');
-          router.push('/admin');
-        }, 1500);
+        // Check if user has admin role
+        if (profile && profile.role === 'admin') {
+          setSuccess('Login successful! Redirecting to admin dashboard...');
+          console.log('AdminLogin: Admin login successful, setting redirect timer...');
+          
+          // Redirect after a short delay
+          setTimeout(() => {
+            console.log('AdminLogin: Redirecting to admin dashboard...');
+            router.push('/admin');
+          }, 1500);
+        } else {
+          setError('Access denied. This account does not have administrator privileges.');
+          console.error('AdminLogin: User does not have admin role');
+        }
       } else {
         console.error('AdminLogin: Login failed:', result.error);
-        setError(result.error || 'Login failed. Please try again.');
+        setError(result.error || 'Login failed. Please check your credentials and try again.');
       }
     } catch (err) {
       console.error('AdminLogin: Unexpected login error:', err);
@@ -95,17 +90,23 @@ export default function AdminLoginPage() {
       console.log('AdminLogin: Demo login result:', result);
       
       if (result.success) {
-        setSuccess('Demo login successful! Redirecting to admin dashboard...');
-        console.log('AdminLogin: Demo login successful, setting redirect timer...');
-        
-        // Redirect after a short delay
-        setTimeout(() => {
-          console.log('AdminLogin: Redirecting to admin dashboard...');
-          router.push('/admin');
-        }, 1500);
+        // Check if user has admin role
+        if (profile && profile.role === 'admin') {
+          setSuccess('Demo login successful! Redirecting to admin dashboard...');
+          console.log('AdminLogin: Demo admin login successful, setting redirect timer...');
+          
+          // Redirect after a short delay
+          setTimeout(() => {
+            console.log('AdminLogin: Redirecting to admin dashboard...');
+            router.push('/admin');
+          }, 1500);
+        } else {
+          setError('Access denied. Demo account does not have administrator privileges.');
+          console.error('AdminLogin: Demo user does not have admin role');
+        }
       } else {
         console.error('AdminLogin: Demo login failed:', result.error);
-        setError(result.error || 'Demo login failed. Please try again.');
+        setError(result.error || 'Demo login failed. Please check the demo credentials.');
       }
     } catch (err) {
       console.error('AdminLogin: Unexpected demo login error:', err);
@@ -116,27 +117,14 @@ export default function AdminLoginPage() {
     }
   };
 
-  // Show loading only briefly while auth initializes, with fallback
-  if (authLoading && !forceShowForm) {
+  // Show loading only briefly while auth initializes
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <h2 className="text-xl font-semibold text-gray-800 mb-2">Initializing...</h2>
-          <p className="text-gray-600 mb-4">Setting up authentication system</p>
-          
-          {/* Force show button */}
-          <Button 
-            onClick={() => setForceShowForm(true)}
-            variant="outline"
-            className="mt-4"
-          >
-            Show Login Form Now
-          </Button>
-          
-          <p className="text-xs text-gray-500 mt-2">
-            If this takes too long, click to proceed
-          </p>
+          <p className="text-gray-600">Setting up authentication system</p>
         </div>
       </div>
     );

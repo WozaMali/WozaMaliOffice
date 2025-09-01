@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +15,6 @@ import {
   Camera,
   MapPin,
   Clock,
-  DollarSign,
   Wallet,
   Gift,
   TrendingUp,
@@ -21,7 +22,9 @@ import {
   CreditCard,
   TreePine,
   Calendar,
-  Settings
+  Settings,
+  LogOut,
+  UserPlus
 } from 'lucide-react';
 import UsersPage from '@/components/admin/UsersPage';
 import PickupsPage from '@/components/admin/PickupsPage';
@@ -32,11 +35,18 @@ import {
   getPayments, 
   getUsers, 
   subscribeToAllChanges,
-  testSupabaseConnection
+  testSupabaseConnection,
+  getAdminDashboardData,
+  getRecentActivity,
+  RecentActivity
 } from '../../src/lib/admin-services';
 
 // Sidebar Navigation Component
-function AdminSidebar({ currentPage, onPageChange }: { currentPage: string; onPageChange: (page: string) => void }) {
+function AdminSidebar({ currentPage, onPageChange, onLogout }: { 
+  currentPage: string; 
+  onPageChange: (page: string) => void;
+  onLogout: () => void;
+}) {
   const navigation = [
     { name: 'Dashboard', page: 'dashboard', icon: BarChart3 },
     { name: 'Users', page: 'users', icon: Users },
@@ -87,14 +97,16 @@ function AdminSidebar({ currentPage, onPageChange }: { currentPage: string; onPa
         })}
       </nav>
 
-      {/* Development Mode Badge */}
-      <div className="mt-8 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-xs">
-            DEV MODE
-          </Badge>
-          <span className="text-xs text-yellow-700">Auth Bypassed</span>
-        </div>
+      {/* Logout Button */}
+      <div className="mt-8">
+        <Button
+          onClick={onLogout}
+          variant="outline"
+          className="w-full text-red-600 border-red-300 hover:bg-red-50"
+        >
+          <LogOut className="w-4 h-4 mr-2" />
+          Logout
+        </Button>
       </div>
     </div>
   );
@@ -102,19 +114,23 @@ function AdminSidebar({ currentPage, onPageChange }: { currentPage: string; onPa
 
 // Main Dashboard Content
 function DashboardContent() {
+  const router = useRouter();
   const [dashboardData, setDashboardData] = useState({
+    totalUsers: 0,
     totalPickups: 0,
     totalWeight: 0,
-    activeUsers: 0,
     totalRevenue: 0,
+    activeUsers: 0,
     pendingPickups: 0,
     totalPayments: 0,
     pendingPayments: 0
   });
   const [loading, setLoading] = useState(true);
+  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
 
   useEffect(() => {
     loadDashboardData();
+    loadRecentActivity();
     
     // Subscribe to real-time updates
     const subscriptions = subscribeToAllChanges({
@@ -206,10 +222,11 @@ function DashboardContent() {
       });
 
       setDashboardData({
+        totalUsers: users.length,
         totalPickups: pickups.length,
         totalWeight,
-        activeUsers,
         totalRevenue,
+        activeUsers,
         pendingPickups,
         totalPayments: payments.length,
         pendingPayments
@@ -224,6 +241,18 @@ function DashboardContent() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRecentActivity = async () => {
+    try {
+      console.log('🔄 Loading recent activity...');
+      const activity = await getRecentActivity();
+      console.log('✅ Recent activity loaded:', activity.length);
+      setRecentActivity(activity);
+    } catch (error) {
+      console.error('❌ Error loading recent activity:', error);
+      setRecentActivity([]);
     }
   };
 
@@ -293,7 +322,7 @@ function DashboardContent() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -362,19 +391,38 @@ function DashboardContent() {
             <CardDescription>Common admin tasks</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button className="w-full justify-start" size="lg">
-              <Plus className="mr-2 h-4 w-4" />
+            <Button 
+              className="w-full justify-start" 
+              size="lg"
+              onClick={() => router.push('/admin/users')}
+            >
+              <UserPlus className="mr-2 h-4 w-4" />
               Add New User
             </Button>
-            <Button className="w-full justify-start" variant="outline" size="lg">
+            <Button 
+              className="w-full justify-start" 
+              variant="outline" 
+              size="lg"
+              onClick={() => router.push('/admin/pickups')}
+            >
               <Package className="mr-2 h-4 w-4" />
               Manage Pickups
             </Button>
-            <Button className="w-full justify-start" variant="outline" size="lg">
+            <Button 
+              className="w-full justify-start" 
+              variant="outline" 
+              size="lg"
+              onClick={() => router.push('/admin/rewards')}
+            >
               <Gift className="mr-2 h-4 w-4" />
               Configure Rewards
             </Button>
-            <Button className="w-full justify-start" variant="outline" size="lg">
+            <Button 
+              className="w-full justify-start" 
+              variant="outline" 
+              size="lg"
+              onClick={() => router.push('/admin/analytics')}
+            >
               <BarChart3 className="mr-2 h-4 w-4" />
               View Reports
             </Button>
@@ -387,30 +435,28 @@ function DashboardContent() {
             <CardDescription>Latest system activities</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">New user registered</p>
-                <p className="text-xs text-gray-500">john.doe@example.com</p>
-              </div>
-              <Clock className="h-4 w-4 text-gray-400" />
-            </div>
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Pickup completed</p>
-                <p className="text-xs text-gray-500">123 Main St - 15.2 kg</p>
-              </div>
-              <Clock className="h-4 w-4 text-gray-400" />
-            </div>
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Reward redeemed</p>
-                <p className="text-xs text-gray-500">5% Cashback - 100 points</p>
-              </div>
-              <Clock className="h-4 w-4 text-gray-400" />
-            </div>
+            {loading ? (
+              <div className="text-center py-4 text-gray-500">Loading recent activity...</div>
+            ) : recentActivity.length === 0 ? (
+              <div className="text-center py-4 text-gray-500">No recent activity</div>
+            ) : (
+              recentActivity.map((activity) => (
+                <div key={activity.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className={`w-2 h-2 rounded-full ${
+                    activity.type === 'pickup_approved' ? 'bg-green-500' :
+                    activity.type === 'pickup_rejected' ? 'bg-red-500' :
+                    activity.type === 'pickup_created' ? 'bg-blue-500' :
+                    activity.type === 'user_registered' ? 'bg-purple-500' :
+                    'bg-gray-500'
+                  }`}></div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{activity.title}</p>
+                    <p className="text-xs text-gray-500">{activity.description}</p>
+                  </div>
+                  <Clock className="h-4 w-4 text-gray-400" />
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
@@ -496,6 +542,8 @@ function ConfigContent() {
 }
 
 export default function AdminDashboardClient() {
+  const router = useRouter();
+  const { user, profile, isLoading: authLoading, logout } = useAuth();
   const [isClient, setIsClient] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
 
@@ -504,9 +552,22 @@ export default function AdminDashboardClient() {
     console.log('AdminDashboardClient: isClient set to true');
   }, []);
 
+  // Check authentication and admin role
+  useEffect(() => {
+    if (!authLoading && (!user || !profile || profile.role !== 'admin')) {
+      console.log('AdminDashboardClient: User not authenticated or not admin, redirecting to login');
+      router.push('/admin-login');
+    }
+  }, [user, profile, authLoading, router]);
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/admin-login');
+  };
+
   // Show loading state during SSR or initial load
-  if (!isClient) {
-    console.log('AdminDashboardClient: Showing loading state', { isClient });
+  if (!isClient || authLoading) {
+    console.log('AdminDashboardClient: Showing loading state', { isClient, authLoading });
     
     return (
       <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
@@ -519,8 +580,14 @@ export default function AdminDashboardClient() {
     );
   }
 
-  // DEVELOPMENT MODE - AUTHENTICATION BYPASSED
-  console.log('AdminDashboardClient: Rendering dashboard (auth bypassed)');
+  // Check if user is authenticated and has admin role
+  if (!user || !profile || profile.role !== 'admin') {
+    console.log('AdminDashboardClient: Access denied, redirecting to login');
+    router.push('/admin-login');
+    return null;
+  }
+
+  console.log('AdminDashboardClient: Rendering dashboard for admin user:', profile.email);
 
   // Render page content based on current page
   const renderPageContent = () => {
@@ -551,7 +618,11 @@ export default function AdminDashboardClient() {
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <AdminSidebar currentPage={currentPage} onPageChange={setCurrentPage} />
+      <AdminSidebar 
+        currentPage={currentPage} 
+        onPageChange={setCurrentPage}
+        onLogout={handleLogout}
+      />
       
       {/* Main Content */}
       <div className="flex-1">
@@ -567,15 +638,15 @@ export default function AdminDashboardClient() {
                 ← Back to Main System
               </Button>
             </div>
-                         <div className="flex items-center gap-3">
-               <Badge variant="secondary" className="text-sm">
-                 DEV MODE
-               </Badge>
-               <span className="text-sm text-gray-500">Authentication Bypassed</span>
-               <Badge variant="outline" className="text-sm">
-                 Live Data
-               </Badge>
-             </div>
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="text-sm">
+                <Building2 className="w-4 h-4 mr-1" />
+                Admin: {profile.full_name}
+              </Badge>
+              <Badge variant="secondary" className="text-sm">
+                Live Data
+              </Badge>
+            </div>
           </div>
         </div>
         

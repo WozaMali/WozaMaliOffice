@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, CheckCircle, XCircle, AlertCircle } from "lucide-react";
-import { supabase } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 
 export default function TestConnectionPage() {
   const [isTesting, setIsTesting] = useState(false);

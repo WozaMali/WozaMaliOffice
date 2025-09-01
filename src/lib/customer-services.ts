@@ -104,13 +104,21 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
       // Get unique profile IDs from the addresses
       const profileIds = [...new Set(addresses.map(addr => addr.profile_id))];
 
-      // Fetch profiles for these IDs
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name, phone, email, is_active')
-        .in('id', profileIds)
-        .eq('role', 'customer')
-        .eq('is_active', true);
+      // Fetch profiles for these IDs (only if we have profile IDs)
+      let profiles: any[] = [];
+      let profilesError: any = null;
+      
+      if (profileIds.length > 0) {
+        const { data: profilesData, error: profilesErrorData } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone, email, is_active')
+          .in('id', profileIds)
+          .eq('role', 'customer')
+          .eq('is_active', true);
+        
+        profiles = profilesData || [];
+        profilesError = profilesErrorData;
+      }
 
       if (profilesError) {
         console.error('❌ Error fetching profiles:', profilesError);
@@ -188,13 +196,21 @@ export async function searchCustomersComprehensive(searchTerm: string): Promise<
       ...(addresses?.map(a => a.profile_id) || [])
     ]);
 
-    // Fetch all relevant profiles
-    const { data: allProfiles, error: allProfilesError } = await supabase
-      .from('profiles')
-      .select('id, full_name, phone, email, is_active')
-      .in('id', Array.from(allProfileIds))
-      .eq('role', 'customer')
-      .eq('is_active', true);
+    // Fetch all relevant profiles (only if we have profile IDs)
+    let allProfiles: any[] = [];
+    let allProfilesError: any = null;
+    
+    if (allProfileIds.size > 0) {
+      const { data: allProfilesData, error: allProfilesErrorData } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone, email, is_active')
+        .in('id', Array.from(allProfileIds))
+        .eq('role', 'customer')
+        .eq('is_active', true);
+      
+      allProfiles = allProfilesData || [];
+      allProfilesError = allProfilesErrorData;
+    }
 
     if (allProfilesError) {
       console.error('❌ Error fetching all profiles:', allProfilesError);

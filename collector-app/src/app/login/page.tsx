@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
+import { supabase } from "@/lib/supabase";
 
 export default function CollectorLoginPage() {
   const router = useRouter();
@@ -51,41 +52,40 @@ export default function CollectorLoginPage() {
     }
   }, [user, profile]);
 
-  // Redirect already authenticated collectors to dashboard
-  useEffect(() => {
-    if (user && profile) {
-      const userRole = profile.role || (user as any).role;
-      console.log('🔍 Debug - Checking role access. User role:', userRole);
-      
-      if (userRole === 'collector' || userRole === 'admin' || 
-          userRole === 'COLLECTOR' || userRole === 'ADMIN') {
-        console.log('✅ User authenticated as collector or admin, redirecting to dashboard');
-        router.push('/');
-      } else {
-        console.log('❌ User role not allowed:', userRole);
-        console.log('❌ Allowed roles: collector, admin, COLLECTOR, ADMIN');
-        console.log('❌ User has role:', userRole);
-        router.push('/unauthorized');
-      }
-    }
-  }, [user, profile, router]);
+  // No auto-redirect - let users manually choose what to do
+  // useEffect(() => {
+  //   if (user && profile) {
+  //     const userRole = profile.role || (user as any).role;
+  //     console.log('🔍 Debug - Checking role access. User role:', userRole);
+  //     
+  //     if (userRole === 'collector' || userRole === 'admin' || 
+  //         userRole === 'COLLECTOR' || userRole === 'ADMIN') {
+  //       console.log('✅ User authenticated as collector or admin, redirecting to dashboard');
+  //       router.push('/');
+  //     } else {
+  //       console.log('❌ User role not allowed:', userRole);
+  //       console.log('❌ Allowed roles: collector, admin, COLLECTOR, ADMIN');
+  //       console.log('❌ User has role:', userRole);
+  //       router.push('/unauthorized');
+  //     }
+  //   }
+  // }, [user, profile, router]);
 
-  // Don't render the form if user is already authenticated
-  if (user && profile) {
-    const userRole = profile.role || (user as any).role;
-    console.log('🔍 Debug - Final role check. User role:', userRole);
-    
-    if (userRole === 'collector' || userRole === 'admin' || 
-        userRole === 'COLLECTOR' || userRole === 'ADMIN') {
-      console.log('✅ Role check passed, redirecting to dashboard');
-      return null; // Will redirect to dashboard
-    } else {
-      console.log('❌ Role check failed, redirecting to unauthorized');
-      console.log('❌ User has role:', userRole);
-      console.log('❌ Expected roles: collector, admin, COLLECTOR, ADMIN');
-      return null; // Will redirect to unauthorized
-    }
-  }
+  // Always show the form - no conditional rendering
+  // if (user && profile) {
+  //   const userRole = profile.role || (user as any).role;
+  //   console.log('🔍 Debug - Final role check. User role:', userRole);
+  //   
+  //   if (userRole === 'collector' || userRole === 'admin' || 
+  //       userRole === 'COLLECTOR' || userRole === 'ADMIN') {
+  //     console.log('✅ Role check passed, redirecting to dashboard');
+  //     return null; // Will redirect to dashboard
+  //   } else {
+  //     console.log('❌ Role check failed, redirecting to unauthorized');
+  //     console.log('❌ User has role:', userRole);
+  //     return null; // Will redirect to unauthorized
+  //   }
+  // }
 
   const handleInputChange = (field: keyof typeof formData, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -162,6 +162,40 @@ export default function CollectorLoginPage() {
               <div>Profile Role: {profile?.role || 'No profile'}</div>
               <div>User Role: {(user as any).role || 'No role'}</div>
               <div>Expected Roles: collector, admin, COLLECTOR, ADMIN</div>
+              
+              {/* Manual Action Buttons */}
+              <div className="mt-3 space-y-2">
+                <Button 
+                  size="sm" 
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => router.push('/')}
+                >
+                  🚀 Go to Dashboard
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="w-full border-gray-300 text-gray-700"
+                  onClick={() => window.location.reload()}
+                >
+                  🔄 Refresh Page
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="destructive" 
+                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                  onClick={async () => {
+                    try {
+                      await supabase.auth.signOut();
+                      window.location.reload();
+                    } catch (error) {
+                      console.error('Logout error:', error);
+                    }
+                  }}
+                >
+                  🚪 Sign Out
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}

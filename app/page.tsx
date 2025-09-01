@@ -25,12 +25,22 @@ export default function HomePage() {
 
   if (selectedRole) {
     // Redirect to appropriate login page based on role selection
+    console.log('Selected role:', selectedRole);
     if (selectedRole === 'admin') {
+      console.log('Redirecting to admin-login...');
       window.location.href = '/admin-login';
     } else if (selectedRole === 'collector') {
+      console.log('Redirecting to collector-login...');
       window.location.href = '/collector-login';
     }
-    return null; // Return null while redirecting
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting to {selectedRole} login...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -76,7 +86,17 @@ export default function HomePage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Button
-              onClick={() => setSelectedRole('admin')}
+              onClick={() => {
+                console.log('Admin button clicked');
+                setSelectedRole('admin');
+                // Fallback navigation method
+                setTimeout(() => {
+                  if (window.location.pathname === '/') {
+                    console.log('Fallback navigation to admin-login');
+                    window.location.href = '/admin-login';
+                  }
+                }, 100);
+              }}
               className="h-16 text-lg bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-600 hover:border-blue-700"
             >
               <Building2 className="w-6 h-6 mr-3" />
@@ -84,7 +104,17 @@ export default function HomePage() {
             </Button>
             
             <Button
-              onClick={() => setSelectedRole('collector')}
+              onClick={() => {
+                console.log('Collector button clicked');
+                setSelectedRole('collector');
+                // Fallback navigation method
+                setTimeout(() => {
+                  if (window.location.pathname === '/') {
+                    console.log('Fallback navigation to collector-login');
+                    window.location.href = '/collector-login';
+                  }
+                }, 100);
+              }}
               className="h-16 text-lg bg-orange-600 hover:bg-orange-700 text-white border-2 border-orange-600 hover:border-orange-700"
             >
               <Users className="w-6 h-6 mr-3" />

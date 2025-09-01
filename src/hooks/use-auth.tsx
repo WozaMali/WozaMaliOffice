@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
 // Types
 export interface Profile {
@@ -27,31 +27,6 @@ export interface AuthContextType {
   refreshProfile: () => Promise<void>;
 }
 
-// Create Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-// Debug Supabase configuration
-console.log('useAuth: Supabase URL:', supabaseUrl ? 'Configured' : 'MISSING');
-console.log('useAuth: Supabase Key:', supabaseAnonKey ? 'Configured' : 'MISSING');
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('useAuth: Missing Supabase environment variables!');
-}
-
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
-
-// Test Supabase connection
-supabase.auth.getSession().then(({ data, error }) => {
-  if (error) {
-    console.error('useAuth: Initial Supabase connection test failed:', error);
-  } else {
-    console.log('useAuth: Initial Supabase connection test successful');
-  }
-}).catch(err => {
-  console.error('useAuth: Initial Supabase connection test error:', err);
-});
-
 // Create Auth Context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -65,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch user profile from database
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('🔍 Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -72,13 +48,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        console.error('❌ Error fetching profile:', error);
         return null;
       }
 
+      console.log('✅ Profile fetched successfully:', data);
       return data as Profile;
     } catch (err) {
-      console.error('Error in fetchProfile:', err);
+      console.error('❌ Error in fetchProfile:', err);
       return null;
     }
   };
@@ -86,17 +63,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Login function
   const login = async (email: string, password: string) => {
     try {
+      console.log('🔐 Login attempt for:', email);
       setError(null);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
+        console.error('❌ Login error:', error);
         return { success: false, error: error.message };
       }
 
       if (data.user) {
+        console.log('✅ Login successful for user:', data.user.id);
         setUser(data.user);
         const userProfile = await fetchProfile(data.user.id);
         setProfile(userProfile);
@@ -105,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: false, error: 'Login failed' };
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('❌ Login exception:', err);
       return { success: false, error: 'An unexpected error occurred' };
     }
   };
@@ -132,8 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: data.user.id,
               email: data.user.email!,
               full_name: profileData.full_name || '',
-              role: profileData.role || 'CUSTOMER',
-              is_verified: false,
+              role: profileData.role || 'customer',
               is_active: true,
             }
           ]);
@@ -157,12 +137,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Logout function
   const logout = async () => {
     try {
+      console.log('🚪 Logging out user...');
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Logout error:', error);
       }
       setUser(null);
       setProfile(null);
+      console.log('✅ User logged out successfully');
     } catch (err) {
       console.error('Logout error:', err);
     }
@@ -207,30 +189,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Effect to handle auth state changes
   useEffect(() => {
-    console.log('useAuth: Starting auth state check');
+    console.log('🔐 useAuth: Starting auth state check');
     
     const checkUser = async () => {
       try {
-        console.log('useAuth: Fetching user session...');
+        console.log('🔐 useAuth: Fetching user session...');
         // Get current session
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('useAuth: Session error:', error);
+          console.error('❌ useAuth: Session error:', error);
         }
         
         if (session?.user) {
-          console.log('useAuth: User session found:', session.user.id);
+          console.log('✅ useAuth: User session found:', session.user.id);
           setUser(session.user);
           const userProfile = await fetchProfile(session.user.id);
           setProfile(userProfile);
         } else {
-          console.log('useAuth: No user session found');
+          console.log('ℹ️ useAuth: No user session found');
         }
       } catch (err) {
-        console.error('useAuth: Error fetching user:', err);
+        console.error('❌ useAuth: Error fetching user:', err);
       } finally {
-        console.log('useAuth: Setting isLoading to false');
+        console.log('🔐 useAuth: Setting isLoading to false');
         setIsLoading(false);
       }
     };
@@ -240,7 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('useAuth: Auth state change:', event, session?.user?.id);
+        console.log('🔐 useAuth: Auth state change:', event, session?.user?.id);
         if (session?.user) {
           setUser(session.user);
           const userProfile = await fetchProfile(session.user.id);

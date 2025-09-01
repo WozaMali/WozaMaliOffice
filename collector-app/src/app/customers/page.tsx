@@ -156,18 +156,111 @@ export default function CollectorCustomersPage() {
       // Fetch real customer data from Supabase
       const customerProfiles = await profileServices.getCustomerProfilesWithAddresses();
       
+      console.log('🔍 Raw customer profiles from Supabase:', {
+        count: customerProfiles?.length || 0,
+        sampleProfile: customerProfiles?.[0],
+        allProfiles: customerProfiles
+      });
+      
       // Transform the data to include stats (you can enhance this with actual pickup data later)
       const customersWithStats: CustomerWithStats[] = customerProfiles.map(profile => {
-        const primaryAddress = profile.addresses?.find(addr => addr.is_primary) || profile.addresses?.[0];
+        const primaryAddress = profile.addresses?.find(addr => addr.is_default && addr.address_type === 'primary') || 
+                              profile.addresses?.find(addr => addr.address_type === 'primary') || 
+                              profile.addresses?.[0];
         
-        console.log(`Customer ${profile.id} addresses:`, profile.addresses);
+        console.log(`Member ${profile.id} profile:`, {
+          id: profile.id,
+          email: profile.email,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          username: profile.username,
+          role: profile.role,
+          addresses: profile.addresses,
+          addresses_type: typeof profile.addresses,
+          addresses_length: Array.isArray(profile.addresses) ? profile.addresses.length : 'Not an array',
+          // Debug name fields specifically
+          name_debug: {
+            first_name_value: profile.first_name,
+            first_name_type: typeof profile.first_name,
+            last_name_value: profile.last_name,
+            last_name_type: typeof profile.last_name,
+            username_value: profile.username,
+            username_type: typeof profile.username
+          }
+        });
         console.log(`Primary address for ${profile.id}:`, primaryAddress);
+        console.log(`Addresses array details:`, {
+          isArray: Array.isArray(profile.addresses),
+          length: profile.addresses?.length || 0,
+          firstAddress: profile.addresses?.[0],
+          allAddresses: profile.addresses
+        });
+        
+        // Build the member name - prioritize first_name + last_name, fallback to member_name, then email
+        let memberName = 'Unknown Member';
+        if (profile.first_name && profile.last_name) {
+          memberName = `${profile.first_name} ${profile.last_name}`;
+        } else if (profile.first_name) {
+          memberName = profile.first_name;
+        } else if (profile.last_name) {
+          memberName = profile.last_name;
+        } else if (profile.username) {
+          memberName = profile.username;
+        } else if ((profile as any).member_name) {
+          memberName = (profile as any).member_name;
+        } else if ((profile as any).full_name) {
+          memberName = (profile as any).full_name;
+        } else if (profile.email) {
+          // Extract name from email as last resort
+          const emailName = profile.email.split('@')[0];
+          memberName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
+        }
+        
+        console.log(`Name building for ${profile.id}:`, {
+          member_name: (profile as any).member_name,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          username: profile.username,
+          full_name: (profile as any).full_name,
+          email: profile.email,
+          final_name: memberName
+        });
+        
+        // Build the address string with robust fallback handling
+        let addressString = 'No address registered';
+        let cityString = 'Unknown city';
+        
+        if (primaryAddress) {
+          console.log(`Processing address for ${profile.id}:`, primaryAddress);
+          
+          // Handle new address format
+          const line1 = primaryAddress.address_line1 || '';
+          const line2 = primaryAddress.address_line2 || '';
+          const city = primaryAddress.city || '';
+          const province = primaryAddress.province || '';
+          
+          // Build address string
+          const addressParts = [line1, line2].filter(Boolean);
+          if (addressParts.length > 0) {
+            addressString = addressParts.join(', ');
+          } else {
+            addressString = 'Address not specified';
+          }
+          
+          // Build city string with province
+          const cityParts = [city, province].filter(Boolean);
+          cityString = cityParts.length > 0 ? cityParts.join(', ') : 'Unknown city';
+          
+          console.log(`Processed address: "${addressString}", city: "${cityString}"`);
+        } else {
+          console.log(`No primary address found for ${profile.id}`);
+        }
         
         return {
           ...profile,
-          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'Unknown Customer',
-          address: primaryAddress ? `${primaryAddress.line1}, ${primaryAddress.suburb}` : 'No address',
-          city: primaryAddress?.city || 'Unknown',
+          name: memberName,
+          address: addressString,
+          city: cityString,
           totalCollections: 0, // TODO: Calculate from actual pickup data
           totalKg: 0, // TODO: Calculate from actual pickup data
           lastCollection: 'Never' // TODO: Get from actual pickup data
@@ -237,7 +330,7 @@ export default function CollectorCustomersPage() {
         first_name: newCustomerForm.firstName,
         last_name: newCustomerForm.lastName,
         phone: newCustomerForm.phone,
-        role: 'customer',
+        role: 'member',
         is_active: true
       });
 
@@ -257,12 +350,13 @@ export default function CollectorCustomersPage() {
         
         // Reset form and close dialog
         setNewCustomerForm({
-          name: '',
+          firstName: '',
+          lastName: '',
           email: '',
           phone: '',
           address: '',
-          city: '',
           suburb: '',
+          city: '',
           postalCode: ''
         });
         setIsNewCustomerOpen(false);
@@ -276,7 +370,9 @@ export default function CollectorCustomersPage() {
   };
 
   const openCollectionDialog = (customer: CustomerWithStats) => {
-    const primaryAddress = customer.addresses?.find(addr => addr.is_primary) || customer.addresses?.[0];
+    const primaryAddress = customer.addresses?.find(addr => addr.is_default && addr.address_type === 'primary') || 
+                          customer.addresses?.find(addr => addr.address_type === 'primary') || 
+                          customer.addresses?.[0];
     
     // Validate that we have the required IDs
     if (!customer.id) {
@@ -357,22 +453,29 @@ export default function CollectorCustomersPage() {
       });
 
       // Create pickup
+      console.log('🔍 About to call pickupServices.createPickup...');
       const pickup = await pickupServices.createPickup({
         customer_id: collectionForm.customerId,
         collector_id: user.id,
         address_id: collectionForm.addressId,
         status: 'submitted'
       });
+      console.log('✅ Pickup created successfully:', pickup);
 
       if (pickup) {
+        console.log('🔍 Creating pickup items for materials:', validMaterials);
+        
         // Create pickup items for each material with weight
         const pickupItems = validMaterials.map(material => ({
           pickup_id: pickup.id,
           material_id: material.materialId,
-          kilograms: material.kilograms
+          quantity: material.kilograms,
+          unit_price: material.ratePerKg
         }));
         
+        console.log('🔍 About to add pickup items:', pickupItems);
         await pickupItemServices.addPickupItems(pickup.id, pickupItems);
+        console.log('✅ Pickup items added successfully');
 
         // Close dialog and reload data
         setIsCollectionOpen(false);
@@ -385,6 +488,11 @@ export default function CollectorCustomersPage() {
           addressId: '',
           materials: []
         });
+        
+        alert('Collection saved successfully!');
+      } else {
+        console.error('❌ Pickup creation failed - pickup is null');
+        alert('Failed to create pickup. Please try again.');
       }
     } catch (error) {
       console.error('Error saving collection:', error);
@@ -472,8 +580,8 @@ export default function CollectorCustomersPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-white">Customers</h1>
-            <p className="text-gray-300">Manage your customer relationships</p>
+            <h1 className="text-2xl font-bold text-white">Members</h1>
+            <p className="text-gray-300">Manage your member relationships</p>
           </div>
         </div>
         

@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import type { 
   Profile, 
   Address, 
+  UserAddress,
   Material, 
   Pickup, 
   PickupItem, 
@@ -10,6 +11,7 @@ import type {
   PickupWithDetails,
   PickupItemWithMaterial,
   ProfileWithAddresses,
+  MemberWithUserAddresses,
   CustomerDashboardView,
   CollectorDashboardView,
   AdminDashboardView,
@@ -89,7 +91,7 @@ export const profileServices = {
     }
   },
 
-  // Get customer profiles with their addresses for collector dashboard
+  // Get customer profiles with their addresses for collector dashboard (legacy)
   async getCustomerProfilesWithAddresses(): Promise<ProfileWithAddresses[]> {
     try {
       const { data, error } = await supabase
@@ -107,12 +109,128 @@ export const profileServices = {
       console.error('Error fetching customer profiles with addresses:', error)
       return []
     }
+  },
+
+  // NEW: Get member profiles with user addresses using the new views
+  async getMemberProfilesWithUserAddresses(): Promise<MemberWithUserAddresses[]> {
+    try {
+      console.log('🔍 Fetching member profiles with user addresses...')
+      
+      const { data, error } = await supabase
+        .from('office_member_user_addresses_view')
+        .select('*')
+        .order('full_name', { ascending: true })
+
+      if (error) {
+        console.error('❌ Supabase error:', error)
+        throw error
+      }
+      
+      console.log('📊 Raw data from view:', { 
+        count: data?.length || 0, 
+        sample: data?.slice(0, 2) 
+      })
+      
+      // Transform the data to group addresses by member
+      const memberMap = new Map<string, MemberWithUserAddresses>()
+      
+      data?.forEach((row: any) => {
+        const memberId = row.member_id
+        
+        if (!memberMap.has(memberId)) {
+          // Create member record
+          memberMap.set(memberId, {
+            id: row.member_id,
+            email: row.email,
+            full_name: row.full_name,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            phone: row.phone,
+            role: row.role,
+            is_active: row.member_is_active,
+            created_at: row.member_since,
+            updated_at: row.member_since,
+            user_addresses: [],
+            wallet_balance: row.wallet_balance,
+            total_points: row.total_points,
+            tier: row.tier,
+            total_pickups: row.total_pickups,
+            last_pickup_date: row.last_pickup_date
+          })
+        }
+        
+        // Add address to member
+        const member = memberMap.get(memberId)!
+        if (row.address_id) {
+          member.user_addresses!.push({
+            id: row.address_id,
+            user_id: row.member_id,
+            address_type: row.address_type,
+            address_line1: row.address_line1,
+            address_line2: row.address_line2,
+            city: row.city,
+            province: row.province,
+            postal_code: row.postal_code,
+            country: row.country,
+            coordinates: row.coordinates,
+            is_default: row.is_default,
+            is_active: row.address_is_active,
+            notes: row.notes,
+            created_at: row.address_created,
+            updated_at: row.address_updated
+          })
+        }
+      })
+      
+      const result = Array.from(memberMap.values())
+      console.log('✅ Transformed data:', { 
+        memberCount: result.length, 
+        sample: result.slice(0, 1) 
+      })
+      
+      return result
+    } catch (error) {
+      console.error('❌ Error fetching member profiles with user addresses:', error)
+      return []
+    }
+  },
+
+  // Get member profiles for collection app
+  async getCollectionMemberProfiles(): Promise<MemberWithUserAddresses[]> {
+    try {
+      const { data, error } = await supabase
+        .from('collection_member_user_addresses_view')
+        .select('*')
+        .order('full_name', { ascending: true })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching collection member profiles:', error)
+      return []
+    }
+  },
+
+  // Get member profiles for office app
+  async getOfficeMemberProfiles(): Promise<MemberWithUserAddresses[]> {
+    try {
+      const { data, error } = await supabase
+        .from('office_member_user_addresses_view')
+        .select('*')
+        .order('full_name', { ascending: true })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching office member profiles:', error)
+      return []
+    }
   }
 }
 
 // Address Services
 export const addressServices = {
-  // Get addresses for a profile
+  // Get addresses for a profile (legacy)
   async getAddressesByProfile(profileId: string): Promise<Address[]> {
     try {
       const { data, error } = await supabase
@@ -129,7 +247,7 @@ export const addressServices = {
     }
   },
 
-  // Create new address
+  // Create new address (legacy)
   async createAddress(address: Omit<Address, 'id'>): Promise<Address | null> {
     try {
       const { data, error } = await supabase
@@ -146,7 +264,7 @@ export const addressServices = {
     }
   },
 
-  // Update address
+  // Update address (legacy)
   async updateAddress(addressId: string, updates: Partial<Address>): Promise<boolean> {
     try {
       const { error } = await supabase
@@ -159,6 +277,108 @@ export const addressServices = {
     } catch (error) {
       console.error('Error updating address:', error)
       return false
+    }
+  },
+
+  // NEW: User Address Services
+  // Get user addresses using the new schema
+  async getUserAddresses(userId: string): Promise<UserAddress[]> {
+    try {
+      const { data, error } = await supabase
+        .from('user_addresses')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .order('is_default', { ascending: false })
+        .order('address_type', { ascending: true })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error fetching user addresses:', error)
+      return []
+    }
+  },
+
+  // Create new user address
+  async createUserAddress(address: Omit<UserAddress, 'id' | 'created_at' | 'updated_at'>): Promise<UserAddress | null> {
+    try {
+      const { data, error } = await supabase
+        .from('user_addresses')
+        .insert([address])
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error creating user address:', error)
+      return null
+    }
+  },
+
+  // Update user address
+  async updateUserAddress(addressId: string, updates: Partial<UserAddress>): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('user_addresses')
+        .update(updates)
+        .eq('id', addressId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error updating user address:', error)
+      return false
+    }
+  },
+
+  // Set default address for a user
+  async setDefaultAddress(userId: string, addressId: string, addressType: string): Promise<boolean> {
+    try {
+      // First, remove default from other addresses of the same type
+      await supabase
+        .from('user_addresses')
+        .update({ is_default: false })
+        .eq('user_id', userId)
+        .eq('address_type', addressType)
+        .neq('id', addressId)
+
+      // Then set the new default
+      const { error } = await supabase
+        .from('user_addresses')
+        .update({ is_default: true })
+        .eq('id', addressId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error setting default address:', error)
+      return false
+    }
+  },
+
+  // Get default address for a user
+  async getDefaultAddress(userId: string, addressType?: string): Promise<UserAddress | null> {
+    try {
+      let query = supabase
+        .from('user_addresses')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_default', true)
+        .eq('is_active', true)
+
+      if (addressType) {
+        query = query.eq('address_type', addressType)
+      }
+
+      const { data, error } = await query.single()
+
+      if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows returned
+      return data || null
+    } catch (error) {
+      console.error('Error fetching default address:', error)
+      return null
     }
   }
 }
@@ -205,13 +425,23 @@ export const pickupServices = {
   // Create a new pickup
   async createPickup(pickupData: Omit<Pickup, 'id' | 'started_at'>): Promise<Pickup | null> {
     try {
+      // Handle both old and new address schema
+      const insertData: any = {
+        ...pickupData,
+        started_at: new Date().toISOString(),
+        status: 'submitted'
+      }
+
+      // If pickup_address_id is provided, use it; otherwise use address_id
+      if (pickupData.pickup_address_id) {
+        insertData.pickup_address_id = pickupData.pickup_address_id
+        // Don't include address_id if using new schema
+        delete insertData.address_id
+      }
+
       const { data, error } = await supabase
         .from('pickups')
-        .insert([{
-          ...pickupData,
-          started_at: new Date().toISOString(),
-          status: 'submitted'
-        }])
+        .insert([insertData])
         .select()
         .single()
 
@@ -233,6 +463,7 @@ export const pickupServices = {
           customer:profiles!pickups_customer_id_fkey(*),
           collector:profiles!pickups_collector_id_fkey(*),
           address:addresses(*),
+          pickup_address:user_addresses!pickups_pickup_address_id_fkey(*),
           items:pickup_items(*),
           photos:pickup_photos(*),
           payment:payments(*)

@@ -89,117 +89,104 @@ export const profileServices = {
     }
   },
 
-  // Get customer profiles with their addresses
+  // Get customer profiles with their addresses using the new view
   async getCustomerProfilesWithAddresses(): Promise<ProfileWithAddresses[]> {
     try {
-      console.log('🔍 Debug - Starting getCustomerProfilesWithAddresses...');
+      console.log('🔍 Debug - Starting getCustomerProfilesWithAddresses with new schema...');
       
-      // Test 1: Try to access addresses table
-      console.log('🔍 Debug - Testing addresses table access...');
-      const { data: addressTestData, error: addressTestError } = await supabase
-        .from('addresses')
-        .select('id, profile_id')
-        .limit(1);
-
-      console.log('🔍 Debug - Addresses table test result:', { 
-        hasData: !!addressTestData, 
-        dataLength: addressTestData?.length || 0, 
-        error: addressTestError 
-      });
-
-      if (addressTestError) {
-        console.error('❌ Cannot access addresses table:', addressTestError);
-        throw addressTestError;
-      }
-      
-      // Test 2: Try to access profiles table
-      console.log('🔍 Debug - Testing profiles table access...');
-      const { data: testData, error: testError } = await supabase
-        .from('profiles')
-        .select('id, email, role')
-        .limit(1);
-
-      console.log('🔍 Debug - Profiles table test result:', { 
-        hasData: !!testData, 
-        dataLength: testData?.length || 0, 
-        error: testError 
-      });
-
-      if (testError) {
-        console.error('❌ Cannot access profiles table:', testError);
-        throw testError;
-      }
-
-      // Test 3: Try the new view first (more reliable)
-      console.log('🔍 Debug - Attempting to use customer_profiles_with_addresses_view...');
-      try {
-        const { data: viewData, error: viewError } = await supabase
-          .from('customer_profiles_with_addresses_view')
-          .select('*');
-
-        if (!viewError && viewData) {
-          console.log('✅ Successfully used view approach:', { count: viewData.length });
-          return viewData as ProfileWithAddresses[];
-        } else {
-          console.log('⚠️ View approach failed, falling back to manual join:', viewError);
-        }
-      } catch (viewError) {
-        console.log('⚠️ View approach failed, falling back to manual join:', viewError);
-      }
-
-      // Test 4: Now try the full query with nested select
-      console.log('🔍 Debug - Attempting full customer profiles query with nested select...');
+      // Use the new collection member user addresses view
+      console.log('🔍 Debug - Using collection_member_user_addresses_view...');
       const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          addresses(*)
-        `)
-        .eq('role', 'customer')
-        .eq('is_active', true)
-
-      console.log('🔍 Debug - Full query result:', { 
-        hasData: !!data, 
-        dataLength: data?.length || 0, 
-        error: error
-      });
+        .from('collection_member_user_addresses_view')
+        .select('*');
 
       if (error) {
-        console.error('❌ Supabase error detected:', error);
-        console.error('❌ Error type:', typeof error);
-        console.error('❌ Error constructor:', error?.constructor?.name);
-        console.error('❌ Error keys:', Object.keys(error || {}));
-        console.error('❌ Error stringified:', JSON.stringify(error, null, 2));
-        console.error('❌ Error toString:', error?.toString());
-        
-        // Try to extract any available error information
-        const errorInfo = {
-          message: error?.message || 'No message',
-          details: error?.details || 'No details',
-          hint: error?.hint || 'No hint',
-          code: error?.code || 'No code',
-          name: error?.name || 'No name',
-          stack: error?.stack || 'No stack',
-          fullError: error
-        };
-        
-        console.error('❌ Extracted error info:', errorInfo);
-        
-        // Fallback: Use separate queries and combine manually
-        console.log('🔄 Falling back to manual join approach...');
-        return await this.getCustomerProfilesWithAddressesFallback();
+        console.error('❌ Error fetching from collection_member_user_addresses_view:', error);
+        throw error;
       }
 
-      console.log('✅ Successfully fetched customer profiles:', { count: data?.length || 0 });
-      return data || []
+      console.log('📊 Raw data from view:', { 
+        count: data?.length || 0, 
+        sample: data?.slice(0, 2),
+        // Debug name fields specifically
+        name_fields_sample: data?.slice(0, 2).map(row => ({
+          member_id: row.member_id,
+          member_email: row.member_email,
+          member_name: row.member_name,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          username: row.username,
+          member_phone: row.member_phone,
+          role: row.role
+        }))
+      });
+
+      // Transform the data to group addresses by member and convert to old format
+      const memberMap = new Map<string, ProfileWithAddresses>()
+      
+      data?.forEach((row: any) => {
+        const memberId = row.member_id
+        
+        if (!memberMap.has(memberId)) {
+          // Create member record using the correct field names from the view
+          memberMap.set(memberId, {
+            id: row.member_id,
+            email: row.member_email, // Use member_email from view
+            first_name: row.first_name, // Now available in updated view
+            last_name: row.last_name, // Now available in updated view
+            phone: row.member_phone, // Use member_phone from view
+            role: row.role, // Use role from view
+            is_active: row.member_is_active, // Use is_active from view
+            created_at: row.member_since, // Use created_at from view
+            updated_at: row.member_since, // Use created_at as updated_at
+            addresses: [] // Use addresses property for compatibility
+          })
+        }
+        
+        // Add address to member
+        const member = memberMap.get(memberId)!
+        if (row.address_id) {
+          member.addresses!.push({
+            id: row.address_id,
+            user_id: row.member_id, // Use user_id as per new schema
+            address_type: row.address_type,
+            address_line1: row.address_line1,
+            address_line2: row.address_line2,
+            city: row.city,
+            province: row.province,
+            postal_code: row.postal_code,
+            country: row.country,
+            coordinates: row.coordinates,
+            is_default: row.is_default,
+            is_active: row.address_is_active,
+            notes: row.notes,
+            created_at: row.address_created,
+            updated_at: row.address_updated
+          })
+        }
+      })
+      
+      const result = Array.from(memberMap.values())
+      console.log('✅ Transformed data for collector app:', { 
+        memberCount: result.length, 
+        sample: result.slice(0, 1),
+        // Debug name fields in final result
+        name_fields_final: result.slice(0, 1).map(member => ({
+          id: member.id,
+          email: member.email,
+          first_name: member.first_name,
+          last_name: member.last_name,
+          username: member.username,
+          role: member.role
+        }))
+      });
+      
+      return result
     } catch (error) {
       console.error('❌ Error fetching customer profiles with addresses:', error)
-      console.error('❌ Error type:', typeof error);
-      console.error('❌ Error constructor:', error?.constructor?.name);
-      console.error('❌ Error stack:', (error as any)?.stack);
       
-      // Final fallback: Use separate queries
-      console.log('🔄 Using final fallback approach...');
+      // Fallback: Use separate queries
+      console.log('🔄 Using fallback approach...');
       return await this.getCustomerProfilesWithAddressesFallback();
     }
   },
@@ -207,13 +194,22 @@ export const profileServices = {
   // Fallback method: Get profiles and addresses separately, then combine
   async getCustomerProfilesWithAddressesFallback(): Promise<ProfileWithAddresses[]> {
     try {
-      console.log('🔄 Fallback: Fetching profiles and addresses separately...');
+      console.log('🔄 Fallback: Fetching profiles and user_addresses separately...');
+      
+      // Check if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) {
+        console.log('⚠️ No authenticated session found in fallback, cannot fetch profiles');
+        return [];
+      }
+      
+      console.log('✅ User authenticated in fallback:', session.user.id);
       
       // Get all customer profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('role', 'customer')
+        .eq('role', 'member')
         .eq('is_active', true);
 
       if (profilesError) {
@@ -226,25 +222,48 @@ export const profileServices = {
         return [];
       }
 
-      // Get all addresses
-      const { data: addresses, error: addressesError } = await supabase
-        .from('addresses')
+      // Get all user addresses
+      const { data: userAddresses, error: addressesError } = await supabase
+        .from('user_addresses')
         .select('*');
 
       if (addressesError) {
-        console.error('❌ Error fetching addresses in fallback:', addressesError);
+        console.error('❌ Error fetching user_addresses in fallback:', addressesError);
         return [];
       }
 
-      // Combine profiles with their addresses
-      const profilesWithAddresses: ProfileWithAddresses[] = profiles.map(profile => ({
-        ...profile,
-        addresses: addresses?.filter(addr => addr.profile_id === profile.id) || []
-      }));
+      // Combine profiles with their addresses in old format
+      const profilesWithAddresses: ProfileWithAddresses[] = profiles.map(profile => {
+        const memberAddresses = userAddresses?.filter(addr => addr.user_id === profile.id) || [];
+        
+        // Use new address format
+        const formattedAddresses = memberAddresses.map(addr => ({
+          id: addr.id,
+          user_id: addr.user_id,
+          address_type: addr.address_type,
+          address_line1: addr.address_line1,
+          address_line2: addr.address_line2,
+          city: addr.city,
+          province: addr.province,
+          postal_code: addr.postal_code,
+          country: addr.country,
+          coordinates: addr.coordinates,
+          is_default: addr.is_default,
+          is_active: addr.is_active,
+          notes: addr.notes,
+          created_at: addr.created_at,
+          updated_at: addr.updated_at
+        }));
+        
+        return {
+          ...profile,
+          addresses: formattedAddresses
+        };
+      });
 
       console.log('✅ Fallback approach successful:', { 
         profilesCount: profiles.length, 
-        addressesCount: addresses?.length || 0,
+        addressesCount: userAddresses?.length || 0,
         combinedCount: profilesWithAddresses.length 
       });
 
@@ -256,16 +275,17 @@ export const profileServices = {
   }
 }
 
-// Address Services
+// Address Services - Updated for new user_addresses schema
 export const addressServices = {
-  // Get addresses for a profile
+  // Get addresses for a profile using user_addresses table
   async getAddressesByProfile(profileId: string): Promise<Address[]> {
     try {
       const { data, error } = await supabase
-        .from('addresses')
+        .from('user_addresses')
         .select('*')
-        .eq('profile_id', profileId)
-        .order('is_primary', { ascending: false })
+        .eq('user_id', profileId)
+        .eq('is_active', true)
+        .order('is_default', { ascending: false })
 
       if (error) throw error
       return data || []
@@ -275,11 +295,11 @@ export const addressServices = {
     }
   },
 
-  // Create new address
+  // Create new address using user_addresses table
   async createAddress(address: Omit<Address, 'id'>): Promise<Address | null> {
     try {
       const { data, error } = await supabase
-        .from('addresses')
+        .from('user_addresses')
         .insert([address])
         .select()
         .single()
@@ -292,11 +312,11 @@ export const addressServices = {
     }
   },
 
-  // Update address
+  // Update address using user_addresses table
   async updateAddress(addressId: string, updates: Partial<Address>): Promise<boolean> {
     try {
       const { error } = await supabase
-        .from('addresses')
+        .from('user_addresses')
         .update(updates)
         .eq('id', addressId)
 
@@ -305,6 +325,57 @@ export const addressServices = {
     } catch (error) {
       console.error('Error updating address:', error)
       return false
+    }
+  },
+
+  // Get user addresses using the helper function
+  async getUserAddresses(userId: string, requestingUserId: string): Promise<any> {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_user_addresses', {
+          target_user_uuid: userId,
+          requesting_user_uuid: requestingUserId
+        })
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error fetching user addresses:', error)
+      return null
+    }
+  },
+
+  // Set default address using the helper function
+  async setDefaultAddress(addressId: string, userId: string): Promise<any> {
+    try {
+      const { data, error } = await supabase
+        .rpc('set_default_address', {
+          address_uuid: addressId,
+          requesting_user_uuid: userId
+        })
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error setting default address:', error)
+      return null
+    }
+  },
+
+  // Get default address using the helper function
+  async getDefaultAddress(userId: string, addressType?: string): Promise<any> {
+    try {
+      const { data, error } = await supabase
+        .rpc('get_default_address', {
+          target_user_uuid: userId,
+          address_type_filter: addressType
+        })
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error fetching default address:', error)
+      return null
     }
   }
 }
@@ -385,7 +456,7 @@ export const pickupServices = {
           *,
           customer:profiles!pickups_customer_id_fkey(*),
           collector:profiles!pickups_collector_id_fkey(*),
-          address:addresses(*),
+          pickup_address:user_addresses!pickups_pickup_address_id_fkey(*),
           items:pickup_items(*),
           photos:pickup_photos(*),
           payment:payments(*)

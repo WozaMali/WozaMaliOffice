@@ -111,47 +111,89 @@ export default function CollectorDashboard() {
 
   const loadBasicStats = async () => {
     try {
+      // Ensure user is authenticated before proceeding
+      if (!user || !user.id) {
+        console.log('⚠️ User not authenticated, skipping stats load');
+        return;
+      }
+      
+      console.log('🔍 Loading stats for authenticated user:', user.id);
       setIsLoading(true);
       
       // Load customers from Supabase
       const customerProfiles = await profileServices.getCustomerProfilesWithAddresses();
       
-      // Transform the data to include name and address
-      const customersWithAddresses: CustomerWithAddresses[] = customerProfiles.map(profile => {
-        const primaryAddress = profile.addresses?.find(addr => addr.is_primary) || profile.addresses?.[0];
+      if (customerProfiles.length === 0) {
+        console.log('⚠️ No customer profiles found, this might be a permission issue');
+        // Set empty customers array instead of failing
+        setCustomers([]);
+        setFilteredCustomers([]);
+      } else {
+        // Transform the data to include name and address
+        const customersWithAddresses: CustomerWithAddresses[] = customerProfiles.map(profile => {
+          const primaryAddress = profile.addresses?.find(addr => addr.is_primary) || profile.addresses?.[0];
+          
+          return {
+            ...profile,
+            name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'Unknown Customer',
+            address: primaryAddress ? `${primaryAddress.line1}, ${primaryAddress.suburb}` : 'No address',
+            city: primaryAddress?.city || 'Unknown'
+          };
+        });
         
-        return {
-          ...profile,
-          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'Unknown Customer',
-          address: primaryAddress ? `${primaryAddress.line1}, ${primaryAddress.suburb}` : 'No address',
-          city: primaryAddress?.city || 'Unknown'
-        };
-      });
-      
-      setCustomers(customersWithAddresses);
-      setFilteredCustomers(customersWithAddresses);
+        setCustomers(customersWithAddresses);
+        setFilteredCustomers(customersWithAddresses);
+        console.log('✅ Loaded customers:', customersWithAddresses.length);
+      }
       
       // Load actual stats from API
-      if (!user) return;
-      
-      const { data: pickupsData } = await supabase
-        .from('pickups')
-        .select('total_kg, status')
-        .eq('collector_id', user.id);
-      
-      const totalCollections = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed').length || 0;
-      const totalKg = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed')
-        .reduce((sum: number, p: any) => sum + (p.total_kg || 0), 0) || 0;
-      const totalPoints = totalKg * 6; // 6 points per kg
-      
-      const realStats = {
-        totalCollections,
-        totalKg,
-        totalPoints
-      };
-      setStats(realStats);
+      try {
+        const { data: pickupsData, error: pickupsError } = await supabase
+          .from('pickups')
+          .select('total_kg, status')
+          .eq('collector_id', user.id);
+        
+        if (pickupsError) {
+          console.error('❌ Error fetching pickups:', pickupsError);
+          // Set default stats instead of failing
+          setStats({
+            totalCollections: 0,
+            totalKg: 0,
+            totalPoints: 0
+          });
+        } else {
+          const totalCollections = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed').length || 0;
+          const totalKg = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed')
+            .reduce((sum: number, p: any) => sum + (p.total_kg || 0), 0) || 0;
+          const totalPoints = totalKg * 6; // 6 points per kg
+          
+          const realStats = {
+            totalCollections,
+            totalKg,
+            totalPoints
+          };
+          setStats(realStats);
+          console.log('✅ Loaded pickup stats:', realStats);
+        }
+      } catch (pickupError) {
+        console.error('❌ Error loading pickup stats:', pickupError);
+        // Set default stats on error
+        setStats({
+          totalCollections: 0,
+          totalKg: 0,
+          totalPoints: 0
+        });
+      }
     } catch (error) {
-      console.error('Error loading stats:', error);
+      console.error('❌ Error loading stats:', error);
+      // Set empty defaults on error
+      setCustomers([]);
+      setFilteredCustomers([]);
+      setStats({
+        totalCollections: 0,
+        totalKg: 0,
+        totalPoints: 0
+      });
     } finally {
       setIsLoading(false);
     }

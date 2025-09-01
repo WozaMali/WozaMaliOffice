@@ -23,7 +23,7 @@ export interface Profile {
   first_name?: string
   last_name?: string
   phone?: string
-  role: 'customer' | 'collector' | 'admin'
+  role: 'member' | 'collector' | 'admin'
   is_active: boolean
   last_login?: string
   created_at: string
@@ -32,14 +32,20 @@ export interface Profile {
 
 export interface Address {
   id: string
-  profile_id: string
-  line1: string
-  suburb: string
+  user_id: string
+  address_type: 'primary' | 'secondary' | 'pickup' | 'billing'
+  address_line1: string
+  address_line2?: string
   city: string
+  province: string
   postal_code?: string
-  lat?: number
-  lng?: number
-  is_primary: boolean
+  country: string
+  coordinates?: { x: number; y: number }
+  is_default: boolean
+  is_active: boolean
+  notes?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface Material {
@@ -54,7 +60,7 @@ export interface Pickup {
   id: string
   customer_id: string
   collector_id: string
-  address_id: string
+  pickup_address_id?: string
   started_at: string
   submitted_at?: string
   lat?: number
@@ -74,8 +80,10 @@ export interface PickupItem {
   id: string
   pickup_id: string
   material_id: string
-  kilograms: number
-  contamination_pct?: number
+  quantity: number
+  unit_price: number
+  quality_rating?: number
+  notes?: string
 }
 
 export interface PickupPhoto {
@@ -102,7 +110,7 @@ export interface Payment {
 export interface PickupWithDetails extends Pickup {
   customer?: Profile
   collector?: Profile
-  address?: Address
+  pickup_address?: Address
   items?: PickupItemWithMaterial[]
   photos?: PickupPhoto[]
   payment?: Payment
@@ -152,9 +160,10 @@ export interface CustomerDashboardView {
   photo_count: number
   collector_name?: string
   collector_phone?: string
-  line1?: string
-  suburb?: string
+  address_line1?: string
+  address_line2?: string
   city?: string
+  province?: string
   postal_code?: string
 }
 
@@ -168,9 +177,10 @@ export interface CollectorDashboardView {
   customer_name?: string
   customer_email?: string
   customer_phone?: string
-  line1?: string
-  suburb?: string
+  address_line1?: string
+  address_line2?: string
   city?: string
+  province?: string
   postal_code?: string
   environmental_impact: {
     co2_saved: number
@@ -215,9 +225,10 @@ export interface AdminDashboardView {
   customer_phone?: string
   collector_name?: string
   collector_phone?: string
-  line1?: string
-  suburb?: string
+  address_line1?: string
+  address_line2?: string
   city?: string
+  province?: string
   postal_code?: string
   environmental_impact: {
     co2_saved: number

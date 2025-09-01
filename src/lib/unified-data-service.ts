@@ -223,45 +223,57 @@ export class UnifiedDataService {
       const customerIds = pickups.map(p => p.customer_id).filter((id, index, arr) => arr.indexOf(id) === index);
       const addressIds = pickups.map(p => p.address_id).filter((id, index, arr) => arr.indexOf(id) === index);
 
-      // Get customers
-      const { data: customers, error: customersError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, phone, role')
-        .in('id', customerIds);
+      // Get customers (only if we have customer IDs)
+      let customers: any[] = [];
+      if (customerIds.length > 0) {
+        const { data: customersData, error: customersError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, phone, role')
+          .in('id', customerIds);
 
-      if (customersError) {
-        return { data: [], error: customersError };
+        if (customersError) {
+          return { data: [], error: customersError };
+        }
+        customers = customersData || [];
       }
 
-      // Get addresses
-      const { data: addresses, error: addressesError } = await supabase
-        .from('addresses')
-        .select('id, line1, suburb, city, postal_code')
-        .in('id', addressIds);
+      // Get addresses (only if we have address IDs)
+      let addresses: any[] = [];
+      if (addressIds.length > 0) {
+        const { data: addressesData, error: addressesError } = await supabase
+          .from('addresses')
+          .select('id, line1, suburb, city, postal_code')
+          .in('id', addressIds);
 
-      if (addressesError) {
-        return { data: [], error: addressesError };
+        if (addressesError) {
+          return { data: [], error: addressesError };
+        }
+        addresses = addressesData || [];
       }
 
-      // Get pickup items with materials
-      const { data: pickupItems, error: itemsError } = await supabase
-        .from('pickup_items')
-        .select(`
-          id,
-          pickup_id,
-          material_id,
-          kilograms,
-          notes,
-          material:materials(
+      // Get pickup items with materials (only if we have pickup IDs)
+      let pickupItems: any[] = [];
+      if (pickupIds.length > 0) {
+        const { data: pickupItemsData, error: itemsError } = await supabase
+          .from('pickup_items')
+          .select(`
             id,
-            name,
-            rate_per_kg
-          )
-        `)
-        .in('pickup_id', pickupIds);
+            pickup_id,
+            material_id,
+            kilograms,
+            notes,
+            material:materials(
+              id,
+              name,
+              rate_per_kg
+            )
+          `)
+          .in('pickup_id', pickupIds);
 
-      if (itemsError) {
-        return { data: [], error: itemsError };
+        if (itemsError) {
+          return { data: [], error: itemsError };
+        }
+        pickupItems = pickupItemsData || [];
       }
 
       // Create lookup maps for efficient data access

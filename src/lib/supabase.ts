@@ -36,6 +36,7 @@ export interface Profile {
   created_at: string
 }
 
+// Legacy address interface (for backward compatibility)
 export interface Address {
   id: string
   profile_id: string
@@ -46,6 +47,25 @@ export interface Address {
   lat?: number
   lng?: number
   is_primary: boolean
+}
+
+// New user address interface matching the user_addresses schema
+export interface UserAddress {
+  id: string
+  user_id: string
+  address_type: 'primary' | 'secondary' | 'pickup' | 'billing'
+  address_line1: string
+  address_line2?: string
+  city: string
+  province: string
+  postal_code?: string
+  country: string
+  coordinates?: { x: number; y: number } // POINT type representation
+  is_default: boolean
+  is_active: boolean
+  notes?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface Material {
@@ -60,7 +80,8 @@ export interface Pickup {
   id: string
   customer_id: string
   collector_id: string
-  address_id: string
+  address_id?: string // Made optional to match new schema
+  pickup_address_id?: string // New field for user_addresses reference
   started_at: string
   submitted_at?: string
   lat?: number
@@ -108,7 +129,8 @@ export interface Payment {
 export interface PickupWithDetails extends Pickup {
   customer?: Profile
   collector?: Profile
-  address?: Address
+  address?: Address // Legacy address
+  pickup_address?: UserAddress // New user address
   items?: PickupItemWithMaterial[]
   photos?: PickupPhoto[]
   payment?: Payment
@@ -119,7 +141,18 @@ export interface PickupItemWithMaterial extends PickupItem {
 }
 
 export interface ProfileWithAddresses extends Profile {
-  addresses?: Address[]
+  addresses?: Address[] // Legacy addresses
+  user_addresses?: UserAddress[] // New user addresses
+}
+
+// New interface for member with user addresses
+export interface MemberWithUserAddresses extends Profile {
+  user_addresses?: UserAddress[]
+  wallet_balance?: number
+  total_points?: number
+  tier?: string
+  total_pickups?: number
+  last_pickup_date?: string
 }
 
 // NEW: Dashboard View Types

@@ -17,21 +17,20 @@ import {
   Clock,
   MapPin,
   Scale,
-  DollarSign,
+  TrendingUp,
   Calendar,
   User,
   Truck
 } from 'lucide-react';
-import { getPickups, subscribeToPickups, updatePickupStatus, formatDate, formatCurrency, formatWeight } from '@/lib/admin-services';
-import { Pickup } from '@/lib/supabase';
+import { getPickups, subscribeToPickups, updatePickupStatus, formatDate, formatCurrency, formatWeight, TransformedPickup } from '@/lib/admin-services';
 
 export default function PickupsPage() {
-  const [pickups, setPickups] = useState<Pickup[]>([]);
-  const [filteredPickups, setFilteredPickups] = useState<Pickup[]>([]);
+  const [pickups, setPickups] = useState<TransformedPickup[]>([]);
+  const [filteredPickups, setFilteredPickups] = useState<TransformedPickup[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedPickup, setSelectedPickup] = useState<Pickup | null>(null);
+  const [selectedPickup, setSelectedPickup] = useState<TransformedPickup | null>(null);
   const [approvalNote, setApprovalNote] = useState('');
 
   // Load pickups and set up real-time subscription
@@ -194,7 +193,7 @@ export default function PickupsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -374,53 +373,103 @@ export default function PickupsPage() {
       {/* Approval Modal */}
       {selectedPickup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Pickup Details</h3>
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Pickup Details</h3>
             
             <div className="space-y-3 mb-4">
-              <div>
-                <span className="font-medium">Customer:</span> {selectedPickup.customer?.full_name}
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium text-gray-700">Customer:</span> 
+                <span className="text-gray-900">{selectedPickup.customer?.full_name || 'Unknown'}</span>
               </div>
-              <div>
-                <span className="font-medium">Weight:</span> {formatWeight(selectedPickup.total_kg || 0)}
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium text-gray-700">Collector:</span> 
+                <span className="text-gray-900">{selectedPickup.collector?.full_name || 'Unassigned'}</span>
               </div>
-              <div>
-                <span className="font-medium">Value:</span> {formatCurrency(selectedPickup.total_value || 0)}
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium text-gray-700">Location:</span> 
+                <span className="text-gray-900">
+                  {selectedPickup.address?.line1}, {selectedPickup.address?.suburb}, {selectedPickup.address?.city}
+                </span>
               </div>
-              <div>
-                <span className="font-medium">Status:</span> 
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium text-gray-700">Weight:</span> 
+                <span className="text-gray-900 font-semibold">{formatWeight(selectedPickup.total_kg || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium text-gray-700">Value:</span> 
+                <span className="text-gray-900 font-semibold">{formatCurrency(selectedPickup.total_value || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium text-gray-700">Status:</span> 
                 <Badge className={`ml-2 ${getStatusBadge(selectedPickup.status)}`}>
                   {selectedPickup.status}
                 </Badge>
               </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="font-medium text-gray-700">Date:</span> 
+                <span className="text-gray-900">{formatDate(selectedPickup.created_at)}</span>
+              </div>
             </div>
+
+            {/* Pickup Items Breakdown */}
+            {selectedPickup.pickup_items && selectedPickup.pickup_items.length > 0 && (
+              <div className="mb-4">
+                <h4 className="font-medium text-gray-700 mb-3">Materials Collected:</h4>
+                <div className="bg-gray-50 rounded-lg p-3 space-y-2">
+                  {selectedPickup.pickup_items.map((item, index) => (
+                    <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
+                      <div className="flex-1">
+                        <span className="font-medium text-gray-900">
+                          {item.material?.name || 'Unknown Material'}
+                        </span>
+                        {item.contamination_pct && (
+                          <span className="text-sm text-gray-500 ml-2">
+                            ({item.contamination_pct}% contamination)
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <span className="font-semibold text-gray-900">
+                          {formatWeight(item.kilograms || 0)}
+                        </span>
+                        <div className="text-sm text-gray-500">
+                          {formatCurrency((item.kilograms || 0) * (item.material?.rate_per_kg || 0))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {selectedPickup.status === 'submitted' && (
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Approval Note (Optional)</label>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Approval Note (Optional)</label>
                 <Textarea
                   value={approvalNote}
                   onChange={(e) => setApprovalNote(e.target.value)}
                   placeholder="Add a note about this pickup..."
                   rows={3}
+                  className="border-gray-300 focus:border-blue-500 focus:ring-blue-500"
                 />
               </div>
             )}
 
             <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedPickup(null);
-                  setApprovalNote('');
-                }}
-              >
-                Close
-              </Button>
+                              <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedPickup(null);
+                    setApprovalNote('');
+                  }}
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                >
+                  Close
+                </Button>
               {selectedPickup.status === 'submitted' && (
                 <>
                   <Button
-                    className="bg-green-600 hover:bg-green-700"
+                    className="bg-green-600 hover:bg-green-700 text-white"
                     onClick={() => handleStatusUpdate(selectedPickup.id, 'approved')}
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
