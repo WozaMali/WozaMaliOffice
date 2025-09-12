@@ -32,6 +32,7 @@ const navigationItems = [
   { name: 'Users', href: '/admin/users', icon: Users, current: false },
   { name: 'Collections', href: '/admin/collections', icon: Recycle, current: false },
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, current: false },
+  { name: 'Resident Summary', href: '/admin/resident-summary', icon: Users, current: false },
   { name: 'Fund Management', href: '/admin/fund', icon: DollarSign, current: false },
   { name: 'Rewards', href: '/admin/rewards', icon: Award, current: false },
   { name: 'Withdrawals', href: '/admin/withdrawals', icon: CreditCard, current: false },

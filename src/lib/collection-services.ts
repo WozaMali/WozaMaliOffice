@@ -43,8 +43,18 @@ export async function submitLiveCollection(
   collectionData: LiveCollectionData,
   collector_id: string
 ): Promise<CollectionResult> {
+  const startTime = Date.now();
+  const TIMEOUT_MS = 45000; // 45 seconds timeout
+  
   try {
     console.log('🚀 Starting live collection submission...', collectionData);
+    
+    // Set up timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Save operation timed out. Please try again.'));
+      }, TIMEOUT_MS);
+    });
 
     // Step 1: Create the pickup record
     const { data: pickup, error: pickupError } = await supabase
@@ -71,29 +81,27 @@ export async function submitLiveCollection(
 
     console.log('✅ Pickup created:', pickup.id);
 
-    // Step 2: Create pickup items for each material
-    const pickupItems = [];
-    for (const material of collectionData.materials) {
-      const { data: item, error: itemError } = await supabase
-        .from('pickup_items')
-        .insert({
-          pickup_id: pickup.id,
-          material_id: material.material_id,
-          kilograms: material.kilograms,
-          contamination_pct: material.contamination_pct,
-          notes: material.notes
-        })
-        .select()
-        .single();
+    // Step 2: Create pickup items for all materials in batch
+    const pickupItemsData = collectionData.materials.map(material => ({
+      pickup_id: pickup.id,
+      material_id: material.material_id,
+      kilograms: material.kilograms,
+      contamination_pct: material.contamination_pct,
+      notes: material.notes
+    }));
 
-      if (itemError) {
-        console.error('❌ Error creating pickup item:', itemError);
-        throw new Error(`Failed to create pickup item: ${itemError.message}`);
-      }
+    console.log('🚀 Creating pickup items in batch...', pickupItemsData);
+    const { data: pickupItems, error: itemsError } = await supabase
+      .from('pickup_items')
+      .insert(pickupItemsData)
+      .select();
 
-      pickupItems.push(item);
-      console.log(`✅ Pickup item created for ${material.kilograms}kg of material`);
+    if (itemsError) {
+      console.error('❌ Error creating pickup items:', itemsError);
+      throw new Error(`Failed to create pickup items: ${itemsError.message}`);
     }
+
+    console.log('✅ Pickup items created:', pickupItems.length);
 
     // Step 3: Add photos if provided
     if (collectionData.scale_photo || collectionData.recyclables_photo) {
@@ -166,11 +174,29 @@ export async function submitLiveCollection(
       fund_allocation: fundAllocation
     };
 
-    console.log('🎉 Live collection submitted successfully!', result);
+    const endTime = Date.now();
+    console.log(`⏱️ Live collection submitted successfully in ${endTime - startTime}ms!`, result);
     return result;
 
   } catch (error) {
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
     console.error('❌ Error in submitLiveCollection:', error);
+    console.error(`⏱️ Operation failed after ${duration}ms`);
+    
+    if (error instanceof Error) {
+      // Check if it's a timeout error
+      if (error.message.includes('timed out') || duration >= TIMEOUT_MS) {
+        throw new Error('Save operation timed out. Please check your internet connection and try again.');
+      }
+      
+      // Check if it's a network error
+      if (error.message.includes('fetch') || error.message.includes('network')) {
+        throw new Error('Network error occurred. Please check your internet connection and try again.');
+      }
+    }
+    
     throw error;
   }
 }
@@ -230,7 +256,7 @@ async function calculateCollectionPoints(materials: CollectionMaterial[]) {
 
 /**
  * Calculate fund allocation based on material types
- * Aluminium: 100% to customer wallet
+ * Aluminum: 100% to customer wallet
  * PET/Plastic: 100% to Green Scholar Fund
  * Other materials: 70% Green Scholar, 30% Customer Wallet
  */
@@ -249,10 +275,12 @@ async function calculateFundAllocation(materials: CollectionMaterial[], totalVal
 
     if (!error && materialData) {
       const materialValue = material.kilograms * materialData.rate_per_kg;
-      
-      if (materialData.name === 'Aluminium Cans') {
+      const matName = String(materialData.name || '').trim();
+      const isAluminum = matName === 'Aluminum Cans' || matName === 'Aluminium Cans';
+      const isPet = matName === 'PET' || matName === 'PET Bottles' || matName === 'Plastic Bottles (PET)';
+      if (isAluminum) {
         aluminiumValue += materialValue;
-      } else if (materialData.name === 'PET') {
+      } else if (isPet) {
         petValue += materialValue;
       } else {
         otherValue += materialValue;

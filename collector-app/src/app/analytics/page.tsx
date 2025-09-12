@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
+import Navigation from "@/components/Navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
@@ -56,6 +57,24 @@ export default function CollectorAnalyticsPage() {
     }
   }, [user, timeRange]);
 
+  // Realtime refresh: listen on unified_collections for this collector
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel('realtime-unified-collections-analytics')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'unified_collections', filter: `collector_id=eq.${user.id}` }, () => {
+        loadAnalyticsData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'unified_collections', filter: `created_by=eq.${user.id}` }, () => {
+        loadAnalyticsData();
+      })
+      .subscribe();
+
+    return () => {
+      try { channel.unsubscribe(); } catch {}
+    };
+  }, [user?.id, timeRange]);
+
   // Redirect unauthenticated users to login
   useEffect(() => {
     if (!user) {
@@ -78,15 +97,15 @@ export default function CollectorAnalyticsPage() {
       
       if (!user) return;
       
-      // Get real analytics data from Supabase
-      const { data: pickups, error } = await supabase
-        .from('pickups')
+      // Get real analytics data from unified collections
+      const { data: collections, error } = await supabase
+        .from('unified_collections')
         .select('*')
-        .eq('collector_id', user.id)
+        .or(`collector_id.eq.${user.id},and(collector_id.is.null,created_by.eq.${user.id})`)
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching pickups:', error);
+        console.error('Error fetching collections:', error);
         return;
       }
 
@@ -95,42 +114,42 @@ export default function CollectorAnalyticsPage() {
       const currentWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      const totalCollections = pickups.filter(p => p.status === 'approved' || p.status === 'completed').length;
-      const totalKg = pickups
-        .filter(p => p.status === 'approved' || p.status === 'completed')
-        .reduce((sum, p) => sum + (p.total_kg || 0), 0);
+      const totalCollections = collections.filter(c => c.status === 'approved' || c.status === 'completed').length;
+      const totalKg = collections
+        .filter(c => c.status === 'approved' || c.status === 'completed')
+        .reduce((sum, c) => sum + (c.total_weight_kg || 0), 0);
       const totalEarnings = totalKg * 5; // R5 per kg
 
-      const monthlyCollections = pickups.filter(p => 
-        new Date(p.created_at) >= currentMonth && 
-        (p.status === 'approved' || p.status === 'completed')
+      const monthlyCollections = collections.filter(c => 
+        new Date(c.created_at) >= currentMonth && 
+        (c.status === 'approved' || c.status === 'completed')
       ).length;
-      const monthlyKg = pickups
-        .filter(p => new Date(p.created_at) >= currentMonth && (p.status === 'approved' || p.status === 'completed'))
-        .reduce((sum, p) => sum + (p.total_kg || 0), 0);
+      const monthlyKg = collections
+        .filter(c => new Date(c.created_at) >= currentMonth && (c.status === 'approved' || c.status === 'completed'))
+        .reduce((sum, c) => sum + (c.total_weight_kg || 0), 0);
       const monthlyEarnings = monthlyKg * 5;
 
-      const weeklyCollections = pickups.filter(p => 
-        new Date(p.created_at) >= currentWeek && 
-        (p.status === 'approved' || p.status === 'completed')
+      const weeklyCollections = collections.filter(c => 
+        new Date(c.created_at) >= currentWeek && 
+        (c.status === 'approved' || c.status === 'completed')
       ).length;
-      const weeklyKg = pickups
-        .filter(p => new Date(p.created_at) >= currentWeek && (p.status === 'approved' || p.status === 'completed'))
-        .reduce((sum, p) => sum + (p.total_kg || 0), 0);
+      const weeklyKg = collections
+        .filter(c => new Date(c.created_at) >= currentWeek && (c.status === 'approved' || c.status === 'completed'))
+        .reduce((sum, c) => sum + (c.total_weight_kg || 0), 0);
       const weeklyEarnings = weeklyKg * 5;
 
       const realStats = {
         totalCollections,
         totalKg,
-        totalPoints: totalCollections * 10, // 10 points per collection
+        totalPoints: totalKg, // 1kg = 1 point
         totalEarnings,
         monthlyCollections,
         monthlyKg,
-        monthlyPoints: monthlyCollections * 10,
+        monthlyPoints: monthlyKg, // 1kg = 1 point
         monthlyEarnings,
         weeklyCollections,
         weeklyKg,
-        weeklyPoints: weeklyCollections * 10,
+        weeklyPoints: weeklyKg, // 1kg = 1 point
         weeklyEarnings
       };
 
@@ -386,52 +405,8 @@ export default function CollectorAnalyticsPage() {
         </CardContent>
       </Card>
 
-      {/* Bottom Navigation Bar - Mobile Optimized - DARK GREY + ORANGE */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 z-50 md:hidden">
-        <div className="flex items-center justify-around py-2">
-          {/* Overview Tab */}
-          <Link
-            href="/"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <BarChart3 className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Overview</span>
-          </Link>
-
-          {/* Pickups Tab */}
-          <Link
-            href="/pickups"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Package className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Pickups</span>
-          </Link>
-
-          {/* Customers Tab */}
-          <Link
-            href="/customers"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Users className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Customers</span>
-          </Link>
-
-          {/* Analytics Tab */}
-          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-orange-500 text-white">
-            <TrendingUp className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Analytics</span>
-          </div>
-
-          {/* Settings Tab */}
-          <Link
-            href="/settings"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Settings className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Settings</span>
-          </Link>
-        </div>
-      </nav>
+      {/* Navigation */}
+      <Navigation />
     </div>
   );
 }

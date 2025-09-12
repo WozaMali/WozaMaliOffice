@@ -110,10 +110,10 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
       
       if (profileIds.length > 0) {
         const { data: profilesData, error: profilesErrorData } = await supabase
-          .from('profiles')
-          .select('id, full_name, phone, email, is_active')
+          .from('users')
+          .select('id, first_name, last_name, phone, email, is_active')
           .in('id', profileIds)
-          .eq('role', 'customer')
+          .eq('role_id', (await this.getRoleId('customer')))
           .eq('is_active', true);
         
         profiles = profilesData || [];
@@ -126,7 +126,13 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
       }
 
       // Create a map of profile data for quick lookup
-      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+      const profileMap = new Map(profiles?.map(p => [p.id, {
+        id: p.id,
+        full_name: `${p.first_name} ${p.last_name}`.trim(),
+        phone: p.phone,
+        email: p.email,
+        is_active: p.is_active
+      }]) || []);
 
       // Combine addresses with profile data
       const customers: CustomerSearchResult[] = addresses
@@ -156,6 +162,18 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
 }
 
 // Enhanced search function that can find customers by multiple criteria
+// Helper method to get role ID
+async function getRoleId(roleName: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('name', roleName)
+    .single()
+  
+  if (error) throw error
+  return data.id
+}
+
 export async function searchCustomersComprehensive(searchTerm: string): Promise<CustomerSearchResult[]> {
   try {
     console.log('🔍 Comprehensive customer search:', searchTerm);
@@ -166,10 +184,10 @@ export async function searchCustomersComprehensive(searchTerm: string): Promise<
 
     // Search in profiles table first (by name, email, phone)
     const { data: profilesByName, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, full_name, phone, email, is_active')
-      .eq('role', 'customer')
-      .eq('is_active', true)
+      .from('users')
+      .select('id, full_name, phone, email, status')
+      .eq('role_id', 'member') // Use member role for customers
+      .eq('status', 'active')
       .or(`full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
       .limit(20);
 
@@ -202,11 +220,11 @@ export async function searchCustomersComprehensive(searchTerm: string): Promise<
     
     if (allProfileIds.size > 0) {
       const { data: allProfilesData, error: allProfilesErrorData } = await supabase
-        .from('profiles')
-        .select('id, full_name, phone, email, is_active')
+        .from('users')
+        .select('id, full_name, phone, email, status')
         .in('id', Array.from(allProfileIds))
-        .eq('role', 'customer')
-        .eq('is_active', true);
+        .eq('role_id', 'member') // Use member role for customers
+        .eq('status', 'active');
       
       allProfiles = allProfilesData || [];
       allProfilesError = allProfilesErrorData;
@@ -275,16 +293,16 @@ export async function getCustomerById(customerId: string): Promise<Customer | nu
     console.log('🔍 Getting customer by ID:', customerId);
     
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select(`
         id,
         email,
         full_name,
         phone,
-        role,
-        is_active,
+        role_id,
+        status,
         created_at,
-        addresses!inner(
+        user_addresses!inner(
           id,
           line1,
           suburb,
@@ -294,8 +312,8 @@ export async function getCustomerById(customerId: string): Promise<Customer | nu
         )
       `)
       .eq('id', customerId)
-      .eq('role', 'customer')
-      .eq('is_active', true)
+      .eq('role_id', 'member') // Use member role for customers
+      .eq('status', 'active')
       .single();
 
     if (error) {
@@ -309,7 +327,7 @@ export async function getCustomerById(customerId: string): Promise<Customer | nu
     }
 
     // Get primary address
-    const primaryAddress = data.addresses?.find(addr => addr.is_primary) || data.addresses?.[0];
+    const primaryAddress = data.user_addresses?.find(addr => addr.is_primary) || data.user_addresses?.[0];
     
     const customer: Customer = {
       id: data.id,
@@ -323,7 +341,7 @@ export async function getCustomerById(customerId: string): Promise<Customer | nu
       suburb: primaryAddress?.suburb || '',
       city: primaryAddress?.city || '',
       postal_code: primaryAddress?.postal_code,
-      is_active: data.is_active,
+      is_active: data.status === 'active',
       created_at: data.created_at,
     };
 
@@ -341,16 +359,16 @@ export async function getAllActiveCustomers(): Promise<Customer[]> {
     console.log('🔍 Getting all active customers');
     
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select(`
         id,
         email,
         full_name,
         phone,
-        role,
-        is_active,
+        role_id,
+        status,
         created_at,
-        addresses(
+        user_addresses(
           id,
           line1,
           suburb,
@@ -359,8 +377,8 @@ export async function getAllActiveCustomers(): Promise<Customer[]> {
           is_primary
         )
       `)
-      .eq('role', 'customer')
-      .eq('is_active', true)
+      .eq('role_id', 'member') // Use member role for customers
+      .eq('status', 'active')
       .order('full_name');
 
     if (error) {
@@ -369,7 +387,7 @@ export async function getAllActiveCustomers(): Promise<Customer[]> {
     }
 
     const customers: Customer[] = data?.map(profile => {
-      const primaryAddress = profile.addresses?.find(addr => addr.is_primary) || profile.addresses?.[0];
+      const primaryAddress = profile.user_addresses?.find(addr => addr.is_primary) || profile.user_addresses?.[0];
       
       return {
         id: profile.id,
@@ -383,7 +401,7 @@ export async function getAllActiveCustomers(): Promise<Customer[]> {
         suburb: primaryAddress?.suburb || '',
         city: primaryAddress?.city || '',
         postal_code: primaryAddress?.postal_code,
-        is_active: profile.is_active,
+        is_active: profile.status === 'active',
         created_at: profile.created_at,
       };
     }) || [];

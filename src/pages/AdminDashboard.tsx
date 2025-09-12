@@ -6,7 +6,6 @@ import {
   BarChart3, 
   Users, 
   Recycle, 
-  DollarSign, 
   TrendingUp,
   Calendar,
   MapPin,

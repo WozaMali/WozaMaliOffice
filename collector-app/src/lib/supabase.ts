@@ -12,8 +12,27 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables. Please check your .env.local file.')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-console.log('✅ Supabase client created successfully')
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  },
+  db: {
+    schema: 'public'
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'collector-app'
+    }
+  },
+  // Add timeout configuration to prevent save operation timeouts
+  realtime: {
+    timeout: 30000, // 30 seconds
+    heartbeatIntervalMs: 30000
+  }
+})
+console.log('✅ Supabase client created successfully with timeout configuration')
 
 // Database types matching your new schema
 export interface Profile {
@@ -24,7 +43,7 @@ export interface Profile {
   last_name?: string
   phone?: string
   role: 'member' | 'collector' | 'admin'
-  is_active: boolean
+  active: boolean
   last_login?: string
   created_at: string
   updated_at: string
@@ -42,7 +61,7 @@ export interface Address {
   country: string
   coordinates?: { x: number; y: number }
   is_default: boolean
-  is_active: boolean
+  active: boolean
   notes?: string
   created_at: string
   updated_at: string
@@ -53,7 +72,7 @@ export interface Material {
   name: string
   unit: string
   rate_per_kg: number
-  is_active: boolean
+  active: boolean
 }
 
 export interface Pickup {
@@ -327,4 +346,115 @@ export interface CustomerPerformanceView {
   total_green_scholar_contribution: number
   total_wallet_balance: number
   last_recycling_date?: string
+}
+
+// ============================================================================
+// UNIFIED SCHEMA TYPES
+// ============================================================================
+
+// User types
+export interface User {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  date_of_birth?: string;
+  phone?: string;
+  email: string;
+  role_id: string;
+  area_id?: string;
+  street_addr?: string;
+  township_id?: string;
+  subdivision?: string;
+  city: string;
+  postal_code?: string;
+  suburb?: string; // Legacy field
+  status: 'active' | 'suspended' | 'deleted';
+  last_login?: string;
+  login_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Role types
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: any;
+  created_at: string;
+  updated_at: string;
+}
+
+// Area types
+export interface Area {
+  id: string;
+  name: string;
+  description?: string;
+  city: string;
+  province?: string;
+  postal_code: string;
+  subdivisions?: string[];
+  boundaries?: any;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Township dropdown types
+export interface TownshipDropdown {
+  id: string;
+  township_name: string;
+  postal_code: string;
+  city: string;
+  subdivisions: string[];
+}
+
+// Subdivision dropdown types
+export interface SubdivisionDropdown {
+  area_id: string;
+  township_name: string;
+  postal_code: string;
+  subdivision: string;
+}
+
+// Residents view types
+export interface Resident {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  email: string;
+  phone?: string;
+  date_of_birth?: string;
+  street_addr?: string;
+  township_id?: string;
+  township_name?: string;
+  subdivision?: string;
+  suburb?: string; // Legacy field
+  city: string;
+  postal_code?: string;
+  status: 'active' | 'suspended' | 'deleted';
+  created_at: string;
+  updated_at: string;
+  address_status: 'complete' | 'legacy' | 'incomplete';
+}
+
+// Extended types with relationships
+export interface UserWithRole extends User {
+  role?: Role;
+}
+
+export interface UserWithArea extends User {
+  area?: Area;
+}
+
+export interface UserWithTownship extends User {
+  township?: Area;
+}
+
+export interface UserComplete extends User {
+  role?: Role;
+  area?: Area;
+  township?: Area;
 }

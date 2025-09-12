@@ -10,6 +10,11 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "Woza Mali - Collector Portal",
   description: "Recycling collection management system for collectors",
+  icons: {
+    icon: "/W yellow.png",
+    shortcut: "/W yellow.png",
+    apple: "/W yellow.png",
+  },
 };
 
 export default function RootLayout({

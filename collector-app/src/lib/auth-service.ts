@@ -25,9 +25,9 @@ export class AuthService {
       if (data.user) {
         // Get profile data
         const { data: profile, error: profileError } = await supabase
-          .from('profiles')
+          .from('user_profiles')
           .select('*')
-          .eq('id', data.user.id)
+          .eq('user_id', data.user.id)
           .single();
 
         if (profileError) {
@@ -38,7 +38,7 @@ export class AuthService {
         return {
           id: profile.id,
           email: profile.email,
-          name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'Unknown',
+          name: profile.full_name || 'Unknown',
           role: profile.role,
           phone: profile.phone,
         };
@@ -123,9 +123,9 @@ export class AuthService {
 
       // Get profile data
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('*')
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .single();
 
       if (profileError) {
@@ -136,7 +136,7 @@ export class AuthService {
       return {
         id: profile.id,
         email: profile.email,
-        name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'Unknown',
+        name: profile.full_name || 'Unknown',
         role: profile.role,
         phone: profile.phone,
       };

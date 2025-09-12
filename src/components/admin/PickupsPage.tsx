@@ -20,38 +20,66 @@ import {
   TrendingUp,
   Calendar,
   User,
-  Truck
+  Truck,
+  Banknote
 } from 'lucide-react';
-import { getPickups, subscribeToPickups, updatePickupStatus, formatDate, formatCurrency, formatWeight, TransformedPickup } from '@/lib/admin-services';
+import { getPickups, subscribeToPickups, updatePickupStatus, assignCollectorToCollection, deleteCollectionDeep, clearPickupsCache, formatDate, formatCurrency, formatWeight, TransformedPickup } from '@/lib/admin-services';
+import { supabase } from '@/lib/supabase';
+
+function getDisplayName(fullName?: string, email?: string): string {
+  const cleaned = (fullName || '').trim();
+  if (cleaned) return cleaned;
+  const e = (email || '').trim();
+  if (!e) return 'Unknown';
+  const local = e.split('@')[0];
+  const parts = local.replace(/\.+|_+|-+/g, ' ').split(' ').filter(Boolean);
+  if (parts.length === 0) return e;
+  const cased = parts.map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ');
+  return cased || e;
+}
 
 export default function PickupsPage() {
   const [pickups, setPickups] = useState<TransformedPickup[]>([]);
   const [filteredPickups, setFilteredPickups] = useState<TransformedPickup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedPickup, setSelectedPickup] = useState<TransformedPickup | null>(null);
   const [approvalNote, setApprovalNote] = useState('');
+  const [fullNameByEmail, setFullNameByEmail] = useState<Record<string, string>>({});
 
   // Load pickups and set up real-time subscription
   useEffect(() => {
     loadPickups();
+    // Watchdog to avoid being stuck in loading state
+    const watchdog = setTimeout(() => {
+      if (loading) {
+        console.warn('⏱️ PickupsPage: Loading took too long, ending loading state');
+        setLoading(false);
+      }
+    }, 10000);
     
     // Subscribe to real-time changes
     const subscription = subscribeToPickups((payload) => {
+      console.log('📡 PickupsPage: Real-time update received:', payload.eventType);
       if (payload.eventType === 'INSERT') {
+        console.log('📡 PickupsPage: Adding new pickup:', payload.new.id);
         setPickups(prev => [payload.new, ...prev]);
       } else if (payload.eventType === 'UPDATE') {
+        console.log('📡 PickupsPage: Updating pickup:', payload.new.id);
         setPickups(prev => prev.map(pickup => 
           pickup.id === payload.new.id ? payload.new : pickup
         ));
       } else if (payload.eventType === 'DELETE') {
+        console.log('📡 PickupsPage: Deleting pickup:', payload.old.id);
         setPickups(prev => prev.filter(pickup => pickup.id !== payload.old.id));
       }
     });
 
     return () => {
       subscription.unsubscribe();
+      clearTimeout(watchdog);
     };
   }, []);
 
@@ -77,13 +105,80 @@ export default function PickupsPage() {
     setFilteredPickups(filtered);
   }, [pickups, searchTerm, statusFilter]);
 
+  // Backfill resident names by email from users/profiles if missing
+  useEffect(() => {
+    const fetchNames = async () => {
+      try {
+        const emails = Array.from(new Set(
+          filteredPickups.map(p => (p.customer?.email || '').trim()).filter(Boolean)
+        ));
+        const missing = emails.filter(e => !fullNameByEmail[e]);
+        if (missing.length === 0) return;
+
+        const map: Record<string, string> = { ...fullNameByEmail };
+
+        // Primary: users table
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('email, full_name, first_name, last_name')
+          .in('email', missing);
+        (usersData || []).forEach((u: any) => {
+          const v = (u.full_name && String(u.full_name).trim())
+            || `${(u.first_name||'').toString().trim()} ${(u.last_name||'').toString().trim()}`.trim();
+          if (u.email && v) map[String(u.email)] = v;
+        });
+
+        // Fallback: legacy profiles
+        const stillMissing = missing.filter(e => !map[e]);
+        if (stillMissing.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('email, full_name')
+            .in('email', stillMissing);
+          (profilesData || []).forEach((p: any) => {
+            if (p.email && p.full_name) map[String(p.email)] = String(p.full_name).trim();
+          });
+        }
+
+        if (Object.keys(map).length !== Object.keys(fullNameByEmail).length) {
+          setFullNameByEmail(map);
+        }
+      } catch (e) {
+        // ignore lookup errors
+      }
+    };
+    fetchNames();
+  }, [filteredPickups, fullNameByEmail]);
+
   const loadPickups = async () => {
     try {
+      console.log('🔄 PickupsPage: Loading pickups...');
       setLoading(true);
-      const data = await getPickups();
+      setLoadError(null);
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      );
+      
+      const dataPromise = getPickups();
+      const data = await Promise.race([dataPromise, timeoutPromise]) as TransformedPickup[];
+      
+      console.log('✅ PickupsPage: Pickups loaded:', data.length);
+      console.log('📊 PickupsPage: Sample data:', data.length > 0 ? data[0] : 'No data');
+      
       setPickups(data);
+      
+      if (data.length === 0) {
+        console.log('⚠️ PickupsPage: No pickups found - this might be normal if no data exists');
+      }
     } catch (error) {
-      console.error('Error loading pickups:', error);
+      console.error('❌ PickupsPage: Error loading pickups:', error);
+      const errorMessage = (error as any)?.message || 'Failed to load pickups';
+      setLoadError(errorMessage);
+      
+      // Set empty array to prevent undefined state
+      setPickups([]);
     } finally {
       setLoading(false);
     }
@@ -91,12 +186,35 @@ export default function PickupsPage() {
 
   const handleStatusUpdate = async (pickupId: string, newStatus: string) => {
     try {
-      await updatePickupStatus(pickupId, newStatus, approvalNote);
-      setSelectedPickup(null);
-      setApprovalNote('');
-      // Real-time update will handle the UI update
+      console.log(`🔄 Updating collection ${pickupId} to status: ${newStatus}`);
+      
+      const result = await updatePickupStatus(pickupId, newStatus, approvalNote);
+      
+      if (result) {
+        console.log('✅ Collection status updated successfully');
+        
+        // Show success message
+        if (newStatus === 'approved') {
+          alert('✅ Collection approved successfully! Customer wallet has been updated.');
+        } else if (newStatus === 'rejected') {
+          alert('❌ Collection rejected successfully.');
+        }
+        
+        // Update local state immediately
+        setPickups(prevPickups => 
+          prevPickups.map(pickup => 
+            pickup.id === pickupId 
+              ? { ...pickup, status: newStatus, admin_notes: approvalNote }
+              : pickup
+          )
+        );
+        
+        setSelectedPickup(null);
+        setApprovalNote('');
+      }
     } catch (error) {
-      console.error('Error updating pickup status:', error);
+      console.error('❌ Error updating pickup status:', error);
+      alert(`❌ Error updating collection status: ${error.message || 'Unknown error'}`);
     }
   };
 
@@ -107,8 +225,13 @@ export default function PickupsPage() {
         return `${baseClasses} bg-green-100 text-green-800`;
       case 'rejected':
         return `${baseClasses} bg-red-100 text-red-800`;
+      case 'pending':
       case 'submitted':
         return `${baseClasses} bg-yellow-100 text-yellow-800`;
+      case 'completed':
+        return `${baseClasses} bg-blue-100 text-blue-800`;
+      case 'cancelled':
+        return `${baseClasses} bg-gray-100 text-gray-800`;
       default:
         return `${baseClasses} bg-gray-100 text-gray-800`;
     }
@@ -120,8 +243,13 @@ export default function PickupsPage() {
         return <CheckCircle className="w-4 h-4 text-green-600" />;
       case 'rejected':
         return <XCircle className="w-4 h-4 text-red-600" />;
+      case 'pending':
       case 'submitted':
         return <Clock className="w-4 h-4 text-yellow-600" />;
+      case 'completed':
+        return <CheckCircle className="w-4 h-4 text-blue-600" />;
+      case 'cancelled':
+        return <XCircle className="w-4 h-4 text-gray-600" />;
       default:
         return <Clock className="w-4 h-4 text-gray-600" />;
     }
@@ -135,13 +263,30 @@ export default function PickupsPage() {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Pickups</CardTitle>
+            <CardDescription>We couldn't load pickups right now.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-red-600 mb-3">{loadError}</div>
+            <Button onClick={loadPickups} variant="outline">Retry</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Pickup Management</h1>
-          <p className="text-gray-600 mt-2">Manage and track all pickup requests</p>
+          <h1 className="text-3xl font-bold text-white">Pickup Management</h1>
+          <p className="text-white mt-2">Manage and track all pickup requests</p>
         </div>
       </div>
 
@@ -149,12 +294,12 @@ export default function PickupsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pickups</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">Total Pickups</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pickups.length}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-white">{pickups.length}</div>
+            <p className="text-xs text-white">
               All time
             </p>
           </CardContent>
@@ -162,14 +307,14 @@ export default function PickupsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">Pending</CardTitle>
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-white">
               {pickups.filter(p => p.status === 'submitted').length}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-white">
               Awaiting approval
             </p>
           </CardContent>
@@ -177,14 +322,14 @@ export default function PickupsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Weight</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">Total Weight</CardTitle>
             <Scale className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-white">
               {formatWeight(pickups.reduce((sum, p) => sum + (p.total_kg || 0), 0))}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-white">
               Recycled
             </p>
           </CardContent>
@@ -192,14 +337,14 @@ export default function PickupsPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">Total Value</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-white">
               {formatCurrency(pickups.reduce((sum, p) => sum + (p.total_value || 0), 0))}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-white">
               Generated
             </p>
           </CardContent>
@@ -209,7 +354,7 @@ export default function PickupsPage() {
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-white">
             <Filter className="w-5 h-5" />
             Filters & Search
           </CardTitle>
@@ -250,18 +395,43 @@ export default function PickupsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {filteredPickups.length === 0 ? (
+            <div className="text-center py-12">
+              <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+              <h3 className="text-lg font-medium text-white mb-2">No pickups found</h3>
+              <p className="text-gray-400 mb-4">
+                {pickups.length === 0 
+                  ? "No pickup data is available. This could mean:" 
+                  : "No pickups match your current filters."}
+              </p>
+              {pickups.length === 0 && (
+                <div className="text-sm text-gray-300 space-y-1">
+                  <p>• No collections have been submitted yet</p>
+                  <p>• Database tables may not exist or be accessible</p>
+                  <p>• Check browser console for detailed error messages</p>
+                </div>
+              )}
+              <Button 
+                onClick={loadPickups} 
+                variant="outline" 
+                className="mt-4"
+              >
+                Refresh Data
+              </Button>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Customer</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Collector</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Location</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Weight</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Value</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Resident</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Collector</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Location</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Weight</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Value</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Status</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Date</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -269,12 +439,12 @@ export default function PickupsPage() {
                   <tr key={pickup.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-400" />
+                        <User className="w-4 h-4 text-white" />
                         <div>
-                          <div className="font-medium text-gray-900">
-                            {pickup.customer?.full_name || 'Unknown'}
+                          <div className="font-medium text-white">
+                            {fullNameByEmail[pickup.customer?.email || ''] || getDisplayName(pickup.customer?.full_name, pickup.customer?.email)}
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-white">
                             {pickup.customer?.email}
                           </div>
                         </div>
@@ -282,37 +452,38 @@ export default function PickupsPage() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <Truck className="w-4 h-4 text-gray-400" />
+                        <Truck className="w-4 h-4 text-white" />
                         <div>
-                          <div className="font-medium text-gray-900">
+                          <div className="font-medium text-white">
                             {pickup.collector?.full_name || 'Unassigned'}
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-white">
                             {pickup.collector?.email}
                           </div>
                         </div>
                       </div>
+                      {/* Removed manual Collector ID input per request */}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        <div className="text-sm">
+                        <MapPin className="w-4 h-4 text-white" />
+                        <div className="text-sm text-white">
                           {pickup.address?.line1}, {pickup.address?.suburb}
                         </div>
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <Scale className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">
+                        <Scale className="w-4 h-4 text-white" />
+                        <span className="font-medium text-white">
                           {formatWeight(pickup.total_kg || 0)}
                         </span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">
+                        <Banknote className="w-4 h-4 text-white" />
+                        <span className="font-medium text-white">
                           {formatCurrency(pickup.total_value || 0)}
                         </span>
                       </div>
@@ -325,9 +496,9 @@ export default function PickupsPage() {
                         </div>
                       </Badge>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-500">
+                    <td className="py-3 px-4 text-sm text-white">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
+                        <Calendar className="w-4 h-4 text-white" />
                         {formatDate(pickup.created_at)}
                       </div>
                     </td>
@@ -340,7 +511,28 @@ export default function PickupsPage() {
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
-                        {pickup.status === 'submitted' && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={async () => {
+                            const confirmed = typeof window !== 'undefined' ? window.confirm('Delete this collection and all related records?') : true;
+                            if (!confirmed) return;
+                            // Optimistic remove
+                            const prev = pickups;
+                            setPickups(p => p.filter(x => x.id !== pickup.id));
+                            const ok = await deleteCollectionDeep(pickup.id);
+                            if (!ok) {
+                              setPickups(prev);
+                              alert('Failed to delete collection');
+                            } else {
+                              try { clearPickupsCache(); } catch {}
+                              try { await loadPickups(); } catch {}
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
+                        {(pickup.status === 'pending' || pickup.status === 'submitted') && (
                           <>
                             <Button
                               variant="outline"
@@ -367,6 +559,7 @@ export default function PickupsPage() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -378,8 +571,8 @@ export default function PickupsPage() {
             
             <div className="space-y-3 mb-4">
               <div className="flex justify-between items-center py-2 border-b border-gray-100">
-                <span className="font-medium text-gray-700">Customer:</span> 
-                <span className="text-gray-900">{selectedPickup.customer?.full_name || 'Unknown'}</span>
+                <span className="font-medium text-gray-700">Resident:</span> 
+                <span className="text-gray-900">{fullNameByEmail[selectedPickup.customer?.email || ''] || getDisplayName(selectedPickup.customer?.full_name, selectedPickup.customer?.email)}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-100">
                 <span className="font-medium text-gray-700">Collector:</span> 
@@ -466,7 +659,7 @@ export default function PickupsPage() {
                 >
                   Close
                 </Button>
-              {selectedPickup.status === 'submitted' && (
+              {(selectedPickup.status === 'pending' || selectedPickup.status === 'submitted') && (
                 <>
                   <Button
                     className="bg-green-600 hover:bg-green-700 text-white"

@@ -179,11 +179,11 @@ export class UnifiedDataService {
     offset?: number;
   }): Promise<{ data: UnifiedPickup[]; error: any }> {
     try {
-      // First, get the basic pickup data
+      // First, get the basic collection data from unified schema
       let query = supabase
-        .from('pickups')
+        .from('unified_collections')
         .select('*')
-        .order('started_at', { ascending: false });
+        .order('created_at', { ascending: false });
 
       // Apply filters
       if (filters?.status) {
@@ -196,10 +196,10 @@ export class UnifiedDataService {
         query = query.eq('collector_id', filters.collector_id);
       }
       if (filters?.date_from) {
-        query = query.gte('started_at', filters.date_from);
+        query = query.gte('created_at', filters.date_from);
       }
       if (filters?.date_to) {
-        query = query.lte('started_at', filters.date_to);
+        query = query.lte('created_at', filters.date_to);
       }
       if (filters?.limit) {
         query = query.limit(filters.limit);
@@ -208,26 +208,26 @@ export class UnifiedDataService {
         query = query.range(filters.offset, (filters.offset || 0) + (filters.limit || 50) - 1);
       }
 
-      const { data: pickups, error: pickupsError } = await query;
+      const { data: collections, error: collectionsError } = await query;
 
-      if (pickupsError) {
-        return { data: [], error: pickupsError };
+      if (collectionsError) {
+        return { data: [], error: collectionsError };
       }
 
-      if (!pickups || pickups.length === 0) {
+      if (!collections || collections.length === 0) {
         return { data: [], error: null };
       }
 
       // Now get the related data separately to avoid foreign key constraint issues
-      const pickupIds = pickups.map(p => p.id);
-      const customerIds = pickups.map(p => p.customer_id).filter((id, index, arr) => arr.indexOf(id) === index);
-      const addressIds = pickups.map(p => p.address_id).filter((id, index, arr) => arr.indexOf(id) === index);
+      const collectionIds = collections.map(c => c.id);
+      const customerIds = collections.map(c => c.customer_id).filter((id, index, arr) => arr.indexOf(id) === index);
+      const addressIds = collections.map(c => c.pickup_address_id).filter((id, index, arr) => arr.indexOf(id) === index);
 
       // Get customers (only if we have customer IDs)
       let customers: any[] = [];
       if (customerIds.length > 0) {
         const { data: customersData, error: customersError } = await supabase
-          .from('profiles')
+          .from('user_profiles')
           .select('id, full_name, email, phone, role')
           .in('id', customerIds);
 
@@ -241,8 +241,8 @@ export class UnifiedDataService {
       let addresses: any[] = [];
       if (addressIds.length > 0) {
         const { data: addressesData, error: addressesError } = await supabase
-          .from('addresses')
-          .select('id, line1, suburb, city, postal_code')
+          .from('user_addresses')
+          .select('id, address_line1, city, province, postal_code')
           .in('id', addressIds);
 
         if (addressesError) {
@@ -251,58 +251,56 @@ export class UnifiedDataService {
         addresses = addressesData || [];
       }
 
-      // Get pickup items with materials (only if we have pickup IDs)
-      let pickupItems: any[] = [];
-      if (pickupIds.length > 0) {
-        const { data: pickupItemsData, error: itemsError } = await supabase
-          .from('pickup_items')
+      // Get collection materials (only if we have collection IDs)
+      let collectionMaterials: any[] = [];
+      if (collectionIds.length > 0) {
+        const { data: materialsData, error: itemsError } = await supabase
+          .from('collection_materials')
           .select(`
             id,
-            pickup_id,
+            collection_id,
             material_id,
-            kilograms,
-            notes,
-            material:materials(
-              id,
-              name,
-              rate_per_kg
-            )
+            quantity,
+            unit,
+            unit_price,
+            material_name,
+            material_category
           `)
-          .in('pickup_id', pickupIds);
+          .in('collection_id', collectionIds);
 
         if (itemsError) {
           return { data: [], error: itemsError };
         }
-        pickupItems = pickupItemsData || [];
+        collectionMaterials = materialsData || [];
       }
 
       // Create lookup maps for efficient data access
       const customersMap = new Map(customers?.map(c => [c.id, c]) || []);
       const addressesMap = new Map(addresses?.map(a => [a.id, a]) || []);
-      const itemsMap = new Map();
+      const materialsMap = new Map();
       
-      // Group items by pickup_id
-      pickupItems?.forEach(item => {
-        if (!itemsMap.has(item.pickup_id)) {
-          itemsMap.set(item.pickup_id, []);
+      // Group materials by collection_id
+      collectionMaterials?.forEach(material => {
+        if (!materialsMap.has(material.collection_id)) {
+          materialsMap.set(material.collection_id, []);
         }
-        itemsMap.get(item.pickup_id).push(item);
+        materialsMap.get(material.collection_id).push(material);
       });
 
       // Process and unify the data
-      const unifiedPickups: UnifiedPickup[] = pickups.map(pickup => {
-        const customer = customersMap.get(pickup.customer_id);
-        const address = addressesMap.get(pickup.address_id);
-        const items = itemsMap.get(pickup.id) || [];
+      const unifiedPickups: UnifiedPickup[] = collections.map(collection => {
+        const customer = customersMap.get(collection.customer_id);
+        const address = addressesMap.get(collection.pickup_address_id);
+        const materials = materialsMap.get(collection.id) || [];
 
-        const processedItems = items.map((item: any) => ({
-          id: item.id,
-          material_id: item.material_id,
-          material_name: item.material?.name || 'Unknown',
-          kilograms: item.kilograms || 0,
-          rate_per_kg: item.material?.rate_per_kg || 0,
-          value: (item.kilograms || 0) * (item.material?.rate_per_kg || 0),
-          notes: item.notes
+        const processedItems = materials.map((material: any) => ({
+          id: material.id,
+          material_id: material.material_id,
+          material_name: material.material_name || 'Unknown',
+          kilograms: material.quantity || 0,
+          rate_per_kg: material.unit_price || 0,
+          value: (material.quantity || 0) * (material.unit_price || 0),
+          notes: material.condition_notes
         }));
 
         // Calculate environmental impact
@@ -315,32 +313,32 @@ export class UnifiedDataService {
         };
 
         return {
-          id: pickup.id,
-          customer_id: pickup.customer_id,
-          collector_id: pickup.collector_id,
-          status: pickup.status,
-          started_at: pickup.started_at,
-          submitted_at: pickup.submitted_at,
-          completed_at: pickup.completed_at,
-          total_kg: pickup.total_kg,
-          total_value: pickup.total_value,
-          notes: pickup.notes,
+          id: collection.id,
+          customer_id: collection.customer_id,
+          collector_id: collection.collector_id,
+          status: collection.status,
+          started_at: collection.created_at, // Use created_at as started_at
+          submitted_at: collection.created_at,
+          completed_at: collection.completed_at,
+          total_kg: collection.total_weight_kg,
+          total_value: collection.total_value,
+          notes: collection.customer_notes || collection.collector_notes,
           customer: {
-            id: customer?.id || '',
-            full_name: customer?.full_name || 'Unknown',
-            email: customer?.email || '',
-            phone: customer?.phone || ''
+            id: customer?.id || collection.customer_id || '',
+            full_name: customer?.full_name || collection.customer_name || 'Unknown',
+            email: customer?.email || collection.customer_email || '',
+            phone: customer?.phone || collection.customer_phone || ''
           },
           address: {
-            line1: address?.line1 || '',
-            suburb: address?.suburb || '',
+            line1: address?.address_line1 || collection.pickup_address || '',
+            suburb: '', // Not available in unified schema
             city: address?.city || '',
             postal_code: address?.postal_code || ''
           },
           items: processedItems,
           environmental_impact,
-          created_at: pickup.created_at,
-          updated_at: pickup.updated_at
+          created_at: collection.created_at,
+          updated_at: collection.updated_at
         };
       });
 
@@ -359,23 +357,23 @@ export class UnifiedDataService {
   }): Promise<{ data: UnifiedCustomer[]; error: any }> {
     try {
       let query = supabase
-        .from('profiles')
+        .from('user_profiles')
         .select(`
           *,
-          addresses(
+          user_addresses(
             id,
-            line1,
-            suburb,
+            address_line1,
             city,
+            province,
             postal_code,
-            is_primary
+            is_default
           )
         `)
-        .eq('role', 'CUSTOMER')
+        .eq('role', 'member')
         .order('full_name', { ascending: true });
 
       if (filters?.is_active !== undefined) {
-        query = query.eq('is_active', filters.is_active);
+        query = query.eq('status', filters.is_active ? 'active' : 'inactive');
       }
       if (filters?.limit) {
         query = query.limit(filters.limit);
@@ -393,16 +391,16 @@ export class UnifiedDataService {
       // Get additional statistics for each customer
       const customersWithStats = await Promise.all(
         (data || []).map(async (customer) => {
-          const { data: pickups } = await supabase
-            .from('pickups')
-            .select('id, status, started_at, total_kg, total_value')
+          const { data: collections } = await supabase
+            .from('unified_collections')
+            .select('id, status, created_at, total_weight_kg, total_value')
             .eq('customer_id', customer.id)
-            .order('started_at', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(5);
 
-          const totalPickups = pickups?.length || 0;
-          const totalKg = pickups?.reduce((sum, p) => sum + (p.total_kg || 0), 0) || 0;
-          const totalValue = pickups?.reduce((sum, p) => sum + (p.total_value || 0), 0) || 0;
+          const totalPickups = collections?.length || 0;
+          const totalKg = collections?.reduce((sum, c) => sum + (c.total_weight_kg || 0), 0) || 0;
+          const totalValue = collections?.reduce((sum, c) => sum + (c.total_value || 0), 0) || 0;
           const totalCO2 = totalKg * 2.5;
 
           return {
@@ -416,8 +414,8 @@ export class UnifiedDataService {
             total_kg_recycled: totalKg,
             total_value_earned: totalValue,
             total_co2_saved: totalCO2,
-            addresses: customer.addresses || [],
-            recent_pickups: pickups || [],
+            addresses: customer.user_addresses || [],
+            recent_pickups: collections || [],
             created_at: customer.created_at,
             updated_at: customer.updated_at
           };
@@ -439,13 +437,13 @@ export class UnifiedDataService {
   }): Promise<{ data: UnifiedCollector[]; error: any }> {
     try {
       let query = supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('*')
-        .eq('role', 'COLLECTOR')
+        .eq('role', 'collector')
         .order('full_name', { ascending: true });
 
       if (filters?.is_active !== undefined) {
-        query = query.eq('is_active', filters.is_active);
+        query = query.eq('status', filters.is_active ? 'active' : 'inactive');
       }
       if (filters?.limit) {
         query = query.limit(filters.limit);
@@ -463,43 +461,43 @@ export class UnifiedDataService {
       // Get additional statistics for each collector
       const collectorsWithStats = await Promise.all(
         (data || []).map(async (collector) => {
-          // Get pickups for this collector with simple queries to avoid foreign key issues
-          const { data: pickups } = await supabase
-            .from('pickups')
-            .select('id, status, started_at, total_kg, total_value, customer_id, address_id')
+          // Get collections for this collector with simple queries to avoid foreign key issues
+          const { data: collections } = await supabase
+            .from('unified_collections')
+            .select('id, status, created_at, total_weight_kg, total_value, customer_id, pickup_address_id')
             .eq('collector_id', collector.id)
-            .order('started_at', { ascending: false });
+            .order('created_at', { ascending: false });
 
-          const totalAssigned = pickups?.length || 0;
-          const totalCompleted = pickups?.filter(p => p.status === 'completed').length || 0;
-          const totalKg = pickups?.reduce((sum, p) => sum + (p.total_kg || 0), 0) || 0;
-          const totalValue = pickups?.reduce((sum, p) => sum + (p.total_value || 0), 0) || 0;
+          const totalAssigned = collections?.length || 0;
+          const totalCompleted = collections?.filter(c => c.status === 'completed').length || 0;
+          const totalKg = collections?.reduce((sum, c) => sum + (c.total_weight_kg || 0), 0) || 0;
+          const totalValue = collections?.reduce((sum, c) => sum + (c.total_value || 0), 0) || 0;
 
           // Get customer and address information separately to avoid join issues
-          const customerIds = pickups?.map(p => p.customer_id).filter((id, index, arr) => arr.indexOf(id) === index) || [];
-          const addressIds = pickups?.map(p => p.address_id).filter((id, index, arr) => arr.indexOf(id) === index && id !== null) || [];
+          const customerIds = collections?.map(c => c.customer_id).filter((id, index, arr) => arr.indexOf(id) === index) || [];
+          const addressIds = collections?.map(c => c.pickup_address_id).filter((id, index, arr) => arr.indexOf(id) === index && id !== null) || [];
 
           const [customersResult, addressesResult] = await Promise.all([
-            customerIds.length > 0 ? supabase.from('profiles').select('id, full_name').in('id', customerIds) : { data: [], error: null },
-            addressIds.length > 0 ? supabase.from('addresses').select('id, line1, suburb, city').in('id', addressIds) : { data: [], error: null }
+            customerIds.length > 0 ? supabase.from('user_profiles').select('id, full_name').in('id', customerIds) : { data: [], error: null },
+            addressIds.length > 0 ? supabase.from('user_addresses').select('id, address_line1, city').or(addressIds.map((id: string) => `id.eq.${id}`).join(',')) : { data: [], error: null }
           ]);
 
           const customersMap = new Map(customersResult.data?.map(c => [c.id, c]) || []);
           const addressesMap = new Map(addressesResult.data?.map(a => [a.id, a]) || []);
 
-          const activePickups = pickups
-            ?.filter(p => ['submitted', 'approved', 'in_progress'].includes(p.status))
-            .map(p => {
-              const customer = customersMap.get(p.customer_id);
-              const address = addressesMap.get(p.address_id);
+          const activePickups = collections
+            ?.filter(c => ['pending', 'approved', 'in_progress'].includes(c.status))
+            .map(c => {
+              const customer = customersMap.get(c.customer_id);
+              const address = addressesMap.get(c.pickup_address_id);
               
               return {
-                id: p.id,
+                id: c.id,
                 customer_name: customer?.full_name || 'Unknown',
-                address: address ? `${address.line1 || ''}, ${address.suburb || ''}, ${address.city || ''}` : 'No address',
-                status: p.status,
-                started_at: p.started_at,
-                total_kg: p.total_kg
+                address: address ? `${address.address_line1 || ''}, ${address.city || ''}` : 'No address',
+                status: c.status,
+                started_at: c.created_at,
+                total_kg: c.total_weight_kg
               };
             }) || [];
 
@@ -533,42 +531,42 @@ export class UnifiedDataService {
     try {
       const [
         profilesResult,
-        pickupsResult,
-        pickupItemsResult,
+        collectionsResult,
+        collectionMaterialsResult,
         activeProfilesResult
       ] = await Promise.all([
-        supabase.from('profiles').select('id, role, is_active'),
-        supabase.from('pickups').select('*'),
-        supabase.from('pickup_items').select('kilograms'),
-        supabase.from('profiles').select('id, role').eq('is_active', true)
+        supabase.from('user_profiles').select('id, role, status'),
+        supabase.from('unified_collections').select('*'),
+        supabase.from('collection_materials').select('quantity'),
+        supabase.from('user_profiles').select('id, role').eq('status', 'active')
       ]);
 
-      if (profilesResult.error || pickupsResult.error || pickupItemsResult.error || activeProfilesResult.error) {
+      if (profilesResult.error || collectionsResult.error || collectionMaterialsResult.error || activeProfilesResult.error) {
         throw new Error('Failed to fetch system data');
       }
 
       const profiles = profilesResult.data || [];
-      const pickups = pickupsResult.data || [];
-      const pickupItems = pickupItemsResult.data || [];
+      const collections = collectionsResult.data || [];
+      const collectionMaterials = collectionMaterialsResult.data || [];
       const activeProfiles = activeProfilesResult.data || [];
 
       // Calculate system statistics
-      const totalKgRecycled = pickupItems.reduce((sum, item) => sum + (item.kilograms || 0), 0);
-      const totalValueGenerated = pickupItems.reduce((sum, item) => sum + (item.kilograms || 0) * 1.5, 0);
+      const totalKgRecycled = collectionMaterials.reduce((sum, item) => sum + (item.quantity || 0), 0);
+      const totalValueGenerated = collections.reduce((sum, c) => sum + (c.total_value || 0), 0);
       const totalCO2Saved = totalKgRecycled * 2.5;
 
-      const customersCount = profiles.filter(p => p.role === 'CUSTOMER').length;
-      const collectorsCount = profiles.filter(p => p.role === 'COLLECTOR').length;
-      const adminsCount = profiles.filter(p => ['ADMIN', 'STAFF'].includes(p.role)).length;
+      const customersCount = profiles.filter(p => p.role === 'member').length;
+      const collectorsCount = profiles.filter(p => p.role === 'collector').length;
+      const adminsCount = profiles.filter(p => ['admin', 'office'].includes(p.role)).length;
 
-      const pendingPickups = pickups.filter(p => p.status === 'submitted').length;
-      const approvedPickups = pickups.filter(p => p.status === 'approved').length;
-      const inProgressPickups = pickups.filter(p => p.status === 'in_progress').length;
-      const completedPickups = pickups.filter(p => p.status === 'completed').length;
-      const rejectedPickups = pickups.filter(p => p.status === 'rejected').length;
+      const pendingPickups = collections.filter(c => c.status === 'pending').length;
+      const approvedPickups = collections.filter(c => c.status === 'approved').length;
+      const inProgressPickups = collections.filter(c => c.status === 'in_progress').length;
+      const completedPickups = collections.filter(c => c.status === 'completed').length;
+      const rejectedPickups = collections.filter(c => c.status === 'rejected').length;
 
-      const averagePickupValue = pickups.length > 0 ? totalValueGenerated / pickups.length : 0;
-      const averagePickupWeight = pickups.length > 0 ? totalKgRecycled / pickups.length : 0;
+      const averagePickupValue = collections.length > 0 ? totalValueGenerated / collections.length : 0;
+      const averagePickupWeight = collections.length > 0 ? totalKgRecycled / collections.length : 0;
 
       // Determine system health
       let systemHealth: 'excellent' | 'good' | 'warning' | 'critical' = 'excellent';
@@ -577,7 +575,7 @@ export class UnifiedDataService {
 
       const stats: UnifiedSystemStats = {
         total_users: profiles.length,
-        total_pickups: pickups.length,
+        total_pickups: collections.length,
         total_kg_recycled: totalKgRecycled,
         total_value_generated: totalValueGenerated,
         total_co2_saved: totalCO2Saved,
@@ -593,7 +591,7 @@ export class UnifiedDataService {
         average_pickup_weight: averagePickupWeight,
         system_health: systemHealth,
         last_sync: new Date().toISOString(),
-        active_collectors: activeProfiles.filter(p => p.role === 'COLLECTOR').length,
+        active_collectors: activeProfiles.filter(p => p.role === 'collector').length,
         realtime_connections: 3 // Pickups, items, profiles
       };
 
@@ -612,16 +610,16 @@ export class UnifiedDataService {
   }) {
     const channels: any[] = [];
 
-    // Pickups channel
+    // Collections channel
     if (callbacks.onPickupChange) {
-      const pickupsChannel = supabase
-        .channel('unified_pickups_changes')
+      const collectionsChannel = supabase
+        .channel('unified_collections_changes')
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'pickups' }, 
+          { event: '*', schema: 'public', table: 'unified_collections' }, 
           callbacks.onPickupChange
         )
         .subscribe();
-      channels.push(pickupsChannel);
+      channels.push(collectionsChannel);
     }
 
     // Customers channel
@@ -629,9 +627,9 @@ export class UnifiedDataService {
       const customersChannel = supabase
         .channel('unified_customers_changes')
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'profiles' }, 
+          { event: '*', schema: 'public', table: 'user_profiles' }, 
           (payload: any) => {
-            if (payload.new?.role === 'CUSTOMER' || payload.old?.role === 'CUSTOMER') {
+            if (payload.new?.role === 'member' || payload.old?.role === 'member') {
               callbacks.onCustomerChange!(payload);
             }
           }
@@ -645,9 +643,9 @@ export class UnifiedDataService {
       const collectorsChannel = supabase
         .channel('unified_collectors_changes')
         .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'profiles' }, 
+          { event: '*', schema: 'public', table: 'user_profiles' }, 
           (payload: any) => {
-            if (payload.new?.role === 'COLLECTOR' || payload.old?.role === 'COLLECTOR') {
+            if (payload.new?.role === 'collector' || payload.old?.role === 'collector') {
               callbacks.onCollectorChange!(payload);
             }
           }

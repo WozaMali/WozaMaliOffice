@@ -6,11 +6,11 @@ export async function getCollectorIdByEmail(email: string): Promise<string | nul
     console.log('🔍 Looking up collector ID for email:', email);
     
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id')
       .eq('email', email)
-      .eq('role', 'collector')
-      .eq('is_active', true)
+      .eq('role_id', 'collector')
+      .eq('status', 'active')
       .single();
     
     if (error) {
@@ -43,8 +43,9 @@ export async function testSupabaseConnection() {
     
     // Test with a simple query that should work
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id')
+      .eq('role_id', 'collector')
       .limit(1);
     
     if (error) {

@@ -1,7 +1,6 @@
-import AdminDashboardClient from './AdminDashboardClient';
+'use client';
 
-// Force dynamic rendering to prevent SSR issues
-export const dynamic = 'force-dynamic';
+import AdminDashboardClient from './AdminDashboardClient';
 
 export default function AdminDashboard() {
   return <AdminDashboardClient />;

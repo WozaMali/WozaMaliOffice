@@ -37,25 +37,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch user profile from database
+  // Fetch user profile from unified schema first, fallback to legacy profiles table
   const fetchProfile = async (userId: string) => {
     try {
-      console.log('🔍 Fetching profile for user:', userId);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
+      console.log('🔍 Fetching profile for user (unified users/roles):', userId);
+      const { data: unifiedUser, error: unifiedError } = await supabase
+        .from('users')
+        .select('id, email, full_name, phone, status, role_id')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('❌ Error fetching profile:', error);
-        return null;
+      if (!unifiedError && unifiedUser) {
+        console.log('✅ Unified user profile fetched:', unifiedUser.id);
+        const mapped: Profile = {
+          id: unifiedUser.id,
+          email: unifiedUser.email,
+          full_name: unifiedUser.full_name || '',
+          phone: unifiedUser.phone || undefined,
+          role: (typeof unifiedUser.role_id === 'string' && unifiedUser.role_id) || 'resident',
+          is_active: (unifiedUser.status || 'active') === 'active',
+          created_at: new Date().toISOString(),
+        };
+        return mapped;
       }
 
-      console.log('✅ Profile fetched successfully:', data);
-      return data as Profile;
+      // Fallback to legacy profiles table if it exists, otherwise build minimal profile from session
+      console.log('ℹ️ Falling back to legacy profiles for user:', userId, unifiedError);
+      try {
+        const { data: legacyProfile, error: legacyError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (!legacyError && legacyProfile) {
+          console.log('✅ Legacy profile fetched successfully:', legacyProfile.id);
+          return legacyProfile as Profile;
+        }
+        if (legacyError) {
+          console.warn('⚠️ Legacy profiles not available, using minimal session profile');
+        }
+      } catch (e) {
+        console.warn('⚠️ Legacy profiles table missing, using minimal session profile');
+      }
+
+      // Minimal profile derived from session when tables are missing
+      const { data: { session } } = await supabase.auth.getSession();
+      const email = session?.user?.email || '';
+      const roleGuess = email.toLowerCase().includes('superadmin@wozamali.co.za')
+        ? 'super_admin'
+        : (email.toLowerCase().includes('admin@wozamali.com') ? 'admin' : 'resident');
+      return {
+        id: userId,
+        email,
+        full_name: '',
+        phone: undefined,
+        role: roleGuess,
+        is_active: true,
+        created_at: new Date().toISOString(),
+      } as Profile;
     } catch (err) {
       console.error('❌ Error in fetchProfile:', err);
+      // As a last resort build minimal profile from current session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        return {
+          id: session.user.id,
+          email: session.user.email || '',
+          full_name: '',
+          phone: undefined,
+          role: 'resident',
+          is_active: true,
+          created_at: new Date().toISOString(),
+        } as Profile;
+      }
       return null;
     }
   };
@@ -113,7 +168,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               id: data.user.id,
               email: data.user.email!,
               full_name: profileData.full_name || '',
-              role: profileData.role || 'customer',
+              role: profileData.role || 'resident',
               is_active: true,
             }
           ]);

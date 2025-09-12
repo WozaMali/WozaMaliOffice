@@ -17,10 +17,16 @@ import {
   UserCheck,
   UserX,
   Mail,
-  Phone
+  Phone,
+  Eye,
+  MoreVertical
 } from 'lucide-react';
-import { getUsers, subscribeToUsers, updateUserRole, formatDate } from '@/lib/admin-services';
+import { getUsers, subscribeToUsers, updateUserRole, deleteUser, formatDate } from '@/lib/admin-services';
 import { Profile } from '@/lib/supabase';
+import EditUserModal from './EditUserModal';
+import UserDetailsModal from './UserDetailsModal';
+import ConfirmDialog from './ConfirmDialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<Profile[]>([]);
@@ -29,6 +35,12 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  
+  // Modal states
+  const [editUser, setEditUser] = useState<Profile | null>(null);
+  const [viewUser, setViewUser] = useState<Profile | null>(null);
+  const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Load users and set up real-time subscription
   useEffect(() => {
@@ -94,8 +106,10 @@ export default function UsersPage() {
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
-      await updateUserRole(userId, newRole, true);
-      // Real-time update will handle the UI update
+      const user = users.find(u => u.id === userId);
+      if (user) {
+        await updateUserRole(userId, newRole, user.is_active);
+      }
     } catch (error) {
       console.error('Error updating user role:', error);
     }
@@ -109,6 +123,22 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('Error updating user status:', error);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUser) return;
+
+    setDeleteLoading(true);
+    try {
+      await deleteUser(deleteUser.id);
+      setDeleteUser(null);
+      // Real-time update will handle the UI update
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Failed to delete user. Please try again.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -331,16 +361,56 @@ export default function UsersPage() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
+                        {/* Status Toggle */}
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleStatusToggle(user.id, user.is_active)}
+                          title={user.is_active ? 'Deactivate User' : 'Activate User'}
                         >
                           {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                         </Button>
-                        <Button variant="outline" size="sm">
-                          <Edit className="w-4 h-4" />
-                        </Button>
+
+                        {/* Role Change Dropdown */}
+                        <Select
+                          value={user.role}
+                          onValueChange={(newRole) => handleRoleChange(user.id, newRole)}
+                        >
+                          <SelectTrigger className="w-24 h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Admin</SelectItem>
+                            <SelectItem value="collector">Collector</SelectItem>
+                            <SelectItem value="customer">Customer</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        {/* Actions Dropdown */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <MoreVertical className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setViewUser(user)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setEditUser(user)}>
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => setDeleteUser(user)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete User
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
@@ -350,6 +420,34 @@ export default function UsersPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modals */}
+      <EditUserModal
+        user={editUser}
+        isOpen={!!editUser}
+        onClose={() => setEditUser(null)}
+        onSuccess={() => {
+          setEditUser(null);
+          // Real-time update will handle the UI update
+        }}
+      />
+
+      <UserDetailsModal
+        user={viewUser}
+        isOpen={!!viewUser}
+        onClose={() => setViewUser(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteUser}
+        onClose={() => setDeleteUser(null)}
+        onConfirm={handleDeleteUser}
+        title="Delete User"
+        description={`Are you sure you want to delete ${deleteUser?.full_name || deleteUser?.email}? This action cannot be undone.`}
+        confirmText="Delete User"
+        confirmVariant="destructive"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

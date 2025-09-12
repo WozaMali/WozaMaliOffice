@@ -61,26 +61,23 @@ export class PickupService {
   static async getPickupById(pickupId: string): Promise<PickupWithDetails | null> {
     try {
       const { data, error } = await supabase
-        .from('pickups')
+        .from('unified_collections')
         .select(`
           *,
-          customer:profiles!pickups_customer_id_fkey(*),
-          collector:profiles!pickups_collector_id_fkey(*),
-          address:addresses(*),
-          items:pickup_items(*),
-          photos:pickup_photos(*)
+          items:collection_materials(*),
+          photos:collection_photos(*)
         `)
         .eq('id', pickupId)
         .single();
 
       if (error) {
-        console.error('Error fetching pickup:', error);
+        console.error('Error fetching collection:', error);
         return null;
       }
 
       return data;
     } catch (error) {
-      console.error('Error fetching pickup:', error);
+      console.error('Error fetching collection:', error);
       return null;
     }
   }
@@ -91,9 +88,17 @@ export class PickupService {
       console.log('1. Pickup data:', pickupData);
       console.log('2. Collector ID:', collectorId);
       
+      // Clean customer ID (remove "profile-" prefix if present)
+      const cleanCustomerId = pickupData.customer_id.startsWith('profile-') 
+        ? pickupData.customer_id.replace('profile-', '') 
+        : pickupData.customer_id;
+      
+      console.log('🔍 Original customer ID:', pickupData.customer_id);
+      console.log('🔍 Clean customer ID:', cleanCustomerId);
+      
       // Start transaction
       console.log('4. Attempting to insert pickup with data:', {
-        customer_id: pickupData.customer_id,
+        customer_id: cleanCustomerId,
         collector_id: collectorId,
         address_id: pickupData.address_id,
         started_at: new Date().toISOString(),
@@ -102,53 +107,61 @@ export class PickupService {
         lng: pickupData.lng,
       });
       
-      const { data: pickup, error: pickupError } = await supabase
-        .from('pickups')
+      const totalKg = pickupData.materials.reduce((sum, m) => sum + m.kilograms, 0);
+      const { data: collection, error: collectionError } = await supabase
+        .from('unified_collections')
         .insert({
-          customer_id: pickupData.customer_id,
+          customer_id: cleanCustomerId,
           collector_id: collectorId,
-          address_id: pickupData.address_id,
-          started_at: new Date().toISOString(),
+          pickup_address_id: pickupData.address_id,
+          total_weight_kg: totalKg,
           status: 'submitted',
-          lat: pickupData.lat,
-          lng: pickupData.lng,
+          admin_notes: pickupData.notes ?? null
         })
         .select('id')
         .single();
 
-      console.log('5. Supabase response:', { pickup, pickupError });
+      console.log('5. Supabase response:', { collection, collectionError });
 
-      if (pickupError) {
-        console.error('🚨 PICKUP ERROR DETECTED! 🚨');
-        console.error('Raw pickupError:', pickupError);
-        console.error('pickupError type:', typeof pickupError);
-        console.error('pickupError === null:', pickupError === null);
-        console.error('pickupError === undefined:', pickupError === undefined);
-        console.error('pickupError === {}:', JSON.stringify(pickupError) === '{}');
-        console.error('pickupError keys:', Object.keys(pickupError));
-        console.error('pickupError length:', Object.keys(pickupError).length);
-        console.error('pickupError stringified:', JSON.stringify(pickupError, null, 2));
-        console.error('pickupError message:', pickupError?.message);
-        console.error('pickupError code:', pickupError?.code);
-        console.error('pickupError details:', pickupError?.details);
-        console.error('pickupError hint:', pickupError?.hint);
-        console.error('Full error object:', pickupError);
+      if (collectionError) {
+        console.error('🚨 COLLECTION ERROR DETECTED! 🚨');
+        console.error('Raw collectionError:', collectionError);
+        console.error('collectionError type:', typeof collectionError);
+        console.error('collectionError === null:', collectionError === null);
+        console.error('collectionError === undefined:', collectionError === undefined);
+        console.error('collectionError === {}:', JSON.stringify(collectionError) === '{}');
+        console.error('collectionError keys:', Object.keys(collectionError));
+        console.error('collectionError length:', Object.keys(collectionError).length);
+        console.error('collectionError stringified:', JSON.stringify(collectionError, null, 2));
+        console.error('collectionError message:', collectionError?.message);
+        console.error('collectionError code:', collectionError?.code);
+        console.error('collectionError details:', collectionError?.details);
+        console.error('collectionError hint:', collectionError?.hint);
+        console.error('Full error object:', collectionError);
         return null;
       }
 
-      // Create pickup items
-      const pickupItems = pickupData.materials.map(material => ({
-        pickup_id: pickup.id,
+      // Fetch material rates
+      const materialIds = Array.from(new Set(pickupData.materials.map(m => m.material_id)));
+      const { data: mats } = await supabase
+        .from('materials')
+        .select('id, rate_per_kg, current_rate')
+        .in('id', materialIds);
+      const idToRate = new Map((mats || []).map((m: any) => [String(m.id), Number(m.current_rate ?? m.rate_per_kg) || 0]));
+
+      // Create collection materials
+      const items = pickupData.materials.map(material => ({
+        collection_id: collection.id,
         material_id: material.material_id,
-        kilograms: material.kilograms,
-        contamination_pct: material.contamination_pct || 0,
+        quantity: material.kilograms,
+        unit_price: idToRate.get(String(material.material_id)) || 0
       }));
 
       console.log('3. Pickup items to create:', pickupItems);
 
       const { error: itemsError } = await supabase
-        .from('pickup_items')
-        .insert(pickupItems);
+        .from('collection_materials')
+        .insert(items);
 
       if (itemsError) {
         console.error('Error creating pickup items from Supabase:', {
@@ -161,12 +174,12 @@ export class PickupService {
           errorDetails: itemsError?.details || 'No details',
           hint: itemsError?.hint || 'No hint'
         });
-        // Rollback pickup creation
-        await supabase.from('pickups').delete().eq('id', pickup.id);
+        // Rollback collection creation
+        await supabase.from('unified_collections').delete().eq('id', collection.id);
         return null;
       }
 
-      return pickup.id;
+      return collection.id;
     } catch (error) {
       console.error('Error creating pickup:', error);
       return null;
@@ -175,38 +188,56 @@ export class PickupService {
 
   static async updatePickupStatus(pickupId: string, status: 'submitted' | 'approved' | 'rejected', notes?: string): Promise<boolean> {
     try {
+      if (status === 'approved' || status === 'rejected') {
+        const { data: authData, error: authErr } = await supabase.auth.getUser();
+        if (authErr || !authData?.user?.id) return false;
+        if (status === 'approved') {
+          const { error } = await supabase.rpc('approve_collection', {
+            p_collection_id: pickupId,
+            p_approver_id: authData.user.id,
+            p_note: notes ?? null,
+            p_idempotency_key: null
+          });
+          if (error) return false;
+        } else {
+          const { error } = await supabase.rpc('reject_collection', {
+            p_collection_id: pickupId,
+            p_approver_id: authData.user.id,
+            p_note: notes ?? null
+          });
+          if (error) return false;
+        }
+        return true;
+      }
+
       const { error } = await supabase
-        .from('pickups')
-        .update({
-          status,
-          approval_note: notes,
-          submitted_at: status === 'approved' ? new Date().toISOString() : null,
-        })
+        .from('unified_collections')
+        .update({ status, admin_notes: notes ?? null })
         .eq('id', pickupId);
 
       if (error) {
-        console.error('Error updating pickup status:', error);
+        console.error('Error updating collection status:', error);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('Error updating pickup status:', error);
+      console.error('Error updating collection status:', error);
       return false;
     }
   }
 
   static async addPickupPhoto(pickupId: string, photoUrl: string, type: 'scale' | 'bags' | 'other', lat?: number, lng?: number): Promise<boolean> {
     try {
+      const mappedType = type === 'other' ? 'general' : 'verification';
       const { error } = await supabase
-        .from('pickup_photos')
+        .from('collection_photos')
         .insert({
-          pickup_id: pickupId,
-          url: photoUrl,
-          taken_at: new Date().toISOString(),
-          type,
-          lat,
-          lng,
+          collection_id: pickupId,
+          photo_url: photoUrl,
+          photo_type: mappedType,
+          uploaded_at: new Date().toISOString(),
+          uploaded_by: null
         });
 
       if (error) {
@@ -283,22 +314,21 @@ export class PickupService {
       // Test connection first
       console.log('3. Testing basic connection...');
       const { data: testData, error: testError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('id')
         .limit(1);
       
       console.log('4. Connection test result:', { testData, testError });
       
-      console.log('5. Fetching member profiles...');
+      console.log('5. Fetching member users...');
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select(`
           id,
-          email,
-          full_name,
+          name,
           phone
         `)
-        .eq('role', 'member');
+        .eq('role', 'resident');
 
       console.log('6. Main query result:', { data, error });
       

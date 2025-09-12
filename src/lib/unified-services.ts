@@ -213,7 +213,7 @@ export const materialServices = {
         .from('materials')
         .select(`
           *,
-          category:material_categories(*)
+          category:materials(*)
         `)
         .eq('active', true)
         .order('name')
@@ -249,7 +249,7 @@ export const materialServices = {
   async getMaterialCategories(): Promise<any[]> {
     try {
       const { data, error } = await supabase
-        .from('material_categories')
+        .from('materials')
         .select('*')
         .eq('active', true)
         .order('sort_order')
@@ -392,14 +392,23 @@ export const walletAdminServices = {
   // Get user wallet details
   async getUserWallet(userId: string): Promise<UserWallet | null> {
     try {
-      const { data, error } = await supabase
+      // Try unified table then fallback to legacy wallets
+      let resp = await supabase
         .from('user_wallets')
         .select('*')
         .eq('user_id', userId)
-        .single()
+        .maybeSingle()
+      if (resp.error && (resp.error.code === 'PGRST205' || resp.error.message?.includes("Could not find the table 'public.user_wallets'"))) {
+        console.warn('⚠️ user_wallets not found, falling back to wallets')
+        resp = await supabase
+          .from('wallets')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle()
+      }
+      if (resp.error) throw resp.error
 
-      if (error) throw error
-      return data
+      return resp.data as any
     } catch (error) {
       console.error('Error fetching user wallet:', error)
       return null

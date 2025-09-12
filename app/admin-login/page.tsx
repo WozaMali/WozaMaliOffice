@@ -21,8 +21,8 @@ import { useAuth } from "@/hooks/use-auth";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@wozamali.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,9 +30,11 @@ export default function AdminLoginPage() {
   
   const { login, isLoading: authLoading, user, profile } = useAuth();
 
-  // If user is already logged in and has admin role, redirect to admin dashboard
+  // If user is already logged in and has admin or super_admin role, redirect to admin dashboard
   useEffect(() => {
-    if (user && profile && profile.role === 'admin') {
+    const role = profile?.role?.toLowerCase?.();
+    const isAdmin = role === 'admin' || role === 'super_admin' || (user?.email?.toLowerCase?.() === 'admin@wozamali.com');
+    if (user && isAdmin) {
       console.log('AdminLogin: Admin user already logged in, redirecting to admin dashboard');
       router.push('/admin');
     }
@@ -52,7 +54,9 @@ export default function AdminLoginPage() {
       
       if (result.success) {
         // Check if user has admin role
-        if (profile && profile.role === 'admin') {
+        const role = profile?.role?.toLowerCase?.();
+        const nextIsAdmin = role === 'admin' || role === 'super_admin' || (user?.email?.toLowerCase?.() === 'admin@wozamali.com');
+        if (nextIsAdmin) {
           setSuccess('Login successful! Redirecting to admin dashboard...');
           console.log('AdminLogin: Admin login successful, setting redirect timer...');
           
@@ -91,7 +95,9 @@ export default function AdminLoginPage() {
       
       if (result.success) {
         // Check if user has admin role
-        if (profile && profile.role === 'admin') {
+        const role = profile?.role?.toLowerCase?.();
+        const nextIsAdmin = role === 'admin' || role === 'super_admin' || (user?.email?.toLowerCase?.() === 'admin@wozamali.com');
+        if (nextIsAdmin) {
           setSuccess('Demo login successful! Redirecting to admin dashboard...');
           console.log('AdminLogin: Demo admin login successful, setting redirect timer...');
           
@@ -133,15 +139,7 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Back Button */}
-        <Button
-          variant="ghost"
-          onClick={() => router.push('/')}
-          className="mb-6 text-gray-600 hover:text-gray-800"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Home
-        </Button>
+        {/* Back Button removed */}
 
         {/* Login Card */}
         <Card className="shadow-2xl border-0">
@@ -173,19 +171,7 @@ export default function AdminLoginPage() {
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {/* Demo Credentials Info */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start space-x-2">
-                <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm">
-                  <p className="font-medium text-blue-800 mb-1">Demo Credentials Available</p>
-                  <p className="text-blue-700">
-                    Email: <span className="font-mono">admin@wozamali.com</span><br/>
-                    Password: <span className="font-mono">admin123</span>
-                  </p>
-                </div>
-              </div>
-            </div>
+            {/* Demo info removed */}
 
             {/* Error Message */}
             {error && (
@@ -266,22 +252,7 @@ export default function AdminLoginPage() {
                   )}
                 </Button>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleDemoLogin}
-                  className="w-full border-blue-300 text-blue-700 hover:bg-blue-50 font-medium py-2.5"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Logging In...
-                    </>
-                  ) : (
-                    'Quick Demo Login'
-                  )}
-                </Button>
+                {/* Demo login removed */}
               </div>
             </form>
 

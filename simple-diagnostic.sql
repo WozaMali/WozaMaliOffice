@@ -1,43 +1,70 @@
--- Simple diagnostic script - should work in any PostgreSQL version
--- Run this in Supabase SQL Editor to check basic connectivity
+-- Simple diagnostic - check table structure
+-- This script checks the actual table structure and permissions
 
--- Test 1: Basic connection
-SELECT 'Connection test' as test, 'OK' as status;
-
--- Test 2: Check if profiles table exists
+-- Step 1: Check user_profiles table structure
+SELECT 'USER_PROFILES TABLE COLUMNS:' as info;
 SELECT 
-  'Profiles table exists' as test,
-  CASE 
-    WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'profiles') 
-    THEN 'YES' 
-    ELSE 'NO' 
-  END as status;
+    column_name,
+    data_type,
+    is_nullable
+FROM information_schema.columns 
+WHERE table_name = 'user_profiles' 
+AND table_schema = 'public'
+ORDER BY ordinal_position;
 
--- Test 3: Count profiles
+-- Step 2: Check admin users
+SELECT 'ADMIN USERS:' as info;
 SELECT 
-  'Total profiles' as test,
-  COUNT(*)::text as status
-FROM profiles;
+    id,
+    email,
+    role,
+    created_at
+FROM public.user_profiles 
+WHERE role = 'admin'
+ORDER BY created_at;
 
--- Test 4: Check roles
+-- Step 3: Check pending pickups
+SELECT 'PENDING PICKUPS:' as info;
 SELECT 
-  'Available roles' as test,
-  string_agg(role, ', ') as status
-FROM (
-  SELECT DISTINCT role FROM profiles
-) roles;
+    id,
+    collection_code,
+    customer_name,
+    status,
+    total_weight_kg,
+    total_value,
+    customer_id
+FROM public.unified_collections
+WHERE status = 'pending'
+ORDER BY created_at DESC;
 
--- Test 5: Check if addresses table exists
+-- Step 4: Check permissions
+SELECT 'UNIFIED_COLLECTIONS PERMISSIONS:' as info;
 SELECT 
-  'Addresses table exists' as test,
-  CASE 
-    WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'addresses') 
-    THEN 'YES' 
-    ELSE 'NO' 
-  END as status;
+    grantee,
+    privilege_type
+FROM information_schema.table_privileges 
+WHERE table_name = 'unified_collections' 
+AND table_schema = 'public'
+ORDER BY grantee, privilege_type;
 
--- Test 6: Count addresses
+SELECT 'USER_WALLETS PERMISSIONS:' as info;
 SELECT 
-  'Total addresses' as test,
-  COUNT(*)::text as status
-FROM addresses;
+    grantee,
+    privilege_type
+FROM information_schema.table_privileges 
+WHERE table_name = 'user_wallets' 
+AND table_schema = 'public'
+ORDER BY grantee, privilege_type;
+
+-- Step 5: Check wallet function
+SELECT 'WALLET FUNCTION:' as info;
+SELECT 
+    routine_name,
+    routine_type,
+    data_type
+FROM information_schema.routines 
+WHERE routine_name = 'update_wallet_simple' 
+AND routine_schema = 'public';
+
+-- Step 6: Success message
+SELECT 'DIAGNOSTIC COMPLETE!' as result;

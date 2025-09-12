@@ -43,7 +43,7 @@ export async function testSupabaseConnection() {
   
   try {
     const { data, error } = await supabase
-      .from('profiles')
+      .from('users')
       .select('count')
       .limit(1);
     
@@ -69,8 +69,11 @@ export async function getUsers(): Promise<Profile[]> {
   
   try {
     const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
+      .from('users')
+      .select(`
+        *,
+        roles!role_id(name)
+      `)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -83,7 +86,19 @@ export async function getUsers(): Promise<Profile[]> {
       console.log('📋 Sample user data:', data[0]);
     }
     
-    return data || [];
+    // Transform unified users data to Profile format for compatibility
+    const profiles = data?.map(user => ({
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
+      phone: user.phone,
+      role: user.roles?.name || user.role_id || 'member',
+      is_active: user.status === 'active',
+      created_at: user.created_at,
+      updated_at: user.updated_at
+    })) || [];
+    
+    return profiles;
   } catch (error) {
     console.error('❌ Exception in getUsers:', error);
     throw error;
@@ -92,8 +107,8 @@ export async function getUsers(): Promise<Profile[]> {
 
 export function subscribeToUsers(callback: RealtimeCallback<Profile>) {
   return supabase
-    .channel('profiles_changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+    .channel('users_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
       callback({ new: payload.new as Profile, old: payload.old as Profile, eventType: payload.eventType });
     })
     .subscribe();
@@ -101,8 +116,8 @@ export function subscribeToUsers(callback: RealtimeCallback<Profile>) {
 
 export async function updateUserRole(userId: string, role: string, isActive: boolean) {
   const { error } = await supabase
-    .from('profiles')
-    .update({ role, is_active: isActive })
+    .from('users')
+    .update({ role_id: role, status: isActive ? 'active' : 'suspended' })
     .eq('id', userId);
 
   if (error) throw error;
@@ -130,14 +145,14 @@ export async function getPickups(): Promise<TransformedPickup[]> {
     // Fetch customer profiles separately (using user_id instead of customer_id)
     const customerIds = Array.from(new Set(pickupsData?.map(p => p.user_id).filter(Boolean) || []));
     const { data: customerProfiles } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id, full_name, email, phone')
       .in('id', customerIds);
 
     // Fetch collector profiles separately (using collector_id if it exists, otherwise null)
     const collectorIds = Array.from(new Set(pickupsData?.map(p => p.collector_id).filter(Boolean) || []));
     const { data: collectorProfiles } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id, full_name, email, phone')
       .in('id', collectorIds);
 
@@ -263,7 +278,7 @@ export async function updatePickupStatus(pickupId: string, status: string, appro
     let customerInfo = null;
     if (pickupData.user_id) {
       const { data: customerData } = await supabase
-        .from('profiles')
+        .from('users')
         .select('id, full_name, email')
         .eq('id', pickupData.user_id)
         .single();
@@ -321,7 +336,7 @@ export async function getPayments(): Promise<Payment[]> {
     // Fetch customer profiles for the pickups (using user_id instead of customer_id)
     const customerIds = Array.from(new Set(pickups?.map(p => p.user_id).filter(Boolean) || []));
     const { data: customerProfiles } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id, full_name, email, phone')
       .in('id', customerIds);
 
@@ -431,7 +446,7 @@ export async function getRecentActivity(limit: number = 20) {
       // Fetch customer names for the pickups
       const customerIds = Array.from(new Set(recentPickups.map(p => p.user_id).filter(Boolean)));
       const { data: customerProfiles } = await supabase
-        .from('profiles')
+        .from('users')
         .select('id, full_name')
         .in('id', customerIds);
 
@@ -470,7 +485,7 @@ export async function getRecentActivity(limit: number = 20) {
 
     // Get recent user registrations
     const { data: recentUsers, error: usersError } = await supabase
-      .from('profiles')
+      .from('users')
       .select('id, full_name, email, role, created_at')
       .order('created_at', { ascending: false })
       .limit(5);

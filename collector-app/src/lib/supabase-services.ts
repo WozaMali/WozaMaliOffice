@@ -79,7 +79,7 @@ export const profileServices = {
         .from('profiles')
         .select('*')
         .eq('role', role)
-        .eq('is_active', true)
+        .eq('active', true)
 
       if (error) throw error
       return data || []
@@ -89,105 +89,65 @@ export const profileServices = {
     }
   },
 
-  // Get customer profiles with their addresses using the new view
+  // Get customer profiles with their addresses using the same approach as Main App
   async getCustomerProfilesWithAddresses(): Promise<ProfileWithAddresses[]> {
     try {
-      console.log('🔍 Debug - Starting getCustomerProfilesWithAddresses with new schema...');
+      console.log('🔍 Debug - Starting getCustomerProfilesWithAddresses...');
+      console.log('🔍 Debug - Service function called at:', new Date().toISOString());
       
-      // Use the new collection member user addresses view
-      console.log('🔍 Debug - Using collection_member_user_addresses_view...');
-      const { data, error } = await supabase
-        .from('collection_member_user_addresses_view')
-        .select('*');
+      // First, get all customer profiles
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'member')
+        .eq('active', true);
 
-      if (error) {
-        console.error('❌ Error fetching from collection_member_user_addresses_view:', error);
-        throw error;
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        return [];
       }
 
-      console.log('📊 Raw data from view:', { 
-        count: data?.length || 0, 
-        sample: data?.slice(0, 2),
-        // Debug name fields specifically
-        name_fields_sample: data?.slice(0, 2).map(row => ({
-          member_id: row.member_id,
-          member_email: row.member_email,
-          member_name: row.member_name,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          username: row.username,
-          member_phone: row.member_phone,
-          role: row.role
-        }))
+      console.log('✅ Profiles fetched:', profiles?.length || 0);
+
+      if (!profiles || profiles.length === 0) {
+        console.log('⚠️ No profiles found');
+        return [];
+      }
+
+      // Then, get all addresses for these profiles
+      const profileIds = profiles.map(p => p.id);
+      const { data: addresses, error: addressesError } = await supabase
+        .from('user_addresses')
+        .select('*')
+        .in('user_id', profileIds)
+        .eq('active', true);
+
+      if (addressesError) {
+        console.error('❌ Error fetching addresses:', addressesError);
+        return [];
+      }
+
+      console.log('✅ Addresses fetched:', addresses?.length || 0);
+
+      // Combine profiles with their addresses
+      const profilesWithAddresses: ProfileWithAddresses[] = profiles.map(profile => {
+        const profileAddresses = addresses?.filter(addr => addr.user_id === profile.id) || [];
+        
+        console.log(`Profile ${profile.email} has ${profileAddresses.length} addresses`);
+        
+        return {
+          ...profile,
+          addresses: profileAddresses
+        };
       });
 
-      // Transform the data to group addresses by member and convert to old format
-      const memberMap = new Map<string, ProfileWithAddresses>()
+      console.log('✅ Profiles with addresses combined:', profilesWithAddresses.length);
+      console.log('🔍 Debug - Service function completed at:', new Date().toISOString());
       
-      data?.forEach((row: any) => {
-        const memberId = row.member_id
-        
-        if (!memberMap.has(memberId)) {
-          // Create member record using the correct field names from the view
-          memberMap.set(memberId, {
-            id: row.member_id,
-            email: row.member_email, // Use member_email from view
-            first_name: row.first_name, // Now available in updated view
-            last_name: row.last_name, // Now available in updated view
-            phone: row.member_phone, // Use member_phone from view
-            role: row.role, // Use role from view
-            is_active: row.member_is_active, // Use is_active from view
-            created_at: row.member_since, // Use created_at from view
-            updated_at: row.member_since, // Use created_at as updated_at
-            addresses: [] // Use addresses property for compatibility
-          })
-        }
-        
-        // Add address to member
-        const member = memberMap.get(memberId)!
-        if (row.address_id) {
-          member.addresses!.push({
-            id: row.address_id,
-            user_id: row.member_id, // Use user_id as per new schema
-            address_type: row.address_type,
-            address_line1: row.address_line1,
-            address_line2: row.address_line2,
-            city: row.city,
-            province: row.province,
-            postal_code: row.postal_code,
-            country: row.country,
-            coordinates: row.coordinates,
-            is_default: row.is_default,
-            is_active: row.address_is_active,
-            notes: row.notes,
-            created_at: row.address_created,
-            updated_at: row.address_updated
-          })
-        }
-      })
-      
-      const result = Array.from(memberMap.values())
-      console.log('✅ Transformed data for collector app:', { 
-        memberCount: result.length, 
-        sample: result.slice(0, 1),
-        // Debug name fields in final result
-        name_fields_final: result.slice(0, 1).map(member => ({
-          id: member.id,
-          email: member.email,
-          first_name: member.first_name,
-          last_name: member.last_name,
-          username: member.username,
-          role: member.role
-        }))
-      });
-      
-      return result
+      return profilesWithAddresses;
     } catch (error) {
       console.error('❌ Error fetching customer profiles with addresses:', error)
-      
-      // Fallback: Use separate queries
-      console.log('🔄 Using fallback approach...');
-      return await this.getCustomerProfilesWithAddressesFallback();
+      return [];
     }
   },
 
@@ -210,7 +170,7 @@ export const profileServices = {
         .from('profiles')
         .select('*')
         .eq('role', 'member')
-        .eq('is_active', true);
+        .eq('active', true);
 
       if (profilesError) {
         console.error('❌ Error fetching profiles in fallback:', profilesError);
@@ -222,24 +182,33 @@ export const profileServices = {
         return [];
       }
 
+      console.log('✅ Found profiles:', profiles.length);
+
       // Get all user addresses
       const { data: userAddresses, error: addressesError } = await supabase
         .from('user_addresses')
-        .select('*');
+        .select('*')
+        .eq('active', true); // Only get active addresses
 
       if (addressesError) {
         console.error('❌ Error fetching user_addresses in fallback:', addressesError);
         return [];
       }
 
+      console.log('✅ Found addresses:', userAddresses?.length || 0);
+
       // Combine profiles with their addresses in old format
       const profilesWithAddresses: ProfileWithAddresses[] = profiles.map(profile => {
         const memberAddresses = userAddresses?.filter(addr => addr.user_id === profile.id) || [];
         
+        console.log(`Profile ${profile.email} has ${memberAddresses.length} addresses`);
+        console.log(`Profile ${profile.email} ID: ${profile.id}`);
+        console.log(`Available addresses:`, userAddresses?.map(addr => ({ id: addr.id, user_id: addr.user_id, address_line1: addr.address_line1 })));
+        
         // Use new address format
         const formattedAddresses = memberAddresses.map(addr => ({
           id: addr.id,
-          user_id: addr.user_id,
+          user_id: addr.user_id, // Use user_id directly
           address_type: addr.address_type,
           address_line1: addr.address_line1,
           address_line2: addr.address_line2,
@@ -267,6 +236,21 @@ export const profileServices = {
         combinedCount: profilesWithAddresses.length 
       });
 
+      // Log detailed information about each profile
+      profilesWithAddresses.forEach(profile => {
+        console.log(`Profile ${profile.email}:`, {
+          id: profile.id,
+          name: `${profile.first_name} ${profile.last_name}`,
+          addressCount: profile.addresses?.length || 0,
+          addresses: profile.addresses?.map(addr => ({
+            id: addr.id,
+            address_line1: addr.address_line1,
+            city: addr.city,
+            is_default: addr.is_default
+          }))
+        });
+      });
+
       return profilesWithAddresses;
     } catch (error) {
       console.error('❌ Error in fallback approach:', error);
@@ -284,7 +268,7 @@ export const addressServices = {
         .from('user_addresses')
         .select('*')
         .eq('user_id', profileId)
-        .eq('is_active', true)
+        .eq('active', true)
         .order('is_default', { ascending: false })
 
       if (error) throw error
@@ -388,7 +372,7 @@ export const materialServices = {
       const { data, error } = await supabase
         .from('materials')
         .select('*')
-        .eq('is_active', true)
+        .eq('active', true)
         .order('name')
 
       if (error) throw error
@@ -419,30 +403,39 @@ export const materialServices = {
 
 // Pickup Services
 export const pickupServices = {
-  // Create a new pickup
+  // Create a new pickup (collection)
   async createPickup(pickupData: Omit<Pickup, 'id' | 'started_at'>): Promise<Pickup | null> {
     try {
       console.log('Supabase createPickup called with:', pickupData);
       
+      // Clean customer ID (remove "profile-" prefix if present)
+      const cleanCustomerId = pickupData.customer_id.startsWith('profile-') 
+        ? pickupData.customer_id.replace('profile-', '') 
+        : pickupData.customer_id;
+      
       const { data, error } = await supabase
-        .from('pickups')
+        .from('collections')
         .insert([{
-          ...pickupData,
-          started_at: new Date().toISOString(),
-          status: 'submitted'
+          user_id: cleanCustomerId,
+          collector_id: pickupData.collector_id,
+          pickup_address_id: pickupData.address_id,
+          material_type: 'Aluminum Cans',
+          weight_kg: 0, // Will be calculated from pickup items
+          status: 'submitted',
+          notes: pickupData.notes
         }])
         .select()
         .single()
 
       if (error) {
-        console.error('Supabase error creating pickup:', error);
+        console.error('Supabase error creating collection:', error);
         throw error;
       }
       
-      console.log('Pickup created successfully:', data);
+      console.log('Collection created successfully:', data);
       return data
     } catch (error) {
-      console.error('Error creating pickup:', error)
+      console.error('Error creating collection:', error)
       throw error; // Re-throw to let the caller handle it
     }
   },
@@ -451,15 +444,14 @@ export const pickupServices = {
   async getPickupWithDetails(pickupId: string): Promise<PickupWithDetails | null> {
     try {
       const { data, error } = await supabase
-        .from('pickups')
+        .from('collections')
         .select(`
           *,
-          customer:profiles!pickups_customer_id_fkey(*),
-          collector:profiles!pickups_collector_id_fkey(*),
-          pickup_address:user_addresses!pickups_pickup_address_id_fkey(*),
+          customer:users!collections_user_id_fkey(*),
+          collector:users!collections_collector_id_fkey(*),
+          pickup_address:user_addresses!collections_pickup_address_id_fkey(*),
           items:pickup_items(*),
-          photos:pickup_photos(*),
-          payment:payments(*)
+          photos:pickup_photos(*)
         `)
         .eq('id', pickupId)
         .single()
@@ -467,7 +459,7 @@ export const pickupServices = {
       if (error) throw error
       return data
     } catch (error) {
-      console.error('Error fetching pickup with details:', error)
+      console.error('Error fetching collection with details:', error)
       return null
     }
   },
@@ -476,15 +468,15 @@ export const pickupServices = {
   async getPickupsByCustomer(customerId: string): Promise<Pickup[]> {
     try {
       const { data, error } = await supabase
-        .from('pickups')
+        .from('collections')
         .select('*')
-        .eq('customer_id', customerId)
-        .order('started_at', { ascending: false })
+        .eq('user_id', customerId)
+        .order('created_at', { ascending: false })
 
       if (error) throw error
       return data || []
     } catch (error) {
-      console.error('Error fetching customer pickups:', error)
+      console.error('Error fetching customer collections:', error)
       return []
     }
   },
@@ -493,15 +485,15 @@ export const pickupServices = {
   async getPickupsByCollector(collectorId: string): Promise<Pickup[]> {
     try {
       const { data, error } = await supabase
-        .from('pickups')
+        .from('collections')
         .select('*')
         .eq('collector_id', collectorId)
-        .order('started_at', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (error) throw error
       return data || []
     } catch (error) {
-      console.error('Error fetching collector pickups:', error)
+      console.error('Error fetching collector collections:', error)
       return []
     }
   },
@@ -510,17 +502,17 @@ export const pickupServices = {
   async updatePickupStatus(pickupId: string, status: Pickup['status'], approvalNote?: string): Promise<boolean> {
     try {
       const updateData: any = { status }
-      if (approvalNote) updateData.approval_note = approvalNote
+      if (approvalNote) updateData.notes = approvalNote
 
       const { error } = await supabase
-        .from('pickups')
+        .from('collections')
         .update(updateData)
         .eq('id', pickupId)
 
       if (error) throw error
       return true
     } catch (error) {
-      console.error('Error updating pickup status:', error)
+      console.error('Error updating collection status:', error)
       return false
     }
   },
@@ -530,13 +522,13 @@ export const pickupServices = {
     try {
       const { error } = await supabase
         .from('pickups')
-        .update({ submitted_at: new Date().toISOString() })
+        .update({ status: 'submitted' })
         .eq('id', pickupId)
 
       if (error) throw error
       return true
     } catch (error) {
-      console.error('Error submitting pickup:', error)
+      console.error('Error submitting collection:', error)
       return false
     }
   },
@@ -548,7 +540,7 @@ export const pickupServices = {
       if (paymentMethod) updateData.payment_method = paymentMethod
 
       const { error } = await supabase
-        .from('pickups')
+        .from('collections')
         .update(updateData)
         .eq('id', pickupId)
 

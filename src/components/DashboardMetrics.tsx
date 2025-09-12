@@ -101,7 +101,7 @@ export function DashboardMetrics() {
       
       // First, test basic connection without auth
       const { data: testData, error: testError } = await supabase
-        .from('profiles')
+        .from('users')
         .select('count')
         .limit(1);
       
@@ -122,7 +122,7 @@ export function DashboardMetrics() {
         pickupItemsResult
       ] = await Promise.all([
         supabase.from('pickups').select('*'),
-        supabase.from('profiles').select('id, role'),
+        supabase.from('users').select('id, role_id'),
         supabase.from('pickup_items').select('kilograms, material:materials(rate_per_kg)')
       ]);
 

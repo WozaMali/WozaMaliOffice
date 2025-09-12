@@ -1,323 +1,143 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import Navigation from "@/components/Navigation";
+import { CollectorDashboardService, type CollectorStats, type RecentPickup, type Township, type CustomerByTownship } from "@/lib/collector-dashboard-service";
+import { ResidentService, type Resident } from "@/lib/resident-service";
 import { 
   Package, 
-  Target, 
-  Leaf, 
-  DollarSign, 
-  Play,
-  Users,
-  BarChart3,
-  Loader2,
-  TrendingUp,
-  X,
+  Users, 
+  TrendingUp, 
+  DollarSign,
+  Calendar,
+  MapPin,
   Plus,
   Search,
-  Camera,
-  Trash2,
-  Settings
+  Loader2,
+  X
 } from "lucide-react";
-import { useTheme } from "@/hooks/use-theme";
-import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/lib/supabase";
-import Link from "next/link";
-import { profileServices } from "@/lib/supabase-services";
-import type { ProfileWithAddresses } from "@/lib/supabase";
+import CollectionModal from "@/components/CollectionModal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
-// Customer data will be loaded from API
-interface CustomerWithAddresses extends ProfileWithAddresses {
-  name: string;
-  address: string;
-  city: string;
-}
-
-export default function CollectorDashboard() {
-  const { theme } = useTheme();
+export default function DashboardPage() {
   const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
-    totalCollections: 0,
-    totalKg: 0,
-    totalPoints: 0
-  });
-  const [showLiveCollection, setShowLiveCollection] = useState(false);
-  const [selectedMaterial, setSelectedMaterial] = useState('aluminium');
-  const [weight, setWeight] = useState(0);
-  
-  // New state for customer search and photo capture
-  const [searchTerm, setSearchTerm] = useState('');
-  const [customers, setCustomers] = useState<CustomerWithAddresses[]>([]);
-  const [filteredCustomers, setFilteredCustomers] = useState<CustomerWithAddresses[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithAddresses | null>(null);
-  const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [stats, setStats] = useState<CollectorStats | null>(null);
+  const [recentPickups, setRecentPickups] = useState<RecentPickup[]>([]);
+  const [townships, setTownships] = useState<Township[]>([]);
+  const [selectedTownship, setSelectedTownship] = useState<string>("");
+  const [residents, setResidents] = useState<Resident[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isLiveCollectionsOpen, setIsLiveCollectionsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCollectionFormOpen, setIsCollectionFormOpen] = useState(false);
+  const [selectedUserForCollection, setSelectedUserForCollection] = useState<any | null>(null);
 
-  // Load basic stats on component mount
   useEffect(() => {
-    if (user) {
-      loadBasicStats();
+    if (user?.id) {
+      loadDashboardData();
     }
-  }, [user]);
+  }, [user?.id]);
 
-  // Filter customers based on search term
-  useEffect(() => {
-    if (searchTerm) {
-      const filtered = customers.filter(customer =>
-        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.phone?.includes(searchTerm) ||
-        customer.address.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredCustomers(filtered);
-    } else {
-      setFilteredCustomers(customers);
-    }
-  }, [customers, searchTerm]);
-
-  // Redirect unauthenticated users to login
-  useEffect(() => {
-    if (!user) {
-      window.location.href = '/login';
-    }
-  }, [user]);
-
-  // Redirect non-collectors to unauthorized page
-  useEffect(() => {
-    if (user && user.role) {
-      console.log('🔍 Debug - User role check:', {
-        userRole: user.role,
-        allowedRoles: ['collector', 'admin', 'COLLECTOR', 'ADMIN'],
-        isAllowed: ['collector', 'admin', 'COLLECTOR', 'ADMIN'].includes(user.role)
-      });
-      
-      if (!['collector', 'admin', 'COLLECTOR', 'ADMIN'].includes(user.role)) {
-        console.log('❌ User role not allowed, redirecting to unauthorized');
-        window.location.href = '/unauthorized';
-      } else {
-        console.log('✅ User role allowed, staying on dashboard');
-      }
-    } else if (user) {
-      console.log('🔍 Debug - User exists but no role:', user);
-      // For development, allow users without roles to access the dashboard
-      console.log('⚠️ Development mode: Allowing user without role to access dashboard');
-    }
-  }, [user]);
-
-  const loadBasicStats = async () => {
+  const loadDashboardData = async () => {
+    if (!user?.id) return;
+    
+    setLoading(true);
     try {
-      // Ensure user is authenticated before proceeding
-      if (!user || !user.id) {
-        console.log('⚠️ User not authenticated, skipping stats load');
-        return;
-      }
+      const [statsData, pickupsData, townshipsData] = await Promise.all([
+        CollectorDashboardService.getCollectorStats(user.id),
+        CollectorDashboardService.getRecentPickups(user.id),
+        CollectorDashboardService.getTownships()
+      ]);
       
-      console.log('🔍 Loading stats for authenticated user:', user.id);
-      setIsLoading(true);
-      
-      // Load customers from Supabase
-      const customerProfiles = await profileServices.getCustomerProfilesWithAddresses();
-      
-      if (customerProfiles.length === 0) {
-        console.log('⚠️ No customer profiles found, this might be a permission issue');
-        // Set empty customers array instead of failing
-        setCustomers([]);
-        setFilteredCustomers([]);
-      } else {
-        // Transform the data to include name and address
-        const customersWithAddresses: CustomerWithAddresses[] = customerProfiles.map(profile => {
-          const primaryAddress = profile.addresses?.find(addr => addr.is_primary) || profile.addresses?.[0];
-          
-          return {
-            ...profile,
-            name: `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username || 'Unknown Customer',
-            address: primaryAddress ? `${primaryAddress.line1}, ${primaryAddress.suburb}` : 'No address',
-            city: primaryAddress?.city || 'Unknown'
-          };
-        });
-        
-        setCustomers(customersWithAddresses);
-        setFilteredCustomers(customersWithAddresses);
-        console.log('✅ Loaded customers:', customersWithAddresses.length);
-      }
-      
-      // Load actual stats from API
-      try {
-        const { data: pickupsData, error: pickupsError } = await supabase
-          .from('pickups')
-          .select('total_kg, status')
-          .eq('collector_id', user.id);
-        
-        if (pickupsError) {
-          console.error('❌ Error fetching pickups:', pickupsError);
-          // Set default stats instead of failing
-          setStats({
-            totalCollections: 0,
-            totalKg: 0,
-            totalPoints: 0
-          });
-        } else {
-          const totalCollections = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed').length || 0;
-          const totalKg = pickupsData?.filter((p: any) => p.status === 'approved' || p.status === 'completed')
-            .reduce((sum: number, p: any) => sum + (p.total_kg || 0), 0) || 0;
-          const totalPoints = totalKg * 6; // 6 points per kg
-          
-          const realStats = {
-            totalCollections,
-            totalKg,
-            totalPoints
-          };
-          setStats(realStats);
-          console.log('✅ Loaded pickup stats:', realStats);
-        }
-      } catch (pickupError) {
-        console.error('❌ Error loading pickup stats:', pickupError);
-        // Set default stats on error
-        setStats({
-          totalCollections: 0,
-          totalKg: 0,
-          totalPoints: 0
-        });
-      }
+      setStats(statsData);
+      setRecentPickups(pickupsData);
+      setTownships(townshipsData);
     } catch (error) {
-      console.error('❌ Error loading stats:', error);
-      // Set empty defaults on error
-      setCustomers([]);
-      setFilteredCustomers([]);
-      setStats({
-        totalCollections: 0,
-        totalKg: 0,
-        totalPoints: 0
-      });
+      console.error('Error loading dashboard data:', error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const getMaterialType = () => {
-    return selectedMaterial === 'aluminium' ? 'Aluminium Cans' : 'Plastic Bottles';
-  };
-
-  // Camera functionality
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } // Use back camera on mobile
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      setIsCameraOpen(true);
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      alert('Unable to access camera. Please check permissions.');
+  const handleTownshipChange = async (townshipId: string) => {
+    setSelectedTownship(townshipId);
+    if (townshipId) {
+      const residentsData = await ResidentService.getResidentsByTownship(townshipId);
+      setResidents(residentsData);
+    } else {
+      setResidents([]);
     }
   };
 
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setIsCameraOpen(false);
-  };
-
-  const capturePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      const context = canvas.getContext('2d');
-      
-      if (!context) return;
-      
-      // Set canvas dimensions to match video
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // Draw video frame to canvas
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to blob and create URL
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const photoUrl = URL.createObjectURL(blob);
-          setCapturedPhotos(prev => [...prev, photoUrl]);
-          stopCamera();
-        }
-      }, 'image/jpeg', 0.8);
+  const handleSearchResidents = async (query: string) => {
+    setSearchQuery(query);
+    if (query.trim()) {
+      const searchResults = await ResidentService.searchResidents(query);
+      setResidents(searchResults);
+    } else if (selectedTownship) {
+      const residentsData = await ResidentService.getResidentsByTownship(selectedTownship);
+      setResidents(residentsData);
     }
   };
 
-  const removePhoto = (index: number) => {
-    setCapturedPhotos(prev => {
-      const newPhotos = prev.filter((_, i) => i !== index);
-      return newPhotos;
+  const formatTime = (timeString?: string) => {
+    if (!timeString) return '';
+    return new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
     });
   };
 
-  const selectCustomer = (customer: CustomerWithAddresses) => {
-    setSelectedCustomer(customer);
-    setSearchTerm(customer.name);
-    setFilteredCustomers([]);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-100 text-green-800';
+      case 'in_progress':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'scheduled':
+        return 'bg-blue-100 text-blue-800';
+      case 'cancelled':
+        return 'bg-red-100 text-red-800';
+      case 'no_show':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
   };
 
-  const clearCustomerSelection = () => {
-    setSelectedCustomer(null);
-    setSearchTerm('');
-    setFilteredCustomers(customers);
+  // Helper function to get display name for user
+  const getUserDisplayName = (user: any) => {
+    if (!user) return 'Collector';
+    
+    // If user.name is not an email (doesn't contain @), use it
+    if (user.name && !user.name.includes('@')) {
+      return user.name;
+    }
+    
+    // If user.name is an email, try to extract name from email
+    if (user.name && user.name.includes('@')) {
+      const emailName = user.name.split('@')[0];
+      // Convert email name to proper case (e.g., john.doe -> John Doe)
+      return emailName
+        .split('.')
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(' ');
+    }
+    
+    // Final fallback
+    return 'Collector';
   };
 
-  // Show loading while checking authentication
-  if (!user || isLoading) {
+  if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-900">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 flex items-center justify-center">
-                <img 
-                  src="/W yellow.png" 
-                  alt="Woza Mali Logo" 
-                  className="w-8 h-8"
-                />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-white">Woza Mali</h1>
-                <p className="text-sm text-gray-300">Collector Portal</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-sm font-medium text-white">
-                  {user?.email || 'Collector'}
-                </p>
-                <p className="text-xs text-orange-400 font-semibold">COLLECTOR</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="container mx-auto px-6 py-8 pb-24">
-        {/* Welcome Section */}
-        <div className="text-center mb-8">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
           <div className="flex justify-center mb-4">
             <img 
               src="/W yellow.png" 
@@ -325,405 +145,338 @@ export default function CollectorDashboard() {
               className="h-16 w-auto"
             />
           </div>
-          <h2 className="text-3xl font-bold text-white mb-2">
-            Welcome back, {user?.name || user?.email?.split('@')[0] || 'Collector'}!
-          </h2>
-          <p className="text-gray-300">
-            Manage your recycling collections and track your performance
-          </p>
+          <h1 className="text-2xl font-bold text-white mb-4">Loading...</h1>
         </div>
+      </div>
+    );
+  }
 
-        {/* Quick Actions - Simplified Small Buttons */}
-        <div className="mb-8">
-          <h3 className="text-xl font-semibold text-white mb-4 text-center">
-            Quick Actions
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <Button 
-              onClick={() => setShowLiveCollection(true)}
-              className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-black px-3 py-1.5 h-12 text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              Live Collection
-            </Button>
-            
-            <Button 
-              asChild
-              className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-black px-3 py-1.5 h-12 text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              <Link href="/pickups">
-                New Pickup
-              </Link>
-            </Button>
-            
-            <Button 
-              asChild
-              className="bg-gradient-to-r from-orange-400 to-yellow-400 hover:from-orange-500 hover:to-yellow-500 text-black px-3 py-1.5 h-12 text-sm font-medium shadow-lg hover:shadow-xl transition-all duration-300"
-            >
-              <Link href="/customers">
-                Customer
-              </Link>
-            </Button>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/W yellow.png" 
+              alt="WozaMali Logo" 
+              className="h-16 w-auto"
+            />
+          </div>
+          <div className="flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-orange-500 mr-2" />
+            <p className="text-gray-300">Loading dashboard...</p>
           </div>
         </div>
+      </div>
+    );
+  }
 
-        {/* Quick Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-gray-800 border-gray-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                <Package className="h-4 w-4 text-orange-400" />
-                Total Collections
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-orange-400">{stats.totalCollections}</div>
-              <p className="text-xs text-gray-400 mt-1">Lifetime total</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gray-800 border-gray-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                <Target className="h-4 w-4 text-yellow-400" />
-                Total Kg Collected
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-yellow-400">{stats.totalKg.toFixed(1)} kg</div>
-              <p className="text-xs text-gray-400 mt-1">Lifetime total</p>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gray-800 border-gray-700 text-white shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-300 flex items-center gap-2">
-                <Leaf className="h-4 w-4 text-orange-400" />
-                Collection Points
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-orange-400">{stats.totalPoints.toLocaleString()}</div>
-              <p className="text-xs text-gray-400 mt-1">Lifetime total</p>
-            </CardContent>
-          </Card>
+  return (
+    <div className="min-h-screen bg-gray-900 pb-20">
+      {/* Header */}
+      <div className="bg-gray-800 border-b border-gray-700 px-4 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
+              <img 
+                src="/W yellow.png" 
+                alt="WozaMali Logo" 
+                className="h-10 w-auto"
+              />
+              <div>
+                <h1 className="text-2xl font-bold text-white">WozaMali Collector Portal</h1>
+                <p className="text-gray-400">Welcome back, {getUserDisplayName(user)}!</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <MapPin className="h-5 w-5 text-orange-500" />
+            <span className="text-gray-300 text-sm">
+              {user?.area_id || "Area not assigned"}
+            </span>
+          </div>
         </div>
+      </div>
 
-        {/* Recent Activity Section */}
-        <div className="mb-8">
-          <h3 className="text-xl font-semibold text-white mb-4">
-            Recent Activity
-          </h3>
-          <div className="grid gap-4">
-            <Card className="bg-gray-800 border-gray-700 text-white">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <div className="w-12 h-12 bg-gray-600 rounded-full flex items-center justify-center mb-4">
-                  <BarChart3 className="h-6 w-6 text-gray-400" />
+      <div className="p-4 space-y-6">
+        {/* Stats Grid */}
+        {stats && (
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Today's Pickups</p>
+                  <p className="text-2xl font-bold text-white">{stats.todayPickups}</p>
                 </div>
-                <h3 className="text-lg font-semibold mb-2 text-white">No recent activity</h3>
-                <p className="text-gray-300 text-center">
-                  Your collection activities will appear here
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </main>
+                <Package className="h-8 w-8 text-blue-500" />
+              </div>
+            </div>
 
-      {/* Live Collection Popup */}
-      {showLiveCollection && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gray-600">
-            <div className="flex items-center justify-between p-6 border-b border-gray-600">
-              <h3 className="text-xl font-semibold text-white">Record Collection</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowLiveCollection(false)}
-                className="h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-700"
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Total Customers</p>
+                  <p className="text-2xl font-bold text-white">{stats.totalCustomers}</p>
+                </div>
+                <Users className="h-8 w-8 text-green-500" />
+              </div>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-sm">Total Weight (kg)</p>
+                  <p className="text-2xl font-bold text-white">{stats.totalWeight || 0}</p>
+                </div>
+                <TrendingUp className="h-8 w-8 text-purple-500" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <CardTitle className="text-white">Quick Actions</CardTitle>
+            <CardDescription className="text-gray-400">Start a new collection or manage existing ones</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Button 
+                onClick={() => setIsCollectionFormOpen(true)}
+                className="bg-orange-500 hover:bg-orange-600 text-white"
               >
-                <X className="h-4 w-4" />
+                <Plus className="h-4 w-4 mr-2" />
+                New Collection
+              </Button>
+              <Button variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-700">
+                <Calendar className="h-4 w-4 mr-2" />
+                View Schedule
+              </Button>
+              <Dialog open={isLiveCollectionsOpen} onOpenChange={setIsLiveCollectionsOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-700">
+                    <Search className="h-4 w-4 mr-2" />
+                    Live Collections
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-gray-800 border-gray-700 text-white max-w-2xl max-h-[80vh] overflow-hidden">
+                  <DialogHeader>
+                    <DialogTitle>Live Collections - Select Resident</DialogTitle>
+                    <DialogDescription className="text-gray-400">
+                      Search for residents by township or name to start collections
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 overflow-y-auto max-h-[60vh]">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-300 mb-2 block">Select Township</label>
+                        <Select value={selectedTownship} onValueChange={handleTownshipChange}>
+                          <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                            <SelectValue placeholder="Choose a township" />
+                          </SelectTrigger>
+                        <SelectContent className="bg-gray-800/95 backdrop-blur-md border-gray-600">
+                          {townships.map((township) => (
+                            <SelectItem key={township.id} value={township.id} className="text-white hover:bg-gray-700">
+                              {township.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium text-gray-300 mb-2 block">Search Residents</label>
+                        <Input
+                          placeholder="Search by name, phone, or email..."
+                          value={searchQuery}
+                          onChange={(e) => handleSearchResidents(e.target.value)}
+                          className="bg-gray-700 border-gray-600 text-white"
+                        />
+                      </div>
+                    </div>
+
+                    {residents.length > 0 && (
+                      <div className="space-y-2">
+                        <h3 className="text-white font-medium">Residents ({residents.length})</h3>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {residents.map((resident) => (
+                            <div
+                              key={resident.id}
+                              className="p-3 bg-gray-700 rounded-lg border border-gray-600 hover:bg-gray-600 transition-colors"
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <h4 className="text-white font-medium">{resident.name}</h4>
+                                  <p className="text-gray-300 text-sm">
+                                    {resident.phone && `📞 ${resident.phone}`}
+                                    {resident.email && ` • ✉️ ${resident.email}`}
+                                  </p>
+                                  <p className="text-gray-400 text-sm mt-1">
+                                    📍 {resident.township}
+                                  </p>
+                                  <p className={`text-sm mt-1 ${resident.hasAddress ? 'text-green-400' : 'text-red-400'}`}>
+                                    {resident.hasAddress ? `📍 ${resident.address}` : '⚠️ No address on file'}
+                                  </p>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  {resident.hasAddress ? (
+                                    <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                                      Has Address
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">
+                                      No Address
+                                    </span>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      console.log('🔄 Collect button clicked for resident:', resident.id, resident.name);
+                                      setIsLiveCollectionsOpen(false);
+                                      setIsCollectionFormOpen(true);
+                                      setSelectedUserForCollection({
+                                        id: resident.id,
+                                        full_name: resident.name,
+                                        email: resident.email || "",
+                                        phone: resident.phone || "",
+                                        street_addr: resident.address || "",
+                                        city: "",
+                                        postal_code: "",
+                                        township_id: resident.area_id || ""
+                                      });
+                                      console.log('✅ Collection form modal should be opening...');
+                                    }}
+                                    className="bg-orange-500 hover:bg-orange-600 text-white text-xs"
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" />
+                                    Collect
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {residents.length === 0 && (selectedTownship || searchQuery) && (
+                      <div className="text-center py-8">
+                        <Users className="h-12 w-12 text-gray-500 mx-auto mb-4" />
+                        <p className="text-gray-400">No residents found</p>
+                        <p className="text-gray-500 text-sm">
+                          {searchQuery ? 'Try a different search term' : 'No residents in this township'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Pickups */}
+        <Card className="bg-gray-800 border-gray-700">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-white">Recent Pickups</CardTitle>
+                <CardDescription className="text-gray-400">Your latest collection activities</CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={loadDashboardData}
+                className="flex items-center space-x-2 bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600"
+              >
+                <Package className="h-4 w-4" />
+                <span>Refresh</span>
               </Button>
             </div>
-            
-            <div className="p-6">
-              {/* Customer Search Section */}
-              <div className="mb-6">
-                <h4 className="text-lg font-medium text-white mb-4">Customer Search</h4>
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input 
-                    type="text" 
-                    placeholder="Search customers by name, phone, or address..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-white placeholder-gray-400"
-                  />
-                </div>
-                
-                {/* Search Results */}
-                {searchTerm && filteredCustomers.length > 0 && (
-                  <div className="mt-3 max-h-40 overflow-y-auto bg-gray-700 rounded-lg border border-gray-600">
-                    {filteredCustomers.map((customer) => (
-                      <div
-                        key={customer.id}
-                        onClick={() => selectCustomer(customer)}
-                        className="p-3 hover:bg-gray-600 cursor-pointer border-b border-gray-600 last:border-b-0"
-                      >
-                        <div className="font-medium text-white">{customer.name}</div>
-                        <div className="text-sm text-gray-300">{customer.phone}</div>
-                        <div className="text-xs text-gray-400">{customer.address}</div>
+          </CardHeader>
+          <CardContent>
+            {recentPickups.length > 0 ? (
+              <div className="space-y-3">
+                {recentPickups.map((pickup) => (
+                  <div key={pickup.id} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <Package className="h-4 w-4 text-orange-500" />
+                        <p className="text-white font-medium">{pickup.customer_name}</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Selected Customer Display */}
-                {selectedCustomer && (
-                  <div className="mt-3 p-3 bg-orange-500/20 border border-orange-500/30 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-white">Selected: {selectedCustomer.name}</div>
-                        <div className="text-sm text-orange-300">{selectedCustomer.phone}</div>
-                        <div className="text-xs text-orange-200">{selectedCustomer.address}</div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearCustomerSelection}
-                        className="text-orange-300 hover:text-white hover:bg-orange-500/30"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Material Selection Tabs */}
-              <div className="mb-6">
-                <h4 className="text-lg font-medium text-white mb-4">Select Materials</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div 
-                    className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                      selectedMaterial === 'aluminium' 
-                        ? 'border-orange-500 bg-orange-500/10' 
-                        : 'border-gray-600 hover:border-orange-400 bg-gray-700'
-                    }`}
-                    onClick={() => setSelectedMaterial('aluminium')}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h5 className="font-medium text-white">Aluminium Cans</h5>
-                        <p className="text-sm text-gray-300">Aluminium Cans</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-orange-400 text-lg">Aluminium</p>
+                      <p className="text-gray-400 text-sm mt-1">{pickup.customer_address}</p>
+                      <div className="flex items-center space-x-4 mt-2">
+                        <p className="text-gray-500 text-xs flex items-center">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          {pickup.scheduled_date} {pickup.scheduled_time && `at ${formatTime(pickup.scheduled_time)}`}
+                        </p>
+                        <p className="text-gray-500 text-xs">
+                          Code: {pickup.pickup_code}
+                        </p>
                       </div>
                     </div>
-                  </div>
-                  
-                  <div 
-                    className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                      selectedMaterial === 'plastic' 
-                        ? 'border-yellow-500 bg-yellow-500/10' 
-                        : 'border-gray-600 hover:border-yellow-400 bg-gray-700'
-                    }`}
-                    onClick={() => setSelectedMaterial('plastic')}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h5 className="font-medium text-white">Plastic Bottles</h5>
-                        <p className="text-sm text-gray-300">Plastic Bottles</p>
-                        <p className="text-xs text-blue-400 font-medium">Donated to Green Scholar Fund</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-yellow-400 text-lg">Plastic</p>
-                      </div>
+                    <div className="text-right">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(pickup.status)}`}>
+                        {pickup.status.replace('_', ' ').toUpperCase()}
+                      </span>
+                      {pickup.total_value && (
+                        <p className="text-green-400 text-sm mt-1 font-medium">R{pickup.total_value.toFixed(2)}</p>
+                      )}
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Weight Input Section */}
-              <div className="mb-6">
-                <h4 className="text-lg font-medium text-white mb-4">Weight Measurement</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Weight Input */}
-                  <div className="text-center">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Weight (kg)</label>
-                    <input 
-                      type="number" 
-                      step="0.01"
-                      placeholder="0.00"
-                      value={weight}
-                      onChange={(e) => setWeight(parseFloat(e.target.value) || 0)}
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-center text-lg font-medium text-white placeholder-gray-400"
-                    />
-                  </div>
-
-                  {/* Photo Capture Section */}
-                  <div className="text-center">
-                    <h5 className="text-sm font-medium text-white mb-3">Photo Evidence</h5>
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      {capturedPhotos.map((photo, index) => (
-                        <div key={index} className="relative">
-                          <img 
-                            src={photo} 
-                            alt={`Collection photo ${index + 1}`}
-                            className="w-full h-20 object-cover rounded-lg border border-gray-600"
-                          />
-                          <button
-                            onClick={() => removePhoto(index)}
-                            className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <Button
-                      onClick={startCamera}
-                      className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white"
+                ))}
+                {recentPickups.length >= 5 && (
+                  <div className="text-center pt-4">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="text-gray-400 hover:text-white border-gray-600 hover:bg-gray-700"
                     >
-                      <Camera className="h-4 w-4 mr-2" />
-                      Take Photo
+                      View All Pickups
                     </Button>
                   </div>
-                </div>
+                )}
               </div>
-
-              {/* Collection Summary */}
-              <div className="mb-6 p-4 bg-gray-700 rounded-lg">
-                <h4 className="text-lg font-medium text-white mb-3">Collection Summary</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-400">Customer:</p>
-                    <p className="font-medium text-white">
-                      {selectedCustomer ? selectedCustomer.name : 'Not selected'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Material Type:</p>
-                    <p className="font-medium text-white">
-                      {selectedMaterial === 'aluminium' ? 'Aluminium Cans' : 'Plastic Bottles'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Weight Recorded:</p>
-                    <p className="font-bold text-orange-400 text-lg">{weight.toFixed(2)} kg</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-400">Photos Taken:</p>
-                    <p className="font-medium text-white">{capturedPhotos.length} photos</p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="space-y-3">
-                <Button className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Record Collection
-                </Button>
-                
+            ) : (
+              <div className="text-center py-8">
+                <Package className="h-12 w-12 text-gray-500 mx-auto mb-4" />
+                <p className="text-gray-400">No recent pickups found</p>
+                <p className="text-gray-500 text-sm mb-4">Start collecting to see your activities here</p>
                 <Button 
-                  variant="outline" 
-                  className="w-full border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-                  onClick={() => setShowLiveCollection(false)}
+                  onClick={() => setIsCollectionFormOpen(true)}
+                  className="bg-orange-500 hover:bg-orange-600 text-white"
                 >
-                  Close
+                  <Plus className="h-4 w-4 mr-2" />
+                  Start Collection
                 </Button>
               </div>
-            </div>
-          </div>
-        </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Unified Users-page Collection Modal */}
+      {isCollectionFormOpen && (
+        <CollectionModal
+          isOpen={isCollectionFormOpen}
+          onClose={() => {
+            console.log('❌ Collection modal closed');
+            setIsCollectionFormOpen(false);
+            setSelectedUserForCollection(null);
+          }}
+          user={selectedUserForCollection}
+          onSuccess={() => {
+            console.log('✅ Collection created successfully');
+            setIsCollectionFormOpen(false);
+            setSelectedUserForCollection(null);
+            loadDashboardData();
+          }}
+        />
       )}
 
-      {/* Camera Modal */}
-      {isCameraOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <div className="text-center mb-4">
-              <h3 className="text-lg font-semibold text-white mb-2">Take Photo</h3>
-              <p className="text-sm text-gray-300">Position the recyclables in frame</p>
-            </div>
-            
-            <div className="relative mb-4">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className="w-full rounded-lg border border-gray-600"
-              />
-              <canvas ref={canvasRef} className="hidden" />
-            </div>
-            
-            <div className="flex gap-3">
-              <Button
-                onClick={capturePhoto}
-                className="flex-1 bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-white"
-              >
-                <Camera className="h-4 w-4 mr-2" />
-                Capture
-              </Button>
-              <Button
-                onClick={stopCamera}
-                variant="outline"
-                className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom Navigation Bar - Mobile Optimized - DARK GREY + ORANGE */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 z-50 md:hidden">
-        <div className="flex items-center justify-around py-2">
-          {/* Overview Tab */}
-          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-orange-500 text-white">
-            <BarChart3 className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Overview</span>
-          </div>
-
-          {/* Pickups Tab */}
-          <Link
-            href="/pickups"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Package className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Pickups</span>
-          </Link>
-
-          {/* Customers Tab */}
-          <Link
-            href="/customers"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Users className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Customers</span>
-          </Link>
-
-          {/* Analytics Tab */}
-          <Link
-            href="/analytics"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <TrendingUp className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Analytics</span>
-          </Link>
-
-          {/* Settings Tab */}
-          <Link
-            href="/settings"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Settings className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Settings</span>
-          </Link>
-        </div>
-      </nav>
+      {/* Navigation */}
+      <Navigation />
     </div>
   );
 }

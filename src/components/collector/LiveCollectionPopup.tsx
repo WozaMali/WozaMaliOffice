@@ -28,6 +28,19 @@ import { searchCustomersByAddress, searchCustomersComprehensive, CustomerSearchR
 import { submitLiveCollection, CollectionMaterial } from '../../lib/collection-services';
 import { getMaterialId } from '../../lib/material-services';
 import { supabase } from '@/lib/supabase';
+import { addressIntegrationService, ProfileWithAddress } from '../../lib/address-integration';
+
+// Helper function to get role ID
+async function getRoleId(roleName: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('name', roleName)
+    .single()
+  
+  if (error) throw error
+  return data.id
+}
 
 interface Material {
   id: string;
@@ -67,6 +80,103 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
   const [recyclablesPhoto, setRecyclablesPhoto] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Fetch materials from database
+  const fetchMaterials = async () => {
+    console.log('🔍 Starting to fetch materials...');
+    setIsLoadingMaterials(true);
+    try {
+      console.log('🔍 Testing Supabase connection...');
+      // Test basic connection first
+      const { data: testData, error: testError } = await supabase
+        .from('materials')
+        .select('count')
+        .limit(1);
+      
+      console.log('🔍 Supabase test result:', { testData, testError });
+      
+      console.log('🔍 Querying materials table...');
+      const { data, error } = await supabase
+        .from('materials')
+        .select(`
+          id,
+          name,
+          current_price_per_unit,
+          unit,
+          materials(name)
+        `)
+        .eq('active', true)
+        .order('materials(name)', { ascending: true })
+        .order('name', { ascending: true });
+
+      console.log('🔍 Materials query result:', { data, error });
+
+      if (error) {
+        console.error('❌ Error fetching materials with join:', error);
+        console.log('🔄 Trying simple query without join...');
+        
+        // Try a simpler query without the join
+        const { data: simpleData, error: simpleError } = await supabase
+          .from('materials')
+          .select('id, name, current_price_per_unit, unit, category_id')
+          .eq('active', true)
+          .order('name', { ascending: true });
+        
+        console.log('🔍 Simple query result:', { simpleData, simpleError });
+        
+        if (simpleError) {
+          console.error('❌ Simple query also failed:', simpleError);
+          // Fallback to sample materials if both queries fail
+          const fallbackMaterials = [
+            { id: '1', name: 'Aluminum Cans', rate_per_kg: 18.55, isDonation: false, category: 'Metals' },
+            { id: '2', name: 'PET Bottles', rate_per_kg: 1.50, isDonation: true, category: 'Plastics' },
+            { id: '3', name: 'Clear Glass', rate_per_kg: 2.00, isDonation: false, category: 'Glass' },
+            { id: '4', name: 'White Paper', rate_per_kg: 1.20, isDonation: false, category: 'Paper' },
+            { id: '5', name: 'Cardboard', rate_per_kg: 1.00, isDonation: false, category: 'Paper' },
+          ];
+          console.log('🔄 Using fallback materials:', fallbackMaterials);
+          setAvailableMaterials(fallbackMaterials);
+        } else {
+          console.log('✅ Simple query succeeded, mapping materials...');
+          const mappedMaterials = simpleData.map(material => ({
+            id: material.id,
+            name: material.name,
+            rate_per_kg: material.current_price_per_unit,
+            isDonation: material.current_price_per_unit < 2.0,
+            category: 'Unknown' // We'll get category later if needed
+          }));
+          console.log('✅ Mapped materials from simple query:', mappedMaterials);
+          setAvailableMaterials(mappedMaterials);
+        }
+      } else {
+        console.log('✅ Successfully fetched materials from database:', data);
+        const mappedMaterials = data.map(material => ({
+          id: material.id,
+          name: material.name,
+          rate_per_kg: material.current_price_per_unit,
+          isDonation: material.current_price_per_unit < 2.0, // Consider low-value items as donations
+          category: material.materials.name
+        }));
+        console.log('✅ Mapped materials:', mappedMaterials);
+        setAvailableMaterials(mappedMaterials);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching materials:', error);
+      // Fallback to sample materials
+      const fallbackMaterials = [
+        { id: '1', name: 'Aluminum Cans', rate_per_kg: 18.55, isDonation: false, category: 'Metals' },
+        { id: '2', name: 'PET Bottles', rate_per_kg: 1.50, isDonation: true, category: 'Plastics' },
+        { id: '3', name: 'Clear Glass', rate_per_kg: 2.00, isDonation: false, category: 'Glass' },
+        { id: '4', name: 'White Paper', rate_per_kg: 1.20, isDonation: false, category: 'Paper' },
+        { id: '5', name: 'Cardboard', rate_per_kg: 1.00, isDonation: false, category: 'Paper' },
+      ];
+      console.log('🔄 Using fallback materials due to error:', fallbackMaterials);
+      setAvailableMaterials(fallbackMaterials);
+    } finally {
+      setIsLoadingMaterials(false);
+      console.log('🔍 Finished fetching materials, loading state set to false');
+    }
+  };
+
   // Clear search results when popup closes
   useEffect(() => {
     if (!isOpen) {
@@ -76,13 +186,19 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
     }
   }, [isOpen]);
 
-  const SAMPLE_MATERIALS = [
-    { id: '1', name: 'Aluminium', rate_per_kg: 18.55, isDonation: false },
-    { id: '2', name: 'PET', rate_per_kg: 1.50, isDonation: true },
-    { id: '3', name: 'Glass', rate_per_kg: 2.00, isDonation: false },
-    { id: '4', name: 'Paper', rate_per_kg: 1.20, isDonation: false },
-    { id: '5', name: 'Cardboard', rate_per_kg: 1.00, isDonation: false },
-  ];
+  // Fetch materials when popup opens
+  useEffect(() => {
+    console.log('🔍 useEffect triggered:', { isOpen, availableMaterialsLength: availableMaterials.length });
+    if (isOpen && availableMaterials.length === 0) {
+      console.log('🔍 Fetching materials because popup is open and no materials loaded');
+      fetchMaterials();
+    }
+  }, [isOpen, availableMaterials.length]);
+
+  // Debug: Log availableMaterials whenever it changes
+  useEffect(() => {
+    console.log('🔍 availableMaterials changed:', availableMaterials);
+  }, [availableMaterials]);
 
   const searchCustomersByAddressHandler = async () => {
     if (!formData.address.trim()) {
@@ -95,7 +211,29 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
       setSearchError(null);
       console.log('🔍 Searching for customers at address:', formData.address);
       
-      const results = await searchCustomersByAddress(formData.address);
+      // Use the same data source as Customer page
+      const allCustomers = await addressIntegrationService.getCustomerProfilesWithAddresses();
+      
+      // Filter customers by address (case-insensitive partial match)
+      const searchTerm = formData.address.toLowerCase();
+      const results = allCustomers
+        .filter(customer => {
+          const addressMatch = customer.displayAddress.toLowerCase().includes(searchTerm) ||
+                              customer.displayCity.toLowerCase().includes(searchTerm);
+          return addressMatch;
+        })
+        .map(customer => ({
+          id: customer.id,
+          profile_id: customer.id,
+          full_name: customer.displayName,
+          phone: customer.phone || '',
+          email: customer.email,
+          address: customer.displayAddress,
+          suburb: customer.primaryAddress?.address_line2 || '',
+          city: customer.primaryAddress?.city || '',
+          postal_code: customer.primaryAddress?.postal_code
+        }));
+      
       setSearchResults(results);
       
       if (results.length === 0) {
@@ -149,7 +287,7 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
     let donationValue = 0;
 
     materials.forEach(material => {
-      const materialInfo = SAMPLE_MATERIALS.find(m => m.name === material.name);
+      const materialInfo = availableMaterials.find(m => m.name === material.name);
       if (materialInfo) {
         const value = material.kilograms * materialInfo.rate_per_kg;
         if (materialInfo.isDonation) {
@@ -199,6 +337,11 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
     
     try {
       console.log('🚀 Submitting live collection to database...');
+      
+      // Show progress indicator
+      let progressInterval: NodeJS.Timeout | undefined = setInterval(() => {
+        console.log('⏳ Collection submission in progress...');
+      }, 2000);
 
       // Get current user (collector) ID
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -228,9 +371,24 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
         throw new Error('No valid materials to submit. Please check material names and weights.');
       }
 
-      // Submit the collection
+      // Get the address ID from the selected customer's primary address
+      const customerData = await addressIntegrationService.getCustomerProfilesWithAddresses();
+      const customer = customerData.find((c: any) => c.id === selectedCustomer.profile_id);
+      const addressId = customer?.primaryAddress?.id;
+
+      if (!addressId) {
+        throw new Error('No address found for selected customer. Please ensure the customer has a registered address.');
+      }
+
+      // Clear progress indicator
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      
+      // Submit the collection with timeout handling
       const result = await submitLiveCollection({
         customer_id: selectedCustomer.profile_id,
+        address_id: addressId,
         materials: collectionMaterials,
         notes: formData.notes,
         scale_photo: scalePhoto || undefined,
@@ -304,7 +462,26 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
       }, 100);
     } catch (error: any) {
       console.error('❌ Error submitting collection:', error);
-      alert(`Failed to submit collection: ${error.message || 'Unknown error occurred'}`);
+      
+      // Clear progress indicator on error
+      if (progressInterval) {
+        clearInterval(progressInterval);
+      }
+      
+      // Provide user-friendly error messages
+      let errorMessage = 'Failed to submit collection. ';
+      
+      if (error.message.includes('timed out')) {
+        errorMessage += 'The operation took too long. Please check your internet connection and try again.';
+      } else if (error.message.includes('network')) {
+        errorMessage += 'Network error occurred. Please check your internet connection and try again.';
+      } else if (error.message.includes('constraint') || error.message.includes('foreign key')) {
+        errorMessage += 'Database error occurred. Please contact support if this persists.';
+      } else {
+        errorMessage += error.message || 'Unknown error occurred. Please try again.';
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -315,16 +492,16 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
   const { totalValue, donationValue } = calculateTotals();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+      <div className="bg-gray-800 border border-gray-700 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Live Collection</h2>
-              <p className="text-gray-600">Record a new collection in real-time</p>
+              <h2 className="text-2xl font-bold text-white">Live Collection</h2>
+              <p className="text-gray-400">Record a new collection in real-time</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
+            <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-400 hover:text-white hover:bg-gray-700">
               <X className="w-5 h-5" />
             </Button>
           </div>
@@ -333,28 +510,29 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
             {/* Left Column - Customer & Address */}
             <div className="space-y-6">
               {/* Customer Search */}
-              <Card>
+              <Card className="bg-gray-700 border-gray-600">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Search className="w-5 h-5" />
+                  <CardTitle className="flex items-center gap-2 text-white">
+                    <Search className="w-5 h-5 text-orange-500" />
                     Find Customer by Address
                   </CardTitle>
-                  <CardDescription>Search for existing customers at this address</CardDescription>
+                  <CardDescription className="text-gray-400">Search for existing customers at this address</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="address">Address</Label>
+                    <Label htmlFor="address" className="text-gray-300">Address</Label>
                     <div className="flex gap-2 mt-1">
                       <Input
                         id="address"
                         placeholder="Enter address to search"
                         value={formData.address}
                         onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                        className="bg-gray-600 border-gray-500 text-white placeholder-gray-400"
                       />
                       <Button 
                         onClick={searchCustomersByAddressHandler}
                         disabled={isSearching}
-                        className="bg-orange-600 hover:bg-orange-700"
+                        className="bg-orange-500 hover:bg-orange-600 text-white"
                       >
                         {isSearching ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -368,6 +546,7 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                     <Button 
                       variant="outline" 
                       size="sm" 
+                      className="border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white"
                       onClick={async () => {
                         try {
                           setIsSearching(true);
@@ -400,15 +579,16 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                     <Button 
                       variant="outline" 
                       size="sm" 
+                      className="border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white"
                       onClick={async () => {
                         try {
                           console.log('🔍 Debug: Checking database state...');
                           
-                          // Check if we can access profiles table
+                          // Check if we can access users table (unified approach)
                           const { data: profiles, error: profilesError } = await supabase
-                            .from('profiles')
-                            .select('id, full_name, role, is_active')
-                            .eq('role', 'customer')
+                            .from('users')
+                            .select('id, first_name, last_name, role_id, is_active')
+                            .eq('role_id', (await getRoleId('customer')))
                             .eq('is_active', true)
                             .limit(5);
                           
@@ -453,17 +633,17 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
 
                   {/* Search Results */}
                   {searchError && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <p className="text-red-700 text-sm">{searchError}</p>
+                    <div className="p-3 bg-red-900/20 border border-red-500/50 rounded-lg">
+                      <p className="text-red-400 text-sm">{searchError}</p>
                     </div>
                   )}
 
                   {/* Loading State */}
                   {isSearching && (
-                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="p-3 bg-blue-900/20 border border-blue-500/50 rounded-lg">
                       <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                        <p className="text-blue-700 text-sm">Searching for customers...</p>
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                        <p className="text-blue-400 text-sm">Searching for customers...</p>
                       </div>
                     </div>
                   )}
@@ -471,15 +651,15 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                   {/* Search Results */}
                   {!isSearching && searchResults.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-sm font-medium text-gray-700">Found Customers:</p>
+                      <p className="text-sm font-medium text-gray-300">Found Customers:</p>
                       {searchResults.map((customer) => (
                         <div 
                           key={customer.id}
-                          className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors duration-150"
+                          className="p-3 border border-gray-600 rounded-lg hover:bg-gray-600 cursor-pointer transition-colors duration-150"
                           onClick={() => selectCustomer(customer)}
                         >
-                          <p className="font-medium text-gray-900">{customer.full_name}</p>
-                          <p className="text-sm text-gray-600">{customer.address}</p>
+                          <p className="font-medium text-white">{customer.full_name}</p>
+                          <p className="text-sm text-gray-400">{customer.address}</p>
                           {customer.phone && (
                             <p className="text-sm text-gray-500">{customer.phone}</p>
                           )}
@@ -490,49 +670,51 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
 
                   {/* No Results Message */}
                   {!isSearching && searchResults.length === 0 && !searchError && formData.address.trim() && (
-                    <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                      <p className="text-gray-600 text-sm">No customers found. Try searching with a different term or click "Show All Customers".</p>
+                    <div className="p-3 bg-gray-600/20 border border-gray-500/50 rounded-lg">
+                      <p className="text-gray-400 text-sm">No customers found. Try searching with a different term or click "Show All Customers".</p>
                     </div>
                   )}
 
                   {/* Selected Customer */}
                   {selectedCustomer && (
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="p-3 bg-green-900/20 border border-green-500/50 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <CheckCircle className="w-4 h-4 text-green-600" />
-                        <p className="font-medium text-green-800">Customer Selected</p>
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                        <p className="font-medium text-green-400">Customer Selected</p>
                       </div>
-                      <p className="text-green-700">{selectedCustomer.full_name}</p>
-                      <p className="text-sm text-green-600">{selectedCustomer.address}</p>
+                      <p className="text-green-300">{selectedCustomer.full_name}</p>
+                      <p className="text-sm text-green-400">{selectedCustomer.address}</p>
                     </div>
                   )}
                 </CardContent>
               </Card>
 
               {/* Manual Customer Entry */}
-              <Card>
+              <Card className="bg-gray-700 border-gray-600">
                 <CardHeader>
-                  <CardTitle>Customer Details</CardTitle>
-                  <CardDescription>Enter customer information manually</CardDescription>
+                  <CardTitle className="text-white">Customer Details</CardTitle>
+                  <CardDescription className="text-gray-400">Enter customer information manually</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="customerName">Customer Name</Label>
+                    <Label htmlFor="customerName" className="text-gray-300">Customer Name</Label>
                     <Input
                       id="customerName"
                       placeholder="Enter customer name"
                       value={formData.customerName}
                       onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
+                      className="bg-gray-600 border-gray-500 text-white placeholder-gray-400 focus:border-orange-500"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="notes">Notes</Label>
+                    <Label htmlFor="notes" className="text-gray-300">Notes</Label>
                     <Textarea
                       id="notes"
                       placeholder="Any additional notes about this collection"
                       value={formData.notes}
                       onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                       rows={3}
+                      className="bg-gray-600 border-gray-500 text-white placeholder-gray-400 focus:border-orange-500"
                     />
                   </div>
                 </CardContent>
@@ -542,65 +724,77 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
             {/* Right Column - Materials & Photos */}
             <div className="space-y-6">
               {/* Materials */}
-              <Card>
+              <Card className="bg-gray-700 border-gray-600">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package className="w-5 h-5" />
+                  <CardTitle className="flex items-center gap-2 text-white">
+                    <Package className="w-5 h-5 text-orange-500" />
                     Materials Collected
                   </CardTitle>
-                  <CardDescription>Add materials and their weights</CardDescription>
+                  <CardDescription className="text-gray-400">Add materials and their weights</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Debug info */}
+                  <div className="text-xs text-gray-400 mb-2">
+                    Available materials: {availableMaterials.length} | Loading: {isLoadingMaterials ? 'Yes' : 'No'}
+                  </div>
                   {materials.map((material, index) => (
                     <div key={material.id} className="grid grid-cols-4 gap-2 items-end">
                       <div>
-                        <Label>Material</Label>
+                        <Label className="text-gray-300">Material</Label>
                         <select
                           value={material.name}
                           onChange={(e) => updateMaterial(material.id, 'name', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md"
+                          className="w-full p-2 border border-gray-500 rounded-md bg-gray-600 text-white"
+                          disabled={isLoadingMaterials}
                         >
-                          <option value="">Select material</option>
-                          {SAMPLE_MATERIALS.map(m => (
-                            <option key={m.id} value={m.name}>
-                              {m.name} - R{m.rate_per_kg}/kg
-                              {m.isDonation ? ' (Donation)' : ''}
-                            </option>
-                          ))}
+                          <option value="">{isLoadingMaterials ? 'Loading materials...' : 'Select material'}</option>
+                          {availableMaterials.length > 0 ? (
+                            availableMaterials.map(m => (
+                              <option key={m.id} value={m.name}>
+                                {m.name} - R{m.rate_per_kg}/kg
+                                {m.isDonation ? ' (Donation)' : ''}
+                                {m.category ? ` [${m.category}]` : ''}
+                              </option>
+                            ))
+                          ) : (
+                            <option value="" disabled>No materials available</option>
+                          )}
                         </select>
                       </div>
                       <div>
-                        <Label>Kg</Label>
+                        <Label className="text-gray-300">Kg</Label>
                         <Input
                           type="number"
                           step="0.1"
                           placeholder="0.0"
                           value={material.kilograms}
                           onChange={(e) => updateMaterial(material.id, 'kilograms', parseFloat(e.target.value) || 0)}
+                          className="bg-gray-600 border-gray-500 text-white placeholder-gray-400 focus:border-orange-500"
                         />
                       </div>
                       <div>
-                        <Label>Contamination %</Label>
+                        <Label className="text-gray-300">Contamination %</Label>
                         <Input
                           type="number"
                           step="1"
                           placeholder="0"
                           value={material.contamination_pct}
                           onChange={(e) => updateMaterial(material.id, 'contamination_pct', parseInt(e.target.value) || 0)}
+                          className="bg-gray-600 border-gray-500 text-white placeholder-gray-400 focus:border-orange-500"
                         />
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => removeMaterial(material.id)}
-                        className="text-red-600 hover:text-red-700"
+                        className="text-red-400 hover:text-red-300 border-red-500 hover:bg-red-900/20"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   ))}
                   
-                  <Button onClick={addMaterial} variant="outline" className="w-full">
+                  <Button onClick={addMaterial} variant="outline" className="w-full border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Material
                   </Button>
@@ -608,18 +802,18 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
               </Card>
 
               {/* Photos */}
-              <Card>
+              <Card className="bg-gray-700 border-gray-600">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Camera className="w-5 h-5" />
+                  <CardTitle className="flex items-center gap-2 text-white">
+                    <Camera className="w-5 h-5 text-orange-500" />
                     Photo Documentation
                   </CardTitle>
-                  <CardDescription>Capture photos of the scale and recyclables</CardDescription>
+                  <CardDescription className="text-gray-400">Capture photos of the scale and recyclables</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <Label>Photo of Scale</Label>
+                      <Label className="text-gray-300">Photo of Scale</Label>
                       <div className="mt-1">
                         {scalePhoto ? (
                           <div className="relative">
@@ -628,7 +822,7 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                               variant="outline"
                               size="sm"
                               onClick={() => setScalePhoto(null)}
-                              className="absolute top-2 right-2 bg-white"
+                              className="absolute top-2 right-2 bg-gray-700 border-gray-500 text-white hover:bg-gray-600"
                             >
                               <X className="w-4 h-4" />
                             </Button>
@@ -637,17 +831,17 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                           <Button
                             onClick={() => capturePhoto('scale')}
                             variant="outline"
-                            className="w-full h-32 border-dashed border-2 border-gray-300 hover:border-gray-400"
+                            className="w-full h-32 border-dashed border-2 border-gray-500 hover:border-gray-400 bg-gray-600/20"
                           >
                             <Camera className="w-8 h-8 text-gray-400" />
-                            <span className="block mt-2 text-sm text-gray-500">Capture Scale Photo</span>
+                            <span className="block mt-2 text-sm text-gray-400">Capture Scale Photo</span>
                           </Button>
                         )}
                       </div>
                     </div>
                     
                     <div>
-                      <Label>Photo of Recyclables</Label>
+                      <Label className="text-gray-300">Photo of Recyclables</Label>
                       <div className="mt-1">
                         {recyclablesPhoto ? (
                           <div className="relative">
@@ -656,7 +850,7 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                               variant="outline"
                               size="sm"
                               onClick={() => setRecyclablesPhoto(null)}
-                              className="absolute top-2 right-2 bg-white"
+                              className="absolute top-2 right-2 bg-gray-700 border-gray-500 text-white hover:bg-gray-600"
                             >
                               <X className="w-4 h-4" />
                             </Button>
@@ -665,10 +859,10 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                           <Button
                             onClick={() => capturePhoto('recyclables')}
                             variant="outline"
-                            className="w-full h-32 border-dashed border-2 border-gray-300 hover:border-gray-400"
+                            className="w-full h-32 border-dashed border-2 border-gray-500 hover:border-gray-400 bg-gray-600/20"
                           >
                             <Camera className="w-8 h-8 text-gray-400" />
-                            <span className="block mt-2 text-sm text-gray-500">Capture Recyclables Photo</span>
+                            <span className="block mt-2 text-sm text-gray-400">Capture Recyclables Photo</span>
                           </Button>
                         )}
                       </div>
@@ -678,54 +872,54 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
               </Card>
 
               {/* Summary */}
-              <Card>
+              <Card className="bg-gray-700 border-gray-600">
                 <CardHeader>
-                  <CardTitle>Collection Summary</CardTitle>
+                  <CardTitle className="text-white">Collection Summary</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                     <div>
-                      <p className="text-2xl font-bold text-blue-600">{materials.length}</p>
-                      <p className="text-sm text-gray-600">Materials</p>
+                      <p className="text-2xl font-bold text-blue-400">{materials.length}</p>
+                      <p className="text-sm text-gray-400">Materials</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-green-600">
+                      <p className="text-2xl font-bold text-green-400">
                         {materials.reduce((sum, m) => sum + m.kilograms, 0).toFixed(1)}
                       </p>
-                      <p className="text-sm text-gray-600">Total Kg</p>
+                      <p className="text-sm text-gray-400">Total Kg</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-orange-600">R {totalValue.toFixed(2)}</p>
-                      <p className="text-sm text-gray-600">Customer Value</p>
+                      <p className="text-2xl font-bold text-orange-400">R {totalValue.toFixed(2)}</p>
+                      <p className="text-sm text-gray-400">Customer Value</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-purple-600">R {donationValue.toFixed(2)}</p>
-                      <p className="text-sm text-gray-600">Donation Value</p>
+                      <p className="text-2xl font-bold text-purple-400">R {donationValue.toFixed(2)}</p>
+                      <p className="text-sm text-gray-400">Donation Value</p>
                     </div>
                   </div>
                   
-                                     <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                     <p className="text-sm text-orange-800">
-                       <strong>Fund Allocation:</strong><br/>
-                       • Aluminium (R18.55/kg): 100% to Customer Wallet<br/>
-                       • PET/Plastic (R1.50/kg): 100% to Green Scholar Fund<br/>
-                       • Other materials: 70% Green Scholar Fund, 30% Customer Wallet
-                     </p>
-                   </div>
+                  <div className="mt-4 p-3 bg-orange-900/20 border border-orange-500/50 rounded-lg">
+                    <p className="text-sm text-orange-300">
+                      <strong>Fund Allocation:</strong><br/>
+                      • Aluminum (R18.55/kg): 100% to Customer Wallet<br/>
+                      • PET/Plastic (R1.50/kg): 100% to Green Scholar Fund<br/>
+                      • Other materials: 70% Green Scholar Fund, 30% Customer Wallet
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </div>
           </div>
 
           {/* Submit Button */}
-          <div className="flex justify-end gap-3 mt-6 pt-6 border-t">
-            <Button variant="outline" onClick={onClose}>
+          <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-600">
+            <Button variant="outline" onClick={onClose} className="border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white">
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={!selectedCustomer || materials.length === 0 || isSubmitting}
-              className="bg-orange-600 hover:bg-orange-700"
+              className="bg-orange-500 hover:bg-orange-600 text-white"
             >
               {isSubmitting ? (
                 <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -737,8 +931,8 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
           </div>
           
           {/* Note about submission requirements */}
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <p className="text-sm text-green-800">
+          <div className="mt-4 p-3 bg-green-900/20 border border-green-500/50 rounded-lg">
+            <p className="text-sm text-green-300">
               <strong>Ready to Submit:</strong> You can submit a collection once you've selected a customer and added at least one material. 
               Photos are optional and not required for submission.
             </p>

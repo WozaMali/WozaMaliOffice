@@ -1,132 +1,321 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/hooks/use-auth";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { 
-  ArrowLeft, 
   User, 
   Mail, 
   Phone, 
   MapPin, 
+  Calendar,
+  IdCard,
   Loader2,
   Save,
-  Settings,
-  BarChart3,
-  Users,
-  Package,
-  TrendingUp
+  CheckCircle,
+  AlertCircle,
+  Settings as SettingsIcon
 } from "lucide-react";
-import Link from "next/link";
+import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
+import Navigation from "@/components/Navigation";
 
-interface CollectorProfile {
-  name: string;
+interface SettingsData {
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  address: string;
+  dateOfBirth: string;
+  streetAddress: string;
+  townshipId: string;
+  subdivision: string;
   city: string;
-  province: string;
   postalCode: string;
-  emergencyContact: string;
-  emergencyPhone: string;
-  notes: string;
+  employeeNumber: string;
 }
 
-export default function CollectorSettingsPage() {
-  const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
+interface Township {
+  id: string;
+  name: string;
+  city: string;
+  postal_code: string;
+}
+
+export default function CollectorSettings() {
+  const router = useRouter();
+  const { user, isLoading: authLoading } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [profile, setProfile] = useState<CollectorProfile>({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    province: '',
-    postalCode: '',
-    emergencyContact: '',
-    emergencyPhone: '',
-    notes: ''
+  const [townships, setTownships] = useState<Township[]>([]);
+  const [subdivisions, setSubdivisions] = useState<string[]>([]);
+  const [selectedTownship, setSelectedTownship] = useState<Township | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [success, setSuccess] = useState(false);
+
+  const [formData, setFormData] = useState<SettingsData>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    dateOfBirth: "",
+    streetAddress: "",
+    townshipId: "",
+    subdivision: "",
+    city: "",
+    postalCode: "",
+    employeeNumber: "C0001"
   });
 
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
+
+  // Load user data and townships on component mount
   useEffect(() => {
     if (user) {
-      loadProfileData();
+      loadUserData();
+      loadTownships();
     }
   }, [user]);
 
-  // Redirect unauthenticated users to login
-  useEffect(() => {
-    if (!user) {
-      window.location.href = '/login';
-    }
-  }, [user]);
+  const loadUserData = async () => {
+    if (!user?.id) return;
 
-  // Redirect non-collectors to unauthorized page
-  useEffect(() => {
-    if (user && user.role && 
-        user.role !== 'collector' && user.role !== 'admin' &&
-        user.role !== 'COLLECTOR' && user.role !== 'ADMIN') {
-      window.location.href = '/unauthorized';
-    }
-  }, [user]);
-
-  const loadProfileData = async () => {
     try {
       setIsLoading(true);
-      // TODO: Load profile from API
-      // For now, populate with user data if available
-      if (user) {
-        setProfile(prev => ({
-          ...prev,
-          name: user.name || '',
-          email: user.email || '',
-          phone: user.phone || '',
-          address: user.address || '',
-          city: user.city || '',
-          province: user.province || '',
-          postalCode: user.postalCode || ''
-        }));
+      const { data: userData, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          email,
+          first_name,
+          last_name,
+          phone,
+          role_id,
+          status,
+          street_addr,
+          township_id,
+          subdivision,
+          city,
+          postal_code,
+          identity_number,
+          date_of_birth,
+          employee_number,
+          areas!township_id(name)
+        `)
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error loading user data:', error);
+      } else if (userData) {
+        setFormData({
+          firstName: userData.first_name || "",
+          lastName: userData.last_name || "",
+          email: userData.email || "",
+          phone: userData.phone || "",
+          dateOfBirth: userData.date_of_birth || "",
+          streetAddress: userData.street_addr || "",
+          townshipId: userData.township_id || "",
+          subdivision: userData.subdivision || "",
+          city: userData.city || "",
+          postalCode: userData.postal_code || "",
+          employeeNumber: "C0001" // Static value since it's not stored in users table
+        });
+
+        // Set selected township if exists
+        if (userData.township_id) {
+          const township = townships.find(t => t.id === userData.township_id);
+          if (township) {
+            setSelectedTownship(township);
+            loadSubdivisions(township.id);
+          }
+        }
       }
     } catch (error) {
-      console.error('Error loading profile:', error);
+      console.error('Error loading user data:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSaveProfile = async () => {
+  const loadTownships = async () => {
     try {
-      setIsSaving(true);
-      // TODO: Save profile to API
-      console.log('Saving profile:', profile);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Show success message (you can use toast here)
-      alert('Profile updated successfully!');
+      // Use the same township_dropdown view as the Main App
+      const { data, error } = await supabase
+        .from('township_dropdown')
+        .select('id, township_name, city, postal_code')
+        .order('township_name');
+
+      if (error) {
+        console.error('Error loading townships:', error);
+      } else {
+        // Map the data to match the expected interface
+        const mappedTownships = data?.map(township => ({
+          id: township.id,
+          name: township.township_name,
+          city: township.city,
+          postal_code: township.postal_code
+        })) || [];
+        setTownships(mappedTownships);
+      }
     } catch (error) {
-      console.error('Error saving profile:', error);
-      alert('Error saving profile. Please try again.');
+      console.error('Error loading townships:', error);
+    }
+  };
+
+  const handleTownshipChange = (townshipId: string) => {
+    const township = townships.find(t => t.id === townshipId);
+    setSelectedTownship(township || null);
+    
+    setFormData(prev => ({
+      ...prev,
+      townshipId,
+      city: township?.city || "",
+      postalCode: township?.postal_code || ""
+    }));
+
+    // Load subdivisions for the selected township
+    loadSubdivisions(townshipId);
+  };
+
+  const loadSubdivisions = async (townshipId: string) => {
+    try {
+      // Fetch subdivisions from the database like the Main App does
+      const { data, error } = await supabase
+        .from('subdivision_dropdown')
+        .select('subdivision')
+        .eq('area_id', townshipId)
+        .order('subdivision');
+
+      if (error) {
+        console.error('Error fetching subdivisions:', error);
+        setSubdivisions([]);
+        return;
+      }
+
+      // Extract subdivision names from the database response
+      const subdivisions = data?.map(item => item.subdivision) || [];
+      setSubdivisions(subdivisions);
+    } catch (error) {
+      console.error('Error loading subdivisions:', error);
+      setSubdivisions([]);
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    // Required fields
+    if (!formData.firstName.trim()) newErrors.firstName = "First name is required";
+    if (!formData.lastName.trim()) newErrors.lastName = "Last name is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+    if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
+    if (!formData.dateOfBirth) newErrors.dateOfBirth = "Date of birth is required";
+    if (!formData.streetAddress.trim()) newErrors.streetAddress = "Street address is required";
+    if (!formData.townshipId) newErrors.townshipId = "Township is required";
+    if (!formData.subdivision.trim()) newErrors.subdivision = "Subdivision is required";
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (formData.email && !emailRegex.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    // Phone validation (basic)
+    const phoneRegex = /^[0-9+\-\s()]+$/;
+    if (formData.phone && !phoneRegex.test(formData.phone)) {
+      newErrors.phone = "Please enter a valid phone number";
+    }
+
+
+    // Date of birth validation
+    if (formData.dateOfBirth) {
+      const birthDate = new Date(formData.dateOfBirth);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      
+      if (age < 18) {
+        newErrors.dateOfBirth = "You must be at least 18 years old";
+      }
+      
+      if (age > 100) {
+        newErrors.dateOfBirth = "Please enter a valid date of birth";
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+
+    if (!user?.id) {
+      setErrors({ submit: 'User not authenticated' });
+      return;
+    }
+
+    setIsSaving(true);
+    setErrors({});
+    setSuccess(false);
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          email: formData.email,
+          phone: formData.phone,
+          date_of_birth: formData.dateOfBirth,
+          street_addr: formData.streetAddress,
+          township_id: formData.townshipId,
+          subdivision: formData.subdivision,
+          city: formData.city,
+          postal_code: formData.postalCode
+        })
+        .eq('id', user.id);
+
+      if (error) {
+        throw new Error(`Failed to update profile: ${error.message}`);
+      }
+
+      setSuccess(true);
+      
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setSuccess(false);
+      }, 3000);
+
+    } catch (error: any) {
+      console.error('Update error:', error);
+      setErrors({ submit: error.message || 'Failed to update profile. Please try again.' });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleInputChange = (field: keyof CollectorProfile, value: string) => {
-    setProfile(prev => ({
-      ...prev,
-      [field]: value
-    }));
+  const handleInputChange = (field: keyof SettingsData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    }
   };
 
-  // Show loading while checking authentication
-  if (!user || isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-900">
         <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
@@ -134,264 +323,308 @@ export default function CollectorSettingsPage() {
     );
   }
 
+  if (!user) {
+    return null; // Will redirect to login
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="p-2 hover:bg-gray-800 rounded-lg text-gray-300 hover:text-white transition-colors">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Settings</h1>
-            <p className="text-gray-300">Manage your profile and preferences</p>
+    <div className="min-h-screen bg-gray-900 py-8">
+      <div className="container mx-auto px-4 max-w-4xl">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/W yellow.png" 
+              alt="WozaMali Logo" 
+              className="h-16 w-auto"
+            />
           </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Settings</h1>
+          <p className="text-gray-300">Update your collector profile information</p>
         </div>
-      </div>
 
-      {/* Profile Information */}
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Card className="bg-gray-800 border-gray-700 text-white">
+        {/* Settings Form */}
+        <Card className="bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <User className="h-5 w-5 text-orange-400" />
-              Personal Information
+            <CardTitle className="text-white flex items-center gap-2">
+              <SettingsIcon className="h-5 w-5 text-orange-500" />
+              Profile Information
             </CardTitle>
-            <CardDescription className="text-gray-300">
-              Update your basic contact information
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="name" className="text-gray-300">Full Name</Label>
-                <Input 
-                  id="name"
-                  value={profile.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  placeholder="Enter your full name"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="email" className="text-gray-300">Email Address</Label>
-                <Input 
-                  id="email"
-                  type="email"
-                  value={profile.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  placeholder="Enter your email"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="phone" className="text-gray-300">Phone Number</Label>
-              <Input 
-                id="phone"
-                value={profile.phone}
-                onChange={(e) => handleInputChange('phone', e.target.value)}
-                placeholder="Enter your phone number"
-                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Address Information */}
-        <Card className="bg-gray-800 border-gray-700 text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <MapPin className="h-5 w-5 text-yellow-400" />
-              Address Information
-            </CardTitle>
-            <CardDescription className="text-gray-300">
-              Your residential address for records
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="address" className="text-gray-300">Street Address</Label>
-              <Input 
-                id="address"
-                value={profile.address}
-                onChange={(e) => handleInputChange('address', e.target.value)}
-                placeholder="Enter your street address"
-                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-              />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="city" className="text-gray-300">City</Label>
-                <Input 
-                  id="city"
-                  value={profile.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  placeholder="City"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="province" className="text-gray-300">Province</Label>
-                <Input 
-                  id="province"
-                  value={profile.province}
-                  onChange={(e) => handleInputChange('province', e.target.value)}
-                  placeholder="Province"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="postalCode" className="text-gray-300">Postal Code</Label>
-                <Input 
-                  id="postalCode"
-                  value={profile.postalCode}
-                  onChange={(e) => handleInputChange('postalCode', e.target.value)}
-                  placeholder="Postal code"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Emergency Contact */}
-        <Card className="bg-gray-800 border-gray-700 text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Phone className="h-5 w-5 text-orange-400" />
-              Emergency Contact
-            </CardTitle>
-            <CardDescription className="text-gray-300">
-              Someone to contact in case of emergency
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="emergencyContact" className="text-gray-300">Contact Name</Label>
-                <Input 
-                  id="emergencyContact"
-                  value={profile.emergencyContact}
-                  onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
-                  placeholder="Emergency contact name"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="emergencyPhone" className="text-gray-300">Contact Phone</Label>
-                <Input 
-                  id="emergencyPhone"
-                  value={profile.emergencyPhone}
-                  onChange={(e) => handleInputChange('emergencyPhone', e.target.value)}
-                  placeholder="Emergency contact phone"
-                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Additional Notes */}
-        <Card className="bg-gray-800 border-gray-700 text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <User className="h-5 w-5 text-yellow-400" />
-              Additional Information
-            </CardTitle>
-            <CardDescription className="text-gray-300">
-              Any additional notes or preferences
+            <CardDescription className="text-gray-400">
+              Update your personal and contact information
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div>
-              <Label htmlFor="notes" className="text-gray-300">Notes</Label>
-              <Textarea 
-                id="notes"
-                value={profile.notes}
-                onChange={(e) => handleInputChange('notes', e.target.value)}
-                placeholder="Any additional information..."
-                rows={3}
-                className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-              />
-            </div>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Personal Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="firstName" className="text-white">First Name *</Label>
+                  <Input
+                    id="firstName"
+                    type="text"
+                    value={formData.firstName}
+                    onChange={(e) => handleInputChange('firstName', e.target.value)}
+                    className="bg-gray-700 border-gray-600 text-white"
+                    placeholder="Enter your first name"
+                  />
+                  {errors.firstName && (
+                    <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {errors.firstName}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="lastName" className="text-white">Last Name *</Label>
+                  <Input
+                    id="lastName"
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => handleInputChange('lastName', e.target.value)}
+                    className="bg-gray-700 border-gray-600 text-white"
+                    placeholder="Enter your last name"
+                  />
+                  {errors.lastName && (
+                    <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {errors.lastName}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="email" className="text-white">Email Address *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    className="bg-gray-700 border-gray-600 text-white"
+                    placeholder="Enter your email"
+                  />
+                  {errors.email && (
+                    <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {errors.email}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="phone" className="text-white">Phone Number *</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    className="bg-gray-700 border-gray-600 text-white"
+                    placeholder="Enter your phone number"
+                  />
+                  {errors.phone && (
+                    <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {errors.phone}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="dateOfBirth" className="text-white">Date of Birth *</Label>
+                <Input
+                  id="dateOfBirth"
+                  type="date"
+                  value={formData.dateOfBirth}
+                  onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+                {errors.dateOfBirth && (
+                  <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.dateOfBirth}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="employeeNumber" className="text-white">Employee Number</Label>
+                  <Input
+                    id="employeeNumber"
+                    type="text"
+                    value={formData.employeeNumber}
+                    onChange={(e) => handleInputChange('employeeNumber', e.target.value)}
+                    className="bg-gray-600 border-gray-500 text-gray-300"
+                    placeholder="C0001"
+                    readOnly
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Your assigned employee number</p>
+                </div>
+              </div>
+
+              {/* Address Information */}
+              <div className="border-t border-gray-600 pt-6">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-orange-500" />
+                  Address Information
+                </h3>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="streetAddress" className="text-white">Street Address *</Label>
+                    <Input
+                      id="streetAddress"
+                      type="text"
+                      value={formData.streetAddress}
+                      onChange={(e) => handleInputChange('streetAddress', e.target.value)}
+                      className="bg-gray-700 border-gray-600 text-white"
+                      placeholder="Enter your street address"
+                    />
+                    {errors.streetAddress && (
+                      <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.streetAddress}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="townshipId" className="text-white">Township *</Label>
+                      <select
+                        id="townshipId"
+                        value={formData.townshipId}
+                        onChange={(e) => handleTownshipChange(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      >
+                        <option value="">Select Township</option>
+                        {townships.map((township) => (
+                          <option key={township.id} value={township.id}>
+                            {township.name}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.townshipId && (
+                        <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          {errors.townshipId}
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="subdivision" className="text-white">Subdivision *</Label>
+                      <select
+                        id="subdivision"
+                        value={formData.subdivision}
+                        onChange={(e) => handleInputChange('subdivision', e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        disabled={!selectedTownship}
+                      >
+                        <option value="">Select Subdivision</option>
+                        {subdivisions.map((subdivision) => (
+                          <option key={subdivision} value={subdivision}>
+                            {subdivision}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.subdivision && (
+                        <p className="text-red-400 text-sm mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          {errors.subdivision}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="city" className="text-white">City</Label>
+                      <Input
+                        id="city"
+                        type="text"
+                        value={formData.city}
+                        readOnly
+                        className="bg-gray-600 border-gray-500 text-gray-300"
+                        placeholder="Auto-filled from township"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="postalCode" className="text-white">Postal Code</Label>
+                      <Input
+                        id="postalCode"
+                        type="text"
+                        value={formData.postalCode}
+                        readOnly
+                        className="bg-gray-600 border-gray-500 text-gray-300"
+                        placeholder="Auto-filled from township"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Success Message */}
+              {success && (
+                <div className="p-4 bg-green-900/20 border border-green-500/30 rounded-lg">
+                  <p className="text-green-400 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Profile updated successfully!
+                  </p>
+                </div>
+              )}
+
+              {/* Submit Error */}
+              {errors.submit && (
+                <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+                  <p className="text-red-400 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.submit}
+                  </p>
+                </div>
+              )}
+
+              {/* Submit Buttons */}
+              <div className="flex flex-col sm:flex-row gap-4 pt-6">
+                <Button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Save Changes
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push('/')}
+                  className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                >
+                  Back to Dashboard
+                </Button>
+              </div>
+            </form>
           </CardContent>
         </Card>
-
-        {/* Save Button */}
-        <div className="flex justify-end mb-20">
-          <Button 
-            onClick={handleSaveProfile}
-            disabled={isSaving}
-            className="bg-gradient-to-r from-orange-500 to-yellow-500 hover:from-orange-600 hover:to-yellow-600 text-black px-8 py-3 text-lg font-medium shadow-lg"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-5 w-5 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
-        </div>
       </div>
 
-      {/* Bottom Navigation Bar - Mobile Optimized - DARK GREY + ORANGE */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-600 z-50 md:hidden">
-        <div className="flex items-center justify-around py-2">
-          {/* Overview Tab */}
-          <Link
-            href="/"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <BarChart3 className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Overview</span>
-          </Link>
-
-          {/* Pickups Tab */}
-          <Link
-            href="/pickups"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Package className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Pickups</span>
-          </Link>
-
-          {/* Customers Tab */}
-          <Link
-            href="/customers"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <Users className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Customers</span>
-          </Link>
-
-          {/* Analytics Tab */}
-          <Link
-            href="/analytics"
-            className="flex flex-col items-center justify-center w-16 h-16 rounded-lg transition-all duration-200 text-gray-300 hover:text-white hover:bg-gray-700"
-          >
-            <TrendingUp className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Analytics</span>
-          </Link>
-
-          {/* Settings Tab */}
-          <div className="flex flex-col items-center justify-center w-16 h-16 rounded-lg bg-orange-500 text-white">
-            <Settings className="h-6 w-6 mb-1" />
-            <span className="text-xs font-medium">Settings</span>
-          </div>
-        </div>
-      </nav>
+      {/* Navigation */}
+      <Navigation />
     </div>
   );
 }

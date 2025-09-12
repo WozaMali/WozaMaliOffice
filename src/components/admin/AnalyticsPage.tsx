@@ -26,6 +26,7 @@ import {
   formatWeight,
   formatDate
 } from '@/lib/admin-services';
+import { exportToCSV, exportToXLSX, exportToPDF } from '@/lib/export-utils';
 import { 
   SystemImpactView, 
   MaterialPerformanceView, 
@@ -229,6 +230,35 @@ export default function AnalyticsPage() {
           <CardDescription>
             Performance metrics by material type
           </CardDescription>
+          <div className="mt-2 flex gap-2">
+            <button className="text-sm underline" onClick={() => exportToCSV('material_performance.csv', ['Material','Category','Rate/kg','Pickups','Total Weight','Total Value','Avg per Pickup'], materialPerformance.map(m => ({
+              'Material': m.material_name,
+              'Category': m.category,
+              'Rate/kg': m.rate_per_kg,
+              'Pickups': m.pickup_count,
+              'Total Weight': m.total_kg_collected,
+              'Total Value': m.total_value_generated,
+              'Avg per Pickup': m.avg_kg_per_pickup
+            })))}>Download CSV</button>
+            <button className="text-sm underline" onClick={() => exportToXLSX('material_performance.xlsx', 'Materials', ['Material','Category','Rate/kg','Pickups','Total Weight','Total Value','Avg per Pickup'], materialPerformance.map(m => ({
+              'Material': m.material_name,
+              'Category': m.category,
+              'Rate/kg': m.rate_per_kg,
+              'Pickups': m.pickup_count,
+              'Total Weight': m.total_kg_collected,
+              'Total Value': m.total_value_generated,
+              'Avg per Pickup': m.avg_kg_per_pickup
+            })), '/Woza Mali logo white.png')}>Download Excel</button>
+            <button className="text-sm underline" onClick={() => exportToPDF('Material Performance', 'material_performance.pdf', ['Material','Category','Rate/kg','Pickups','Total Weight','Total Value','Avg per Pickup'], materialPerformance.map(m => ({
+              'Material': m.material_name,
+              'Category': m.category,
+              'Rate/kg': m.rate_per_kg,
+              'Pickups': m.pickup_count,
+              'Total Weight': m.total_kg_collected,
+              'Total Value': m.total_value_generated,
+              'Avg per Pickup': m.avg_kg_per_pickup
+            })), '/Woza Mali logo white.png')}>Download PDF</button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -274,6 +304,32 @@ export default function AnalyticsPage() {
           <CardDescription>
             Performance ranking of field collectors
           </CardDescription>
+          <div className="mt-2 flex gap-2">
+            <button className="text-sm underline" onClick={() => exportToCSV('top_collectors.csv', ['Collector','Email','Pickups','Weight','Value','CO2 Saved'], collectorPerformance.map(c => ({
+              'Collector': c.collector_name,
+              'Email': c.collector_email,
+              'Pickups': c.total_pickups,
+              'Weight': c.total_kg_collected,
+              'Value': c.total_value_generated,
+              'CO2 Saved': c.total_co2_saved
+            })))}>Download CSV</button>
+            <button className="text-sm underline" onClick={() => exportToXLSX('top_collectors.xlsx', 'Collectors', ['Collector','Email','Pickups','Weight','Value','CO2 Saved'], collectorPerformance.map(c => ({
+              'Collector': c.collector_name,
+              'Email': c.collector_email,
+              'Pickups': c.total_pickups,
+              'Weight': c.total_kg_collected,
+              'Value': c.total_value_generated,
+              'CO2 Saved': c.total_co2_saved
+            })), '/Woza Mali logo white.png')}>Download Excel</button>
+            <button className="text-sm underline" onClick={() => exportToPDF('Top Collectors', 'top_collectors.pdf', ['Collector','Email','Pickups','Weight','Value','CO2 Saved'], collectorPerformance.map(c => ({
+              'Collector': c.collector_name,
+              'Email': c.collector_email,
+              'Pickups': c.total_pickups,
+              'Weight': c.total_kg_collected,
+              'Value': c.total_value_generated,
+              'CO2 Saved': c.total_co2_saved
+            })), '/Woza Mali logo white.png')}>Download PDF</button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -329,6 +385,32 @@ export default function AnalyticsPage() {
           <CardDescription>
             Most active recycling customers
           </CardDescription>
+          <div className="mt-2 flex gap-2">
+            <button className="text-sm underline" onClick={() => exportToCSV('top_customers.csv', ['Resident','Email','Pickups','Weight','Earned','Wallet'], customerPerformance.map(c => ({
+              'Resident': c.customer_name,
+              'Email': c.customer_email,
+              'Pickups': c.total_pickups,
+              'Weight': c.total_kg_recycled,
+              'Earned': c.total_value_earned,
+              'Wallet': c.total_wallet_balance
+            })))}>Download CSV</button>
+            <button className="text-sm underline" onClick={() => exportToXLSX('top_customers.xlsx', 'Residents', ['Resident','Email','Pickups','Weight','Earned','Wallet'], customerPerformance.map(c => ({
+              'Resident': c.customer_name,
+              'Email': c.customer_email,
+              'Pickups': c.total_pickups,
+              'Weight': c.total_kg_recycled,
+              'Earned': c.total_value_earned,
+              'Wallet': c.total_wallet_balance
+            })), '/Woza Mali logo white.png')}>Download Excel</button>
+            <button className="text-sm underline" onClick={() => exportToPDF('Top Residents', 'top_residents.pdf', ['Resident','Email','Pickups','Weight','Earned','Wallet'], customerPerformance.map(c => ({
+              'Resident': c.customer_name,
+              'Email': c.customer_email,
+              'Pickups': c.total_pickups,
+              'Weight': c.total_kg_recycled,
+              'Earned': c.total_value_earned,
+              'Wallet': c.total_wallet_balance
+            })), '/Woza Mali logo white.png')}>Download PDF</button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

@@ -37,6 +37,11 @@ import {
 import { formatCurrency, formatWeight, formatPoints } from "@/lib/recycling-schema";
 import { pickupServices, dashboardServices } from "@/lib/supabase-services";
 import type { AdminDashboardView } from "@/lib/supabase";
+import { 
+  getPendingCollections,
+  updateCollectionStatus,
+  type CollectionWithDetails
+} from "../lib/office-collection-services";
 
 export default function AdminPickups() {
   const [selectedPickup, setSelectedPickup] = useState<AdminDashboardView | null>(null);

@@ -94,27 +94,139 @@ export const profileServices = {
   // Get customer profiles with their addresses for collector dashboard (legacy)
   async getCustomerProfilesWithAddresses(): Promise<ProfileWithAddresses[]> {
     try {
+      // Use the same approach as Main App Dashboard - direct fields from users table
       const { data, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select(`
-          *,
-          addresses(*)
+          id,
+          first_name,
+          last_name,
+          phone,
+          email,
+          township_id,
+          street_addr,
+          subdivision,
+          city,
+          postal_code,
+          created_at,
+          areas!township_id(name)
         `)
-        .eq('role', 'customer')
+        .eq('role_id', (await this.getRoleId('customer')))
         .eq('is_active', true)
 
       if (error) throw error
-      return data || []
+      
+      // Transform to match ProfileWithAddresses interface
+      return data?.map(user => ({
+        id: user.id,
+        full_name: `${user.first_name} ${user.last_name}`.trim(),
+        phone: user.phone,
+        email: user.email,
+        role: 'customer',
+        is_active: true,
+        created_at: user.created_at,
+        // Create address object from direct fields (same as Main App Dashboard)
+        addresses: [{
+          id: user.id, // Use user id as address id for compatibility
+          profile_id: user.id,
+          line1: user.street_addr || '',
+          suburb: user.subdivision || '',
+          city: user.city || '',
+          postal_code: user.postal_code || '',
+          is_primary: true,
+          created_at: user.created_at
+        }]
+      })) || []
     } catch (error) {
       console.error('Error fetching customer profiles with addresses:', error)
       return []
     }
   },
 
-  // NEW: Get member profiles with user addresses using the new views
+  // Helper method to get role ID
+  async getRoleId(roleName: string): Promise<string> {
+    const { data, error } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('name', roleName)
+      .single()
+    
+    if (error) throw error
+    return data.id
+  },
+
+  // NEW: Get member profiles with user addresses using the same approach as Main App
   async getMemberProfilesWithUserAddresses(): Promise<MemberWithUserAddresses[]> {
     try {
       console.log('🔍 Fetching member profiles with user addresses...')
+      
+      // Use the same approach as Main App Dashboard - direct fields from users table
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          id,
+          first_name,
+          last_name,
+          phone,
+          email,
+          township_id,
+          street_addr,
+          subdivision,
+          city,
+          postal_code,
+          created_at,
+          areas!township_id(name)
+        `)
+        .eq('role_id', (await this.getRoleId('member')))
+        .eq('is_active', true)
+        .order('first_name', { ascending: true })
+
+      if (error) {
+        console.error('❌ Supabase error:', error)
+        throw error
+      }
+      
+      console.log('📊 Raw data from users table:', { 
+        count: data?.length || 0, 
+        sample: data?.slice(0, 2) 
+      })
+      
+      // Transform to match MemberWithUserAddresses interface
+      return data?.map(user => ({
+        member_id: user.id,
+        full_name: `${user.first_name} ${user.last_name}`.trim(),
+        phone: user.phone,
+        email: user.email,
+        role: 'member',
+        is_active: true,
+        created_at: user.created_at,
+        // Create user addresses from direct fields (same as Main App Dashboard)
+        user_addresses: [{
+          id: user.id, // Use user id as address id for compatibility
+          user_id: user.id,
+          address_type: 'primary',
+          address_line1: user.street_addr || '',
+          address_line2: user.subdivision || '',
+          city: user.city || '',
+          province: 'Gauteng', // Default province
+          postal_code: user.postal_code || '',
+          country: 'South Africa',
+          is_default: true,
+          is_active: true,
+          created_at: user.created_at,
+          updated_at: user.created_at
+        }]
+      })) || []
+    } catch (error) {
+      console.error('❌ Error fetching member profiles with user addresses:', error)
+      return []
+    }
+  },
+
+  // Legacy method for backward compatibility
+  async getMemberProfilesWithUserAddressesLegacy(): Promise<MemberWithUserAddresses[]> {
+    try {
+      console.log('🔍 Fetching member profiles with user addresses (legacy view)...')
       
       const { data, error } = await supabase
         .from('office_member_user_addresses_view')

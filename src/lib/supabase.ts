@@ -1,18 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://your-project.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'your-anon-key'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 console.log('🔌 Creating Supabase client with:');
 console.log('🔌 URL:', supabaseUrl);
 console.log('🔌 Key length:', supabaseAnonKey?.length || 0);
 
-if (!supabaseUrl || supabaseUrl === 'https://your-project.supabase.co') {
-  console.error('❌ NEXT_PUBLIC_SUPABASE_URL is not set or invalid');
-}
-
-if (!supabaseAnonKey || supabaseAnonKey === 'your-anon-key') {
-  console.error('❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is not set or invalid');
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -23,7 +19,12 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
+// Create admin client with service role key for admin operations
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
+
 console.log('✅ Supabase client created successfully');
+console.log('✅ Supabase admin client created:', supabaseAdmin ? 'Yes' : 'No');
 
 // Database types matching your new schema
 export interface Profile {
@@ -31,7 +32,7 @@ export interface Profile {
   email: string
   full_name?: string
   phone?: string
-  role: 'customer' | 'collector' | 'admin'
+  role: 'customer' | 'collector' | 'admin' | 'super_admin'
   is_active: boolean
   created_at: string
 }
@@ -291,68 +292,159 @@ export interface AdminDashboardView {
   approval_note?: string
 }
 
-// NEW: Analytics Types
+// NEW: Analytics Types (Updated to match actual data structure)
 export interface SystemImpactView {
   total_pickups: number
-  unique_customers: number
-  unique_collectors: number
+  pending_pickups: number
   total_kg_collected: number
   total_value_generated: number
+  unique_customers: number
+  unique_collectors: number
   total_co2_saved: number
   total_water_saved: number
   total_landfill_saved: number
   total_trees_equivalent: number
-  total_green_scholar_fund: number
-  total_user_wallet_fund: number
-  total_points_generated: number
-  pending_pickups: number
-  approved_pickups: number
-  rejected_pickups: number
 }
 
 export interface MaterialPerformanceView {
   material_name: string
   category: string
-  rate_per_kg: number
   pickup_count: number
   total_kg_collected: number
   total_value_generated: number
   avg_kg_per_pickup: number
-  total_co2_saved: number
-  total_water_saved: number
-  total_landfill_saved: number
-  total_points_generated: number
+  rate_per_kg: number
 }
 
 export interface CollectorPerformanceView {
   collector_id: string
   collector_name: string
-  collector_email: string
-  collector_phone: string
+  collector_email: string // This will contain phone number from collector_phone
   total_pickups: number
   total_kg_collected: number
   total_value_generated: number
   total_co2_saved: number
-  total_water_saved: number
-  total_points_generated: number
-  pending_pickups: number
-  approved_pickups: number
-  rejected_pickups: number
-  last_pickup_date?: string
+  last_activity: string
 }
 
 export interface CustomerPerformanceView {
   customer_id: string
   customer_name: string
   customer_email: string
-  customer_phone: string
   total_pickups: number
   total_kg_recycled: number
   total_value_earned: number
-  total_co2_saved: number
-  total_water_saved: number
-  total_points_earned: number
-  total_green_scholar_contribution: number
   total_wallet_balance: number
-  last_recycling_date?: string
+  last_activity: string
+}
+
+// ============================================================================
+// UNIFIED SCHEMA TYPES
+// ============================================================================
+
+// User types
+export interface User {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  date_of_birth?: string;
+  phone?: string;
+  email: string;
+  role_id: string;
+  area_id?: string;
+  street_addr?: string;
+  township_id?: string;
+  subdivision?: string;
+  city: string;
+  postal_code?: string;
+  suburb?: string; // Legacy field
+  status: 'active' | 'suspended' | 'deleted';
+  last_login?: string;
+  login_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// Role types
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
+  permissions: any;
+  created_at: string;
+  updated_at: string;
+}
+
+// Area types
+export interface Area {
+  id: string;
+  name: string;
+  description?: string;
+  city: string;
+  province?: string;
+  postal_code: string;
+  subdivisions?: string[];
+  boundaries?: any;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Township dropdown types
+export interface TownshipDropdown {
+  id: string;
+  township_name: string;
+  postal_code: string;
+  city: string;
+  subdivisions: string[];
+}
+
+// Subdivision dropdown types
+export interface SubdivisionDropdown {
+  area_id: string;
+  township_name: string;
+  postal_code: string;
+  subdivision: string;
+}
+
+// Residents view types
+export interface Resident {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
+  email: string;
+  phone?: string;
+  date_of_birth?: string;
+  street_addr?: string;
+  township_id?: string;
+  township_name?: string;
+  subdivision?: string;
+  suburb?: string; // Legacy field
+  city: string;
+  postal_code?: string;
+  status: 'active' | 'suspended' | 'deleted';
+  created_at: string;
+  updated_at: string;
+  address_status: 'complete' | 'legacy' | 'incomplete';
+}
+
+// Extended types with relationships
+export interface UserWithRole extends User {
+  role?: Role;
+}
+
+export interface UserWithArea extends User {
+  area?: Area;
+}
+
+export interface UserWithTownship extends User {
+  township?: Area;
+}
+
+export interface UserComplete extends User {
+  role?: Role;
+  area?: Area;
+  township?: Area;
 }

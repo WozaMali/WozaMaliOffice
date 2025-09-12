@@ -40,18 +40,15 @@ export class UserService {
         return { success: false, error: 'Failed to create user' };
       }
 
-      // Create profile in profiles table
+      // Create profile in users table (unified schema)
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
+        .from('users')
         .insert({
           id: authData.user.id,
           email: userData.email,
-          username: userData.username || userData.email,
-          first_name: userData.firstName || '',
-          last_name: userData.lastName || '',
+          name: `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || userData.email,
           role: userData.role,
           phone: userData.phone || '',
-          is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -66,13 +63,13 @@ export class UserService {
 
       const user: User = {
         id: profile.id,
-        username: profile.username || profile.email,
+        username: profile.name || profile.email,
         email: profile.email,
         role: profile.role as UserRole,
-        firstName: profile.first_name || '',
-        lastName: profile.last_name || '',
-        isActive: profile.is_active,
-        lastLogin: profile.last_login ? new Date(profile.last_login) : undefined,
+        firstName: profile.name?.split(' ')[0] || '',
+        lastName: profile.name?.split(' ').slice(1).join(' ') || '',
+        isActive: true, // Default to true in unified schema
+        lastLogin: undefined, // Not tracked in unified schema
         createdAt: new Date(profile.created_at),
         updatedAt: new Date(profile.updated_at),
       };
@@ -88,7 +85,7 @@ export class UserService {
   static async getUserById(id: string): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       const { data: profile, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('id', id)
         .single();
@@ -103,13 +100,13 @@ export class UserService {
 
       const user: User = {
         id: profile.id,
-        username: profile.username || profile.email,
+        username: profile.name || profile.email,
         email: profile.email,
         role: profile.role as UserRole,
-        firstName: profile.first_name || '',
-        lastName: profile.last_name || '',
-        isActive: profile.is_active,
-        lastLogin: profile.last_login ? new Date(profile.last_login) : undefined,
+        firstName: profile.name?.split(' ')[0] || '',
+        lastName: profile.name?.split(' ').slice(1).join(' ') || '',
+        isActive: true, // Default to true in unified schema
+        lastLogin: undefined, // Not tracked in unified schema
         createdAt: new Date(profile.created_at),
         updatedAt: new Date(profile.updated_at),
       };
@@ -125,7 +122,7 @@ export class UserService {
   static async getUserByEmail(email: string): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       const { data: profile, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .eq('email', email)
         .single();
@@ -140,13 +137,13 @@ export class UserService {
 
       const user: User = {
         id: profile.id,
-        username: profile.username || profile.email,
+        username: profile.name || profile.email,
         email: profile.email,
         role: profile.role as UserRole,
-        firstName: profile.first_name || '',
-        lastName: profile.last_name || '',
-        isActive: profile.is_active,
-        lastLogin: profile.last_login ? new Date(profile.last_login) : undefined,
+        firstName: profile.name?.split(' ')[0] || '',
+        lastName: profile.name?.split(' ').slice(1).join(' ') || '',
+        isActive: true, // Default to true in unified schema
+        lastLogin: undefined, // Not tracked in unified schema
         createdAt: new Date(profile.created_at),
         updatedAt: new Date(profile.updated_at),
       };
@@ -165,15 +162,17 @@ export class UserService {
         updated_at: new Date().toISOString(),
       };
 
-      if (updateData.username !== undefined) updateFields.username = updateData.username;
-      if (updateData.firstName !== undefined) updateFields.first_name = updateData.firstName;
-      if (updateData.lastName !== undefined) updateFields.last_name = updateData.lastName;
+      if (updateData.username !== undefined) updateFields.name = updateData.username;
+      if (updateData.firstName !== undefined || updateData.lastName !== undefined) {
+        const firstName = updateData.firstName || '';
+        const lastName = updateData.lastName || '';
+        updateFields.name = `${firstName} ${lastName}`.trim();
+      }
       if (updateData.role !== undefined) updateFields.role = updateData.role;
       if (updateData.phone !== undefined) updateFields.phone = updateData.phone;
-      if (updateData.isActive !== undefined) updateFields.is_active = updateData.isActive;
 
       const { data: profile, error } = await supabase
-        .from('profiles')
+        .from('users')
         .update(updateFields)
         .eq('id', id)
         .select()
@@ -185,13 +184,13 @@ export class UserService {
 
       const user: User = {
         id: profile.id,
-        username: profile.username || profile.email,
+        username: profile.name || profile.email,
         email: profile.email,
         role: profile.role as UserRole,
-        firstName: profile.first_name || '',
-        lastName: profile.last_name || '',
-        isActive: profile.is_active,
-        lastLogin: profile.last_login ? new Date(profile.last_login) : undefined,
+        firstName: profile.name?.split(' ')[0] || '',
+        lastName: profile.name?.split(' ').slice(1).join(' ') || '',
+        isActive: true, // Default to true in unified schema
+        lastLogin: undefined, // Not tracked in unified schema
         createdAt: new Date(profile.created_at),
         updatedAt: new Date(profile.updated_at),
       };
@@ -209,7 +208,7 @@ export class UserService {
       console.log('Fetching users from Supabase...');
       
       const { data: profiles, error } = await supabase
-        .from('profiles')
+        .from('users')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -250,9 +249,8 @@ export class UserService {
   static async updateLastLogin(id: string): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from('users')
         .update({
-          last_login: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq('id', id);

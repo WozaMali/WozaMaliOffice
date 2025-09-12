@@ -18,35 +18,48 @@ import {
   Calendar,
   User,
   Wallet,
-  TrendingUp
+  TrendingUp,
+  TrendingDown,
+  DollarSign
 } from 'lucide-react';
-import { getPayments, subscribeToPayments, updatePaymentStatus, formatDate, formatCurrency, getStatusColor } from '@/lib/admin-services';
-import { Payment } from '@/lib/supabase';
+import { 
+  getWithdrawals, 
+  subscribeToWithdrawals, 
+  updateWithdrawalStatusOffice, 
+  formatDate, 
+  formatCurrency,
+  getWithdrawalsFallbackFromCollections
+} from '@/lib/admin-services';
 
 export default function PaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [filteredWithdrawals, setFilteredWithdrawals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [methodFilter, setMethodFilter] = useState('all');
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState<'wallet' | 'cash' | 'bank_transfer' | 'mobile_money'>('wallet');
 
-  // Load payments and set up real-time subscription
+  // Load withdrawals and set up real-time subscription
   useEffect(() => {
-    loadPayments();
+    loadWithdrawals();
     
     // Subscribe to real-time changes
-    const subscription = subscribeToPayments((payload) => {
+    const subscription = subscribeToWithdrawals((payload) => {
+      console.log('🔔 Real-time withdrawal update:', payload);
       if (payload.eventType === 'INSERT') {
-        setPayments(prev => [payload.new, ...prev]);
+        console.log('➕ New withdrawal inserted:', payload.new);
+        setWithdrawals(prev => [payload.new, ...prev]);
       } else if (payload.eventType === 'UPDATE') {
-        setPayments(prev => prev.map(payment => 
-          payment.id === payload.new.id ? payload.new : payment
+        console.log('🔄 Withdrawal updated:', payload.new);
+        setWithdrawals(prev => prev.map(row => 
+          row.id === payload.new.id ? payload.new : row
         ));
       } else if (payload.eventType === 'DELETE') {
-        setPayments(prev => prev.filter(payment => payment.id !== payload.old.id));
+        console.log('🗑️ Withdrawal deleted:', payload.old);
+        setWithdrawals(prev => prev.filter(row => row.id !== payload.old.id));
       }
     });
 
@@ -55,52 +68,59 @@ export default function PaymentsPage() {
     };
   }, []);
 
-  // Filter payments based on search and filters
+  // Filter withdrawals based on search and filters
   useEffect(() => {
-    let filtered = payments;
+    let filtered = withdrawals;
 
     // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(payment =>
-        payment.pickup?.customer?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        payment.pickup?.customer?.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        payment.reference_number?.toLowerCase().includes(searchTerm.toLowerCase())
+      filtered = filtered.filter(row =>
+        row.user?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        row.user?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        row.id?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     // Status filter
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(payment => payment.status === statusFilter);
+      filtered = filtered.filter(row => row.status === statusFilter);
     }
 
-    // Method filter
-    if (methodFilter !== 'all') {
-      filtered = filtered.filter(payment => payment.method === methodFilter);
-    }
+    setFilteredWithdrawals(filtered);
+  }, [withdrawals, searchTerm, statusFilter]);
 
-    setFilteredPayments(filtered);
-  }, [payments, searchTerm, statusFilter, methodFilter]);
-
-  const loadPayments = async () => {
+  const loadWithdrawals = async () => {
     try {
       setLoading(true);
-      const data = await getPayments();
-      setPayments(data);
+      console.log('🔄 Loading withdrawals with status filter:', statusFilter);
+      let data = await getWithdrawals(statusFilter);
+      if (!data || data.length === 0) {
+        console.log('⚠️ No withdrawals rows returned; falling back to unified_collections...');
+        let collectionId: string | undefined = undefined;
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const cid = params.get('collection_id');
+          if (cid) collectionId = cid;
+        } catch {}
+        data = await getWithdrawalsFallbackFromCollections({ collectionId, limit: 200 });
+      }
+      console.log('📊 Loaded withdrawals:', data);
+      setWithdrawals(data);
     } catch (error) {
-      console.error('Error loading payments:', error);
+      console.error('❌ Error loading withdrawals:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStatusUpdate = async (paymentId: string, newStatus: string) => {
+  const handleStatusUpdate = async (withdrawalId: string, newStatus: string) => {
     try {
-      await updatePaymentStatus(paymentId, newStatus, adminNotes);
+      await updateWithdrawalStatusOffice(withdrawalId, newStatus as any, adminNotes, payoutMethod);
       setSelectedPayment(null);
       setAdminNotes('');
       // Real-time update will handle the UI update
     } catch (error) {
-      console.error('Error updating payment status:', error);
+      console.error('Error updating withdrawal status:', error);
     }
   };
 
@@ -155,10 +175,10 @@ export default function PaymentsPage() {
     );
   }
 
-  const totalPending = payments.filter(p => p.status === 'pending').length;
-  const totalApproved = payments.filter(p => p.status === 'approved').length;
-  const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
-  const pendingAmount = payments.filter(p => p.status === 'pending').reduce((sum, p) => sum + (p.amount || 0), 0);
+  const totalPending = withdrawals.filter(p => p.status === 'pending').length;
+  const totalApproved = withdrawals.filter(p => p.status === 'approved').length;
+  const totalAmount = withdrawals.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const pendingAmount = withdrawals.filter(p => p.status === 'pending').reduce((sum, p) => sum + (p.amount || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -178,7 +198,7 @@ export default function PaymentsPage() {
             <CreditCard className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{payments.length}</div>
+            <div className="text-2xl font-bold">{withdrawals.length}</div>
             <p className="text-xs text-muted-foreground">
               All time
             </p>
@@ -225,18 +245,81 @@ export default function PaymentsPage() {
         </Card>
       </div>
 
+      {/* Additional Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Approved</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {withdrawals.filter(w => w.status === 'approved' || w.status === 'completed').length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Successfully processed
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Rejected</CardTitle>
+            <XCircle className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {withdrawals.filter(w => w.status === 'rejected' || w.status === 'cancelled').length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Declined requests
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Approved Amount</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {formatCurrency(withdrawals.filter(w => w.status === 'approved' || w.status === 'completed').reduce((sum, w) => sum + (w.amount || 0), 0))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Total approved
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Rejected Amount</CardTitle>
+            <TrendingDown className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {formatCurrency(withdrawals.filter(w => w.status === 'rejected' || w.status === 'cancelled').reduce((sum, w) => sum + (w.amount || 0), 0))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Total rejected
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-5 h-5" />
+          <CardTitle className="flex items-center gap-2 text-white">
+            <Filter className="w-5 h-5 text-white" />
             Filters & Search
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-3 h-4 w-4 text-white" />
               <Input
                 placeholder="Search payments..."
                 value={searchTerm}
@@ -276,8 +359,8 @@ export default function PaymentsPage() {
       {/* Payments Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Payments ({filteredPayments.length})</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-white">Withdrawals ({filteredWithdrawals.length})</CardTitle>
+          <CardDescription className="text-white">
             Review and process payment requests
           </CardDescription>
         </CardHeader>
@@ -286,59 +369,59 @@ export default function PaymentsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Customer</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Amount</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Method</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Reference</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Customer</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Amount</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Method</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Status</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Reference</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Date</th>
+                  <th className="text-left py-3 px-4 font-medium text-white">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredPayments.map((payment) => (
-                  <tr key={payment.id} className="border-b border-gray-100 hover:bg-gray-50">
+                {filteredWithdrawals.map((row) => (
+                  <tr key={row.id} className="border-b border-gray-100 hover:bg-orange-500 transition-colors duration-200 group">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-400" />
+                        <User className="w-4 h-4 text-white group-hover:text-gray-900" />
                         <div>
-                          <div className="font-medium text-gray-900">
-                            {payment.pickup?.customer?.full_name || 'Unknown'}
+                          <div className="font-medium text-white group-hover:text-gray-900">
+                            {row.owner_name || row.user?.full_name || 'Unknown'}
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {payment.pickup?.customer?.email}
+                          <div className="text-sm text-white group-hover:text-gray-700">
+                            {row.user?.email || row.user_id || 'N/A'}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">
-                          {formatCurrency(payment.amount)}
+                        <DollarSign className="w-4 h-4 text-white group-hover:text-gray-900" />
+                        <span className="font-medium text-white group-hover:text-gray-900">
+                          {formatCurrency(row.amount)}
                         </span>
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <Badge className={getMethodBadge(payment.method || 'unknown')}>
-                        {payment.method?.replace('_', ' ') || 'Unknown'}
-                      </Badge>
+                      <span className={getMethodBadge(row.payout_method || 'bank_transfer')}>
+                        {row.payout_method || 'bank_transfer'}
+                      </span>
                     </td>
                     <td className="py-3 px-4">
-                      <Badge className={getStatusBadge(payment.status)}>
+                      <Badge className={getStatusBadge(row.status)}>
                         <div className="flex items-center gap-1">
-                          {getStatusIcon(payment.status)}
-                          {payment.status}
+                          {getStatusIcon(row.status)}
+                          {row.status}
                         </div>
                       </Badge>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-500">
-                      {payment.reference_number || 'N/A'}
+                    <td className="py-3 px-4 text-sm text-white group-hover:text-gray-700">
+                      {row.id}
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-500">
+                    <td className="py-3 px-4 text-sm text-white group-hover:text-gray-700">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        {formatDate(payment.created_at)}
+                        <Calendar className="w-4 h-4 text-white group-hover:text-gray-900" />
+                        {formatDate(row.created_at)}
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -346,17 +429,17 @@ export default function PaymentsPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setSelectedPayment(payment)}
+                          onClick={() => setSelectedPayment(row)}
                         >
                           <Eye className="w-4 h-4" />
                         </Button>
-                        {payment.status === 'pending' && (
+                        {row.status === 'pending' && (
                           <>
                             <Button
                               variant="outline"
                               size="sm"
                               className="text-green-600 border-green-600 hover:bg-green-50"
-                              onClick={() => handleStatusUpdate(payment.id, 'approved')}
+                              onClick={() => handleStatusUpdate(row.id, 'approved')}
                             >
                               <CheckCircle className="w-4 h-4" />
                             </Button>
@@ -364,7 +447,7 @@ export default function PaymentsPage() {
                               variant="outline"
                               size="sm"
                               className="text-red-600 border-red-600 hover:bg-red-50"
-                              onClick={() => handleStatusUpdate(payment.id, 'rejected')}
+                              onClick={() => handleStatusUpdate(row.id, 'rejected')}
                             >
                               <XCircle className="w-4 h-4" />
                             </Button>
@@ -383,21 +466,33 @@ export default function PaymentsPage() {
       {/* Payment Details Modal */}
       {selectedPayment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Payment Details</h3>
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4 text-gray-900">Withdrawal Details</h3>
             
-            <div className="space-y-3 mb-4">
+            <div className="space-y-3 mb-4 text-gray-800">
               <div>
-                <span className="font-medium">Customer:</span> {selectedPayment.pickup?.customer?.full_name}
+                <span className="font-medium">User:</span> {selectedPayment.user?.full_name || selectedPayment.owner_name}
+              </div>
+              <div>
+                <span className="font-medium">Email/ID:</span> {selectedPayment.user?.email || selectedPayment.user_id || 'N/A'}
               </div>
               <div>
                 <span className="font-medium">Amount:</span> {formatCurrency(selectedPayment.amount)}
               </div>
               <div>
-                <span className="font-medium">Method:</span> 
-                <Badge className={`ml-2 ${getMethodBadge(selectedPayment.method || 'unknown')}`}>
-                  {selectedPayment.method?.replace('_', ' ') || 'Unknown'}
-                </Badge>
+                <span className="font-medium">Bank:</span> {selectedPayment.bank_name}
+              </div>
+              <div>
+                <span className="font-medium">Account Number:</span> {selectedPayment.account_number}
+              </div>
+              <div>
+                <span className="font-medium">Account Type:</span> {selectedPayment.account_type}
+              </div>
+              <div>
+                <span className="font-medium">Branch Code:</span> {selectedPayment.branch_code}
+              </div>
+              <div>
+                <span className="font-medium">Payout Method:</span> {selectedPayment.payout_method || 'bank_transfer'}
               </div>
               <div>
                 <span className="font-medium">Status:</span> 
@@ -405,22 +500,46 @@ export default function PaymentsPage() {
                   {selectedPayment.status}
                 </Badge>
               </div>
-              {selectedPayment.reference_number && (
+              <div>
+                <span className="font-medium">Created:</span> {formatDate(selectedPayment.created_at)}
+              </div>
+              {selectedPayment.notes && (
                 <div>
-                  <span className="font-medium">Reference:</span> {selectedPayment.reference_number}
+                  <span className="font-medium">Notes:</span> {selectedPayment.notes}
                 </div>
               )}
+              <div>
+                <span className="font-medium">Reference:</span> 
+                <div className="text-xs text-gray-600 mt-1 break-all">{selectedPayment.id}</div>
+              </div>
             </div>
 
             {selectedPayment.status === 'pending' && (
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">Admin Notes (Optional)</label>
+                <label className="block text-sm font-medium mb-2 text-gray-800">Admin Notes (Optional)</label>
                 <Textarea
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
                   placeholder="Add notes about this payment..."
                   rows={3}
                 />
+              </div>
+            )}
+
+            {selectedPayment.status === 'pending' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2 text-gray-800">Payout Method</label>
+                <Select value={payoutMethod} onValueChange={(v) => setPayoutMethod(v as any)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="wallet">Wallet (deduct balance)</SelectItem>
+                    <SelectItem value="cash">Cash Payout</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
