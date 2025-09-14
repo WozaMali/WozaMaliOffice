@@ -19,8 +19,7 @@ import {
   User,
   Wallet,
   TrendingUp,
-  TrendingDown,
-  DollarSign
+  TrendingDown
 } from 'lucide-react';
 import { 
   getWithdrawals, 
@@ -396,7 +395,6 @@ export default function PaymentsPage() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-white group-hover:text-gray-900" />
                         <span className="font-medium text-white group-hover:text-gray-900">
                           {formatCurrency(row.amount)}
                         </span>

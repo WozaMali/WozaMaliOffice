@@ -12,13 +12,12 @@ import {
   Heart, 
   School, 
   Home, 
-  DollarSign, 
   MessageCircle,
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/use-auth';
 
 interface School {
   id: string;
@@ -254,7 +253,7 @@ export default function DonationForm() {
                 onClick={() => handleInputChange('beneficiaryType', 'general_fund')}
                 className="h-auto p-4 flex flex-col items-center gap-2"
               >
-                <DollarSign className="h-6 w-6" />
+                
                 <span>General Fund</span>
                 <span className="text-xs text-gray-500">It matters not</span>
               </Button>

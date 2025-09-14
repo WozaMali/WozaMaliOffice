@@ -181,6 +181,17 @@ export async function updateCollectionStatus(
         p_idempotency_key: null
       });
       if (rpcErr) throw rpcErr;
+
+      // After successful approval, process PET Bottles contribution for this collection (idempotent)
+      try {
+        await fetch('/api/green-scholar/pet-bottles-contribution', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collectionId })
+        });
+      } catch (e) {
+        console.warn('⚠️ PET contribution processing failed (non-blocking):', (e as any)?.message || e);
+      }
     } else {
       const { error: rpcErr } = await supabase.rpc('reject_collection', {
         p_collection_id: collectionId,

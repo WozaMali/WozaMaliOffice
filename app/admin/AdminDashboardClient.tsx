@@ -20,12 +20,11 @@ import {
   TrendingUp,
   Building2,
   CreditCard,
-  TreePine,
   Calendar,
   Settings,
   LogOut,
   UserPlus,
-  DollarSign,
+  TreePine,
   School,
   Home,
   Crown
@@ -37,6 +36,7 @@ import AnalyticsPage from '@/components/admin/AnalyticsPage';
 import PaymentsPage from '@/components/admin/PaymentsPage';
 import RewardsPage from '@/components/admin/RewardsPage';
 import ResidentSummaryPage from '@/components/admin/ResidentSummaryPage';
+import AdminGreenScholarFund from '@/components/admin/AdminGreenScholarFund';
 import AddUserModal from '@/components/admin/AddUserModal';
 import BeneficiariesPage from './Beneficiaries';
 import {
@@ -52,7 +52,8 @@ import {
 import { supabase } from '../../src/lib/supabase';
 import { UnifiedAdminService, useDashboardData, useAllUsers, useCollections, useTownships, useSubdivisions } from '../../src/lib/unified-admin-service';
 import { clearPickupsCache } from '../../src/lib/admin-services';
-import type { User, TownshipDropdown, SubdivisionDropdown, CollectionData } from '../../src/lib/supabase';
+import type { User, TownshipDropdown, SubdivisionDropdown } from '../../src/lib/supabase';
+import type { CollectionData } from '../../src/lib/unified-admin-service';
 
 // Sidebar Navigation Component
 function AdminSidebar({ currentPage, onPageChange, onLogout }: { 
@@ -66,8 +67,8 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
     { name: 'Resident Summary', page: 'tiers', icon: Crown },
     { name: 'Withdrawals', page: 'withdrawals', icon: CreditCard },
     { name: 'Rewards', page: 'rewards', icon: Gift },
-    { name: 'Green Scholar Fund', page: 'fund', icon: TreePine },
     { name: 'Beneficiaries', page: 'beneficiaries', icon: School },
+    { name: 'Green Scholar Fund', page: 'green-scholar', icon: TreePine },
     { name: 'Collections', page: 'collections', icon: Calendar },
     { name: 'Pickups', page: 'pickups', icon: Package },
     { name: 'Analytics', page: 'analytics', icon: TrendingUp },
@@ -191,6 +192,115 @@ function DashboardContent({ onPageChange, onAddUser }: {
     }
   }, [unifiedDashboardData, unifiedLoading, unifiedError]);
 
+  const loadDashboardData = async () => {
+    try {
+      console.log('🔄 Loading dashboard data...');
+      setLoading(true);
+      
+      // Test connection first
+      console.log('🔌 Testing Supabase connection...');
+      const connectionTest = await testSupabaseConnection();
+      console.log('🔌 Connection test result:', connectionTest);
+      
+      if (!connectionTest.success) {
+        throw new Error(`Connection test failed: ${JSON.stringify(connectionTest.error)}`);
+      }
+      
+      // Load data individually to catch specific errors
+      console.log('📊 Loading pickups...');
+      let pickups: any[] = [];
+      try {
+        pickups = await getPickups();
+        console.log('✅ Pickups loaded:', pickups.length);
+      } catch (pickupError) {
+        console.error('❌ Error loading pickups:', pickupError);
+        pickups = []; // Set empty array as fallback
+      }
+
+      console.log('📊 Loading collections...');
+      let collections: any[] = [];
+      try {
+        const { data: colData, error: colErr } = await supabase
+          .from('collections')
+          .select('status, total_kg, weight_kg');
+        if (colErr) {
+          console.error('❌ Error loading collections:', colErr);
+        } else {
+          collections = colData || [];
+          console.log('✅ Collections loaded:', collections.length);
+        }
+      } catch (collectionsError) {
+        console.error('❌ Error loading collections:', collectionsError);
+        collections = [];
+      }
+      
+      console.log('📊 Loading payments...');
+      let payments: any[] = [];
+      try {
+        const { data: payData, error: payErr } = await supabase
+          .from('payments')
+          .select('amount, status');
+        if (payErr) {
+          console.error('❌ Error loading payments:', payErr);
+        } else {
+          payments = payData || [];
+          console.log('✅ Payments loaded:', payments.length);
+        }
+      } catch (paymentsError) {
+        console.error('❌ Error loading payments:', paymentsError);
+        payments = [];
+      }
+
+      // Calculate metrics
+      const totalPickups = pickups.length;
+      const pendingPickups = pickups.filter(p => p.status === 'pending').length;
+      const approvedPickups = pickups.filter(p => p.status === 'approved').length;
+      const rejectedPickups = pickups.filter(p => p.status === 'rejected').length;
+      
+      const totalCollections = collections.length;
+      const pendingCollections = collections.filter(c => c.status === 'pending').length;
+      const approvedCollections = collections.filter(c => c.status === 'approved').length;
+      const rejectedCollections = collections.filter(c => c.status === 'rejected').length;
+      
+      const totalPayments = payments.length;
+      const pendingPayments = payments.filter(p => p.status === 'pending').length;
+      const completedPayments = payments.filter(p => p.status === 'completed').length;
+      
+      const totalRevenue = payments
+        .filter(p => p.status === 'completed')
+        .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+      setDashboardData({
+        totalPickups,
+        pendingPickups,
+        approvedPickups,
+        rejectedPickups,
+        totalCollections,
+        pendingCollections,
+        approvedCollections,
+        rejectedCollections,
+        totalPayments,
+        pendingPayments,
+        completedPayments,
+        totalRevenue,
+        totalWallets: 0, // Will be updated by unified data
+        totalWalletBalance: 0, // Will be updated by unified data
+        totalPointsEarned: 0, // Will be updated by unified data
+        totalPointsSpent: 0 // Will be updated by unified data
+      });
+    } catch (error: any) {
+      console.error('❌ Error loading dashboard data:', error);
+      console.error('❌ Error details:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+        fullError: error
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 2) Set up realtime subscriptions once on mount
   useEffect(() => {
     const subscriptions = subscribeToAllChanges({
@@ -231,7 +341,7 @@ function DashboardContent({ onPageChange, onAddUser }: {
     };
   }, []);
 
-  const loadDashboardData = async () => {
+  const loadRecentActivity = async () => {
     try {
       console.log('🔄 Loading dashboard data...');
       setLoading(true);
@@ -804,313 +914,6 @@ function TiersContent() {
   return <ResidentSummaryPage />;
 }
 
-function FundContent() {
-  const [fundData, setFundData] = useState<{
-    totalBalance: number;
-    petDonations: number;
-    directDonations: number;
-    expenses: number;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
-  const [petStats, setPetStats] = useState({
-    approvedPetCollections: 0,
-    pendingPetCollections: 0,
-    schoolsSupported: 0,
-    childHomesSupported: 0
-  });
-
-  useEffect(() => {
-    loadFundData();
-  }, []);
-
-  const loadFundData = async () => {
-    try {
-      setLoading(true);
-      
-      // Load actual Green Scholar Fund data
-      const { data: balanceData, error: balanceError } = await supabase
-        .from('green_scholar_fund_balance')
-        .select('*')
-        .order('last_updated', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (balanceError) {
-        console.error('Error loading fund balance:', balanceError);
-        // Fallback to zero values
-        setFundData({
-          totalBalance: 0,
-          petDonations: 0,
-          directDonations: 0,
-          expenses: 0
-        });
-        return;
-      }
-
-      setFundData({
-        totalBalance: balanceData?.total_balance || 0,
-        petDonations: balanceData?.pet_donations_total || 0,
-        directDonations: balanceData?.direct_donations_total || 0,
-        expenses: balanceData?.expenses_total || 0
-      });
-
-      // Load recent Green Scholar transactions (no relational joins to avoid 400s)
-      const { data: transactionsData } = await supabase
-        .from('green_scholar_transactions')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
-      setRecentTransactions(transactionsData || []);
-
-      // Load counts for schools and child homes
-      const [{ data: schools }, { data: homes }] = await Promise.all([
-        supabase.from('schools').select('id').eq('is_active', true),
-        supabase.from('child_headed_homes').select('id').eq('is_active', true)
-      ]);
-
-      // Compute PET collection stats from monthly summary view (approved only)
-      const { data: summaryRows } = await supabase
-        .from('green_scholar_fund_summary')
-        .select('total_pet_collections');
-      const rows = summaryRows || [] as any[];
-      const approvedPetCollections = rows.reduce((sum, r) => sum + (Number(r.total_pet_collections) || 0), 0);
-      const pendingPetCollections = 0;
-      setPetStats({
-        approvedPetCollections,
-        pendingPetCollections,
-        schoolsSupported: (schools || []).length,
-        childHomesSupported: (homes || []).length
-      });
-    } catch (error) {
-      console.error('Error loading fund data:', error);
-      setFundData({
-        totalBalance: 0,
-        petDonations: 0,
-        directDonations: 0,
-        expenses: 0
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <TreePine className="h-8 w-8 text-green-600" />
-            Green Scholar Fund
-          </h1>
-          <p className="text-gray-600 mt-1">
-            Managing educational funding from PET donations and direct contributions
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={async () => {
-              const id = window.prompt('Enter PET Bottles approved collection ID to process');
-              if (!id) return;
-              try {
-                const res = await fetch('/api/green-scholar/pet-bottles-contribution', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ collectionId: id })
-                });
-                const json = await res.json();
-                if (!res.ok) throw new Error(json?.error || 'Failed to process PET contribution');
-                await loadFundData();
-                alert('Processed successfully: ' + (json?.message || 'OK'));
-              } catch (e: any) {
-                console.error(e);
-                alert('Error: ' + (e?.message || 'Failed'));
-              }
-            }}
-          >
-            Process PET
-          </Button>
-          <Button onClick={loadFundData}>
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Refresh Data
-          </Button>
-        </div>
-      </div>
-
-      {/* Fund Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Fund Balance</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {(fundData?.totalBalance ?? 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Available for educational support
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">PET Donations</CardTitle>
-            <TreePine className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {(fundData?.petDonations ?? 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              From recycled PET materials
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Direct Donations</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
-              {(fundData?.directDonations ?? 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              From user contributions
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {(fundData?.expenses ?? 0).toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Funds distributed to beneficiaries
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Additional PET and Beneficiary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Schools Supported</CardTitle>
-            <School className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{petStats.schoolsSupported}</div>
-            <p className="text-xs text-muted-foreground">Active partner schools</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Child Homes Supported</CardTitle>
-            <Home className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{petStats.childHomesSupported}</div>
-            <p className="text-xs text-muted-foreground">Active child-headed homes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved PET Collections</CardTitle>
-            <TreePine className="h-4 w-4 text-green-700" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-700">{petStats.approvedPetCollections}</div>
-            <p className="text-xs text-muted-foreground">Contributing to the fund</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending PET Collections</CardTitle>
-            <TreePine className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{petStats.pendingPetCollections}</div>
-            <p className="text-xs text-muted-foreground">Awaiting approval</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent PET Contributions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent PET Contributions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recentTransactions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <TreePine className="h-12 w-12 mx-auto mb-4 text-green-600" />
-                <p className="text-sm">No recent contributions</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {recentTransactions
-                  .filter(t => t.transaction_type === 'donation' || t.transaction_type === 'pet_contribution' || (t.transaction_type === 'contribution' && t.source_type === 'pet_bottles_collection'))
-                  .slice(0, 8)
-                  .map(tx => (
-                  <div key={tx.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <TreePine className="h-4 w-4 text-green-600" />
-                      <div>
-                        <p className="font-medium text-sm">{tx.description}</p>
-                        {tx.beneficiary_name && (
-                          <p className="text-xs text-gray-500">{tx.beneficiary_name}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium text-sm">+{(tx.amount ?? 0).toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">{new Date(tx.created_at).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Beneficiary Management</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-8 text-gray-500">
-              <School className="h-12 w-12 mx-auto mb-4 text-blue-600" />
-              <p className="text-lg font-medium mb-2">Schools & Child Homes</p>
-              <p className="text-sm">Manage educational beneficiaries</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
 
 function CollectionsContent() {
   const { collections, loading, error } = useCollections();
@@ -1192,7 +995,7 @@ function CollectionsContent() {
     if (!confirmed) return;
     try {
       // Optimistic update
-      setRows(prev => prev.map(c => c.id === collectionId ? { ...c, status: newStatus } : c));
+      setRows(prev => prev.map(c => c.id === collectionId ? { ...c, status: newStatus as 'pending' | 'submitted' | 'approved' | 'rejected' } : c));
       const { data, error } = await UnifiedAdminService.updateCollectionStatus(collectionId, newStatus);
       if (error || !data) {
         console.error('Error updating collection status:', error);
@@ -1596,10 +1399,6 @@ export default function AdminDashboardClient() {
     console.log('AdminDashboardClient: isClient set to true');
   }, []);
 
-  const loadDashboardData = async () => {
-    // This function will be called by the AddUserModal onSuccess
-    console.log('🔄 Refreshing dashboard data...');
-  };
 
   const loadRecentActivity = async () => {
     // This function will be called by the AddUserModal onSuccess
@@ -1663,10 +1462,10 @@ export default function AdminDashboardClient() {
         return <RewardsContent />;
       case 'tiers':
         return <TiersContent />;
-      case 'fund':
-        return <FundContent />;
       case 'beneficiaries':
         return <BeneficiariesPage />;
+      case 'green-scholar':
+        return <AdminGreenScholarFund />;
       case 'collections':
         return <CollectionsContent />;
       case 'pickups':

@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+// Temporarily disabled jsPDF due to build issues
+// import jsPDF from 'jspdf';
+// import autoTable from 'jspdf-autotable';
 
 export type ExportRow = Record<string, string | number | boolean | null | undefined>;
 
@@ -82,34 +83,10 @@ export async function exportToXLSX(filename: string, sheetName: string, columns:
   URL.revokeObjectURL(url);
 }
 
+// Temporarily disabled PDF export due to build issues
 export async function exportToPDF(title: string, filename: string, columns: string[], rows: ExportRow[], logoPath?: string) {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-
-  let y = 40;
-  if (logoPath) {
-    const base64 = await fetchImageAsBase64(logoPath);
-    if (base64) {
-      try {
-        doc.addImage(base64, 'PNG', 40, 20, 120, 40);
-        y = 80;
-      } catch {}
-    }
-  }
-
-  doc.setFontSize(16);
-  doc.text(title, 40, y);
-  y += 10;
-
-  const body = rows.map(r => columns.map(c => (r[c] ?? '') as any));
-  autoTable(doc, {
-    startY: y + 10,
-    head: [columns],
-    body,
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [239, 239, 239], textColor: [0, 0, 0] }
-  });
-
-  doc.save(filename.endsWith('.pdf') ? filename : filename + '.pdf');
+  console.warn('PDF export is temporarily disabled due to build issues');
+  // TODO: Re-enable when jsPDF build issues are resolved
 }
 
 

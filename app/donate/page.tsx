@@ -8,7 +8,6 @@ import {
   School, 
   Home, 
   TreePine, 
-  DollarSign,
   Users,
   BookOpen,
   Shield

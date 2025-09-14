@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { School, Home, Filter, Check, X, Search, Link as LinkIcon } from 'lucide-react';
+import { School, Home, Filter, Check, X, Search, Link as LinkIcon, Eye } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface SchoolRow {
@@ -39,14 +39,46 @@ interface FundingRequest {
   created_at: string;
 }
 
+interface ApplicationRow {
+  id: string;
+  created_by: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  full_name: string;
+  date_of_birth: string | null;
+  phone_number: string | null;
+  email: string | null;
+  id_number: string | null;
+  school_name: string | null;
+  grade: string | null;
+  student_number: string | null;
+  academic_performance: string | null;
+  household_income: string | null;
+  household_size: string | null;
+  employment_status: string | null;
+  other_income_sources: string | null;
+  support_type: string[] | null;
+  urgent_needs: string | null;
+  previous_support: string | null;
+  has_id_document: boolean;
+  has_school_report: boolean;
+  has_income_proof: boolean;
+  has_bank_statement: boolean;
+  special_circumstances: string | null;
+  community_involvement: string | null;
+  references_info: string | null;
+  created_at: string;
+}
+
 export default function BeneficiariesPage() {
-  const [activeTab, setActiveTab] = useState<'schools' | 'homes' | 'requests'>('schools');
+  const [activeTab, setActiveTab] = useState<'schools' | 'homes' | 'requests' | 'applications'>('schools');
   const [search, setSearch] = useState('');
   const [schools, setSchools] = useState<SchoolRow[]>([]);
   const [homes, setHomes] = useState<HomeRow[]>([]);
   const [requests, setRequests] = useState<FundingRequest[]>([]);
+  const [applications, setApplications] = useState<ApplicationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<ApplicationRow | null>(null);
 
   useEffect(() => {
     loadAll();
@@ -56,17 +88,18 @@ export default function BeneficiariesPage() {
     try {
       setLoading(true);
       setError(null);
-      const [s, h, r] = await Promise.all([
+      const [s, h, r, a] = await Promise.all([
         supabase.from('schools').select('*').order('name'),
         supabase.from('child_headed_homes').select('*').order('name'),
-        supabase.from('green_scholar_requests').select('*').order('created_at', { ascending: false })
+        supabase.from('green_scholar_requests').select('*').order('created_at', { ascending: false }),
+        supabase.from('green_scholar_applications').select('*').order('created_at', { ascending: false })
       ]);
       if (s.error) throw s.error;
       if (h.error) throw h.error;
-      // requests table may not exist yet; tolerate error
       setSchools((s.data || []) as any);
       setHomes((h.data || []) as any);
       setRequests((r.data || []) as any);
+      setApplications((a.data || []) as any);
     } catch (e: any) {
       setError(e.message || 'Failed to load beneficiaries');
     } finally {
@@ -92,6 +125,12 @@ export default function BeneficiariesPage() {
     return requests.filter(r => [r.title, r.reason, r.requester_type].some(x => (x || '').toLowerCase().includes(q)));
   }, [requests, search]);
 
+  const filteredApplications = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return applications;
+    return applications.filter(a => [a.full_name, a.email, a.phone_number, a.school_name].some(x => (x || '').toLowerCase().includes(q)));
+  }, [applications, search]);
+
   const updateRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
     if (status === 'approved') {
       const auth = await supabase.auth.getUser();
@@ -116,11 +155,11 @@ export default function BeneficiariesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Beneficiary Management</h1>
-          <p className="text-gray-600 mt-1">Manage schools, child-headed homes, and funding requests</p>
+          <p className="text-gray-600 mt-1">Manage schools, child-headed homes, requests, and applications</p>
         </div>
         <div className="flex items-center gap-2">
           <Search className="h-4 w-4 text-gray-400" />
-          <Input placeholder="Search beneficiaries or requests" value={search} onChange={e => setSearch(e.target.value)} className="w-80" />
+          <Input placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} className="w-80" />
         </div>
       </div>
 
@@ -129,6 +168,7 @@ export default function BeneficiariesPage() {
           <TabsTrigger value="schools">Schools</TabsTrigger>
           <TabsTrigger value="homes">Child Homes</TabsTrigger>
           <TabsTrigger value="requests">Requests</TabsTrigger>
+          <TabsTrigger value="applications">Applications</TabsTrigger>
         </TabsList>
 
         <TabsContent value="schools">
@@ -247,6 +287,137 @@ export default function BeneficiariesPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="applications">
+          <Card>
+            <CardHeader>
+              <CardTitle>Applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {applications.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">No applications yet</div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredApplications.map(a => (
+                    <div key={a.id} className="border rounded-lg p-4 flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">{a.full_name}</div>
+                        <div className="text-sm text-gray-500">{a.email || a.phone_number || 'No contact'} • {new Date(a.created_at).toLocaleDateString()}</div>
+                        <div className="text-sm text-gray-600 mt-1">{a.school_name || '—'}{a.grade ? ` • Grade ${a.grade}` : ''}</div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Badge variant={a.status === 'pending' ? 'secondary' : a.status === 'approved' ? 'default' : 'destructive'}>{a.status}</Badge>
+                        <Button size="sm" variant="outline" onClick={() => setViewing(a)}>
+                          <Eye className="h-4 w-4 mr-1" /> View
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {viewing && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setViewing(null)} />
+              <div className="relative bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 text-gray-900">
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Application Details</h3>
+                  <button onClick={() => setViewing(null)} className="text-gray-500 hover:text-gray-700">✕</button>
+                </div>
+                <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <div className="text-gray-800">Full Name</div>
+                      <div className="font-medium">{viewing.full_name}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Date of Birth</div>
+                      <div className="font-medium">{viewing.date_of_birth || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Email</div>
+                      <div className="font-medium break-all">{viewing.email || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Phone</div>
+                      <div className="font-medium">{viewing.phone_number || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">ID Number</div>
+                      <div className="font-medium break-all">{viewing.id_number || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Status</div>
+                      <Badge variant={viewing.status === 'pending' ? 'secondary' : viewing.status === 'approved' ? 'default' : 'destructive'}>{viewing.status}</Badge>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">School</div>
+                      <div className="font-medium">{viewing.school_name || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Grade</div>
+                      <div className="font-medium">{viewing.grade || '—'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">Academic Performance</div>
+                      <div className="font-medium whitespace-pre-wrap">{viewing.academic_performance || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Household Income</div>
+                      <div className="font-medium">{viewing.household_income || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Household Size</div>
+                      <div className="font-medium">{viewing.household_size || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Employment Status</div>
+                      <div className="font-medium">{viewing.employment_status || '—'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">Other Income Sources</div>
+                      <div className="font-medium whitespace-pre-wrap">{viewing.other_income_sources || '—'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">Support Type</div>
+                      <div className="font-medium">{(viewing.support_type || []).join(', ') || '—'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">Urgent Needs</div>
+                      <div className="font-medium whitespace-pre-wrap">{viewing.urgent_needs || '—'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">Previous Support</div>
+                      <div className="font-medium whitespace-pre-wrap">{viewing.previous_support || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-800">Documents</div>
+                      <div className="font-medium text-sm">ID: {viewing.has_id_document ? 'Yes' : 'No'} • School Report: {viewing.has_school_report ? 'Yes' : 'No'}</div>
+                      <div className="font-medium text-sm">Income Proof: {viewing.has_income_proof ? 'Yes' : 'No'} • Bank Statement: {viewing.has_bank_statement ? 'Yes' : 'No'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">Special Circumstances</div>
+                      <div className="font-medium whitespace-pre-wrap">{viewing.special_circumstances || '—'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">Community Involvement</div>
+                      <div className="font-medium whitespace-pre-wrap">{viewing.community_involvement || '—'}</div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <div className="text-gray-800">References</div>
+                      <div className="font-medium whitespace-pre-wrap">{viewing.references_info || '—'}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setViewing(null)}>Close</Button>
+                </div>
+              </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

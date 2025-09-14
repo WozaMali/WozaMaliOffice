@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import type { 
   User, 
+  UserWithRole,
+  UserComplete,
   Role, 
   Area, 
   Resident,
@@ -278,13 +280,14 @@ export class UnifiedAdminService {
   // ============================================================================
   // USERS MANAGEMENT
   // ============================================================================
-  static async getAllUsers(): Promise<{ data: User[] | null; error: any }> {
+  static async getAllUsers(): Promise<{ data: UserComplete[] | null; error: any }> {
     try {
       const { data, error } = await supabase
         .from('users')
         .select(`
           *,
-          role:roles(*)
+          role:roles(*),
+          township:areas(*)
         `)
         .order('created_at', { ascending: false });
 
@@ -992,7 +995,7 @@ export function useDashboardData() {
 }
 
 export function useAllUsers() {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserComplete[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<any>(null);
 
