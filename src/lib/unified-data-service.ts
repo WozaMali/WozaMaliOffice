@@ -403,22 +403,29 @@ export class UnifiedDataService {
           const totalValue = collections?.reduce((sum, c) => sum + (c.total_value || 0), 0) || 0;
           const totalCO2 = totalKg * 2.5;
 
-          return {
+          const unified: UnifiedCustomer = {
             id: customer.id,
             full_name: customer.full_name,
             email: customer.email,
             phone: customer.phone,
-            role: customer.role,
+            role: 'CUSTOMER',
             is_active: customer.is_active,
             total_pickups: totalPickups,
             total_kg_recycled: totalKg,
             total_value_earned: totalValue,
             total_co2_saved: totalCO2,
             addresses: customer.user_addresses || [],
-            recent_pickups: collections || [],
+            recent_pickups: (collections || []).map(c => ({
+              id: c.id,
+              status: c.status,
+              started_at: c.created_at,
+              total_kg: c.total_weight_kg || 0,
+              total_value: c.total_value || 0
+            })),
             created_at: customer.created_at,
             updated_at: customer.updated_at
           };
+          return unified;
         })
       );
 

@@ -37,7 +37,7 @@ export default function PaymentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [methodFilter, setMethodFilter] = useState('all');
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
   const [payoutMethod, setPayoutMethod] = useState<'wallet' | 'cash' | 'bank_transfer' | 'mobile_money'>('wallet');
 

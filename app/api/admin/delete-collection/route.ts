@@ -50,6 +50,8 @@ export async function POST(req: Request) {
       return [primary, typed];
     };
 
+    console.log('🗑️ Starting deletion of collection:', collectionId);
+
     const children = [
       await safeDelete('collection_photos', { collection_id: collectionId }),
       await safeDelete('collection_materials', { collection_id: collectionId }),
@@ -64,6 +66,20 @@ export async function POST(req: Request) {
       safeDelete('unified_collections', { id: collectionId }),
       safeDelete('collections', { id: collectionId })
     ]);
+
+    // Log results of delete operations
+    const failedChildren = children.filter(r => !r.ok);
+    const failedParents = parents.filter(r => !r.ok);
+    
+    if (failedChildren.length > 0 || failedParents.length > 0) {
+      console.error('❌ Some delete operations failed:', {
+        collectionId,
+        failedChildren: failedChildren.map(r => ({ table: 'child', message: r.message })),
+        failedParents: failedParents.map(r => ({ table: 'parent', message: r.message }))
+      });
+    } else {
+      console.log('✅ All delete operations completed successfully');
+    }
 
     // Verify deletion actually happened (avoid false positive OK)
     const verifyUnified = await supabase
@@ -107,6 +123,14 @@ export async function POST(req: Request) {
 
     if ((!verifyUnified.error && verifyUnified.data) || (!verifyLegacy.error && verifyLegacy.data) || verifyWalletTx.remaining || verifyQueue.remaining) {
       const reasons = [...children, ...parents].filter(r => !r.ok).map(r => r.message).filter(Boolean);
+      console.error('❌ Collection deletion verification failed:', {
+        collectionId,
+        verifyUnified: verifyUnified.data ? 'still exists' : 'deleted',
+        verifyLegacy: verifyLegacy.data ? 'still exists' : 'deleted',
+        walletTxRemaining: verifyWalletTx.remaining,
+        queueRemaining: verifyQueue.remaining,
+        failedOperations: reasons
+      });
       return NextResponse.json({ ok: false, reason: 'not_deleted', details: reasons }, { status: 409 });
     }
 

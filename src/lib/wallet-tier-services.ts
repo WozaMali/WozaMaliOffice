@@ -107,7 +107,7 @@ export async function getUsersWithWalletTiers(): Promise<UserWalletWithTier[]> {
     if (walletsResp.error && (walletsResp.error.code === 'PGRST205' || walletsResp.error.message?.includes("Could not find the table 'public.user_wallets'"))) {
       console.warn('⚠️ user_wallets not found, falling back to wallets');
       source = 'wallets';
-      walletsResp = await supabase
+      const legacyResp = await supabase
         .from('wallets')
         .select(`
           user_id,
@@ -116,6 +116,20 @@ export async function getUsersWithWalletTiers(): Promise<UserWalletWithTier[]> {
           updated_at
         `)
         .order('balance', { ascending: false });
+      // Remap legacy fields to expected unified fields
+      walletsResp = {
+        data: (legacyResp.data || []).map((w: any) => ({
+          user_id: w.user_id,
+          current_points: w.balance,
+          total_points_earned: w.total_points,
+          total_points_spent: 0,
+          last_updated: w.updated_at
+        })),
+        error: legacyResp.error,
+        count: legacyResp.count,
+        status: legacyResp.status,
+        statusText: legacyResp.statusText
+      } as any;
     }
 
     if (walletsResp.error) {

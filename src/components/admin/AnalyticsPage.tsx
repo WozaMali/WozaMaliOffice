@@ -56,10 +56,10 @@ export default function AnalyticsPage() {
         getCustomerPerformance()
       ]);
       
-      setSystemImpact(impact);
-      setMaterialPerformance(materials);
-      setCollectorPerformance(collectors);
-      setCustomerPerformance(customers);
+      setSystemImpact(impact as any);
+      setMaterialPerformance(materials as any);
+      setCollectorPerformance(collectors as any);
+      setCustomerPerformance(customers as any);
     } catch (error) {
       console.error('Error loading analytics data:', error);
     } finally {

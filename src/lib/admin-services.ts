@@ -1436,7 +1436,11 @@ export async function deleteCollectionDeep(collectionId: string): Promise<boolea
     clearTimeout(timeout);
     if (!res.ok) {
       const msg = await res.json().catch(() => ({}));
-      console.error('Delete API failed:', msg);
+      console.error('Delete API failed:', {
+        status: res.status,
+        statusText: res.statusText,
+        response: msg
+      });
       return false;
     }
     return true;

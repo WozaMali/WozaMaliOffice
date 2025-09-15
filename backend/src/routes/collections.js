@@ -221,6 +221,21 @@ router.patch('/:id/approval', requireRole('admin'), async (req, res) => {
         )
       `, [collection.user_id, collection.total_value, collection.id, `Collection approved - ${collection.material_type}`]);
 
+      // Process PET Bottles contribution for Green Scholar Fund
+      try {
+        const fetch = require('node-fetch');
+        const response = await fetch(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/api/green-scholar/pet-bottles-contribution`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ collectionId })
+        });
+        if (!response.ok) {
+          console.warn('⚠️ PET contribution processing failed (non-blocking):', response.statusText);
+        }
+      } catch (e) {
+        console.warn('⚠️ PET contribution processing failed (non-blocking):', e.message);
+      }
+
       // Emit real-time wallet update
       req.app.get('io').to(`user-${collection.user_id}`).emit('wallet-balance-changed', {
         userId: collection.user_id,

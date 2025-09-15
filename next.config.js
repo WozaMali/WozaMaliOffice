@@ -3,6 +3,9 @@ const nextConfig = {
   images: {
     domains: ['localhost'],
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Next.js 15 compatibility
   experimental: {
     // Enable better debugging

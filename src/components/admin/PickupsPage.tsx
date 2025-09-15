@@ -204,7 +204,7 @@ export default function PickupsPage() {
         setPickups(prevPickups => 
           prevPickups.map(pickup => 
             pickup.id === pickupId 
-              ? { ...pickup, status: newStatus, admin_notes: approvalNote }
+              ? { ...pickup, status: newStatus as 'submitted' | 'approved' | 'rejected', admin_notes: approvalNote }
               : pickup
           )
         );
@@ -214,7 +214,7 @@ export default function PickupsPage() {
       }
     } catch (error) {
       console.error('❌ Error updating pickup status:', error);
-      alert(`❌ Error updating collection status: ${error.message || 'Unknown error'}`);
+      alert(`❌ Error updating collection status: ${(error as any)?.message || 'Unknown error'}`);
     }
   };
 
@@ -499,7 +499,7 @@ export default function PickupsPage() {
                     <td className="py-3 px-4 text-sm text-white">
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-white" />
-                        {formatDate(pickup.created_at)}
+                        {formatDate((pickup as any).created_at)}
                       </div>
                     </td>
                     <td className="py-3 px-4">
@@ -532,7 +532,7 @@ export default function PickupsPage() {
                         >
                           Delete
                         </Button>
-                        {(pickup.status === 'pending' || pickup.status === 'submitted') && (
+                        {((pickup.status as string) === 'pending' || pickup.status === 'submitted') && (
                           <>
                             <Button
                               variant="outline"
@@ -600,16 +600,16 @@ export default function PickupsPage() {
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-100">
                 <span className="font-medium text-gray-700">Date:</span> 
-                <span className="text-gray-900">{formatDate(selectedPickup.created_at)}</span>
+                <span className="text-gray-900">{formatDate((selectedPickup as any).created_at)}</span>
               </div>
             </div>
 
             {/* Pickup Items Breakdown */}
-            {selectedPickup.pickup_items && selectedPickup.pickup_items.length > 0 && (
+            {(selectedPickup as any).pickup_items && (selectedPickup as any).pickup_items.length > 0 && (
               <div className="mb-4">
                 <h4 className="font-medium text-gray-700 mb-3">Materials Collected:</h4>
                 <div className="bg-gray-50 rounded-lg p-3 space-y-2">
-                  {selectedPickup.pickup_items.map((item, index) => (
+                  {(selectedPickup as any).pickup_items.map((item: any, index: number) => (
                     <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
                       <div className="flex-1">
                         <span className="font-medium text-gray-900">
@@ -659,7 +659,7 @@ export default function PickupsPage() {
                 >
                   Close
                 </Button>
-              {(selectedPickup.status === 'pending' || selectedPickup.status === 'submitted') && (
+              {((selectedPickup.status as string) === 'pending' || selectedPickup.status === 'submitted') && (
                 <>
                   <Button
                     className="bg-green-600 hover:bg-green-700 text-white"

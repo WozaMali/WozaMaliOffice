@@ -50,8 +50,8 @@ export async function GET(request: NextRequest) {
     const userIds = Array.from(new Set((withdrawals || []).map(r => r.user_id).filter(Boolean)));
     console.log('👥 API: User IDs to fetch:', userIds);
 
-    let profiles = [];
-    let users = [];
+    let profiles: any[] = [];
+    let users: any[] = [];
 
     if (userIds.length > 0) {
       // Try to get from user_profiles table

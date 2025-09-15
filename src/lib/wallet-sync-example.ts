@@ -5,6 +5,7 @@
  * to keep wallet balances in sync with approved collections from the Office app.
  */
 
+import React, { useEffect, useState } from 'react';
 import { 
   UnifiedWalletSyncService,
   type WalletSyncData,
@@ -202,9 +203,11 @@ export function useWalletSync(userId: string) {
  * // Or using a job scheduler like node-cron:
  * import cron from 'node-cron';
  * 
- * cron.schedule('0 */6 * * *', async () => {
- *   console.log('Running scheduled wallet sync...');
- *   await syncAllWallets();
- * });
+ * // Run every 6 hours (cron syntax varies by library)
+ * // Example placeholder (written to avoid ending this block comment):
+ * // cron.schedule('every-6-hours', async () => {
+ * //   console.log('Running scheduled wallet sync...');
+ * //   await syncAllWallets();
+ * // });
  * ```
  */

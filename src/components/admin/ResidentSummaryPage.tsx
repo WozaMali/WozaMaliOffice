@@ -181,7 +181,7 @@ export default function ResidentSummaryPage() {
     try {
       const result = await updatePickupStatus(pickupId, newStatus, approvalNote);
       if (result) {
-        setPickups(prevPickups => prevPickups.map(pickup => pickup.id === pickupId ? { ...pickup, status: newStatus, admin_notes: approvalNote } : pickup));
+        setPickups(prevPickups => prevPickups.map(pickup => pickup.id === pickupId ? { ...pickup, status: newStatus as 'submitted' | 'approved' | 'rejected', admin_notes: approvalNote } : pickup));
         setSelectedPickup(null);
         setApprovalNote('');
       }

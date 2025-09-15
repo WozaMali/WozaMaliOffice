@@ -162,36 +162,6 @@ function DashboardContent({ onPageChange, onAddUser }: {
   const { users: unifiedUsers, loading: usersLoading, error: usersError } = useAllUsers();
   const { collections: unifiedCollections, loading: collectionsLoading, error: collectionsError } = useCollections();
 
-  // 1) React to unified data availability (no subscriptions here)
-  useEffect(() => {
-    if (unifiedDashboardData && !unifiedLoading && !unifiedError) {
-      setDashboardData({
-        totalUsers: unifiedDashboardData.totalUsers,
-        totalPickups: unifiedDashboardData.totalCollections,
-        totalWeight: unifiedDashboardData.totalWeight,
-        totalRevenue: unifiedDashboardData.totalRevenue,
-        activeUsers: unifiedDashboardData.totalUsers,
-        pendingPickups: unifiedDashboardData.pendingCollections,
-        totalPayments: 0,
-        pendingPayments: 0,
-        totalWallets: unifiedDashboardData.totalWallets,
-        totalCashBalance: unifiedDashboardData.totalWalletBalance,
-        totalWalletWeight: 0,
-        totalWalletCollections: 0,
-        totalCurrentPoints: unifiedDashboardData.totalWalletBalance,
-        totalPointsEarned: unifiedDashboardData.totalPointsEarned,
-        totalPointsSpent: unifiedDashboardData.totalPointsSpent,
-        totalLifetimeEarnings: unifiedDashboardData.totalPointsEarned,
-        walletPermissionError: false,
-        walletErrorMessage: ''
-      });
-      setLoading(false);
-    } else if (!unifiedLoading) {
-      loadDashboardData();
-      loadRecentActivity();
-    }
-  }, [unifiedDashboardData, unifiedLoading, unifiedError]);
-
   const loadDashboardData = async () => {
     try {
       console.log('🔄 Loading dashboard data...');
@@ -254,40 +224,22 @@ function DashboardContent({ onPageChange, onAddUser }: {
       // Calculate metrics
       const totalPickups = pickups.length;
       const pendingPickups = pickups.filter(p => p.status === 'pending').length;
-      const approvedPickups = pickups.filter(p => p.status === 'approved').length;
-      const rejectedPickups = pickups.filter(p => p.status === 'rejected').length;
-      
-      const totalCollections = collections.length;
-      const pendingCollections = collections.filter(c => c.status === 'pending').length;
-      const approvedCollections = collections.filter(c => c.status === 'approved').length;
-      const rejectedCollections = collections.filter(c => c.status === 'rejected').length;
       
       const totalPayments = payments.length;
       const pendingPayments = payments.filter(p => p.status === 'pending').length;
-      const completedPayments = payments.filter(p => p.status === 'completed').length;
       
       const totalRevenue = payments
         .filter(p => p.status === 'completed')
         .reduce((sum, p) => sum + (p.amount || 0), 0);
 
-      setDashboardData({
+      setDashboardData(prev => ({
+        ...prev,
         totalPickups,
         pendingPickups,
-        approvedPickups,
-        rejectedPickups,
-        totalCollections,
-        pendingCollections,
-        approvedCollections,
-        rejectedCollections,
         totalPayments,
         pendingPayments,
-        completedPayments,
-        totalRevenue,
-        totalWallets: 0, // Will be updated by unified data
-        totalWalletBalance: 0, // Will be updated by unified data
-        totalPointsEarned: 0, // Will be updated by unified data
-        totalPointsSpent: 0 // Will be updated by unified data
-      });
+        totalRevenue
+      }));
     } catch (error: any) {
       console.error('❌ Error loading dashboard data:', error);
       console.error('❌ Error details:', {
@@ -300,6 +252,37 @@ function DashboardContent({ onPageChange, onAddUser }: {
       setLoading(false);
     }
   };
+
+  // 1) React to unified data availability (no subscriptions here)
+  useEffect(() => {
+    if (unifiedDashboardData && !unifiedLoading && !unifiedError) {
+      setDashboardData({
+        totalUsers: unifiedDashboardData.totalUsers,
+        totalPickups: unifiedDashboardData.totalCollections,
+        totalWeight: unifiedDashboardData.totalWeight,
+        totalRevenue: unifiedDashboardData.totalRevenue,
+        activeUsers: unifiedDashboardData.totalUsers,
+        pendingPickups: unifiedDashboardData.pendingCollections,
+        totalPayments: 0,
+        pendingPayments: 0,
+        totalWallets: unifiedDashboardData.totalWallets,
+        totalCashBalance: unifiedDashboardData.totalWalletBalance,
+        totalWalletWeight: 0,
+        totalWalletCollections: 0,
+        totalCurrentPoints: unifiedDashboardData.totalWalletBalance,
+        totalPointsEarned: unifiedDashboardData.totalPointsEarned,
+        totalPointsSpent: unifiedDashboardData.totalPointsSpent,
+        totalLifetimeEarnings: unifiedDashboardData.totalPointsEarned,
+        walletPermissionError: false,
+        walletErrorMessage: ''
+      });
+      setLoading(false);
+    } else if (!unifiedLoading) {
+      loadDashboardData();
+      loadRecentActivity();
+    }
+  }, [unifiedDashboardData, unifiedLoading, unifiedError]);
+
 
   // 2) Set up realtime subscriptions once on mount
   useEffect(() => {
@@ -520,22 +503,6 @@ function DashboardContent({ onPageChange, onAddUser }: {
     }
   };
 
-  const loadRecentActivity = async () => {
-    try {
-      console.log('🔄 Loading recent activity (unified)...');
-      const { data, error } = await UnifiedAdminService.getRecentActivity(20);
-      if (error) {
-        console.warn('⚠️ Unified recent activity error:', error);
-        setRecentActivity([]);
-        return;
-      }
-      console.log('✅ Recent activity loaded:', data?.length || 0);
-      setRecentActivity(data || []);
-    } catch (error) {
-      console.warn('⚠️ Exception loading recent activity:', error);
-      setRecentActivity([]);
-    }
-  };
 
   return (
     <div className="p-6 space-y-6">
@@ -1067,7 +1034,8 @@ function CollectionsContent() {
       if (ok) {
         setNotice({ type: 'success', message: 'Collection deleted.' });
         try { clearPickupsCache(); } catch {}
-        try { await loadDashboardData(); } catch {}
+        // Refresh dashboard data after deletion
+        // try { await loadDashboardData(); } catch {}
       } else {
         setRows(prevRows);
         setNotice({ type: 'error', message: 'Failed to delete collection.' });
@@ -1400,10 +1368,6 @@ export default function AdminDashboardClient() {
   }, []);
 
 
-  const loadRecentActivity = async () => {
-    // This function will be called by the AddUserModal onSuccess
-    console.log('🔄 Refreshing recent activity...');
-  };
 
   // Check authentication and admin/super_admin role
   useEffect(() => {
@@ -1518,8 +1482,8 @@ export default function AdminDashboardClient() {
         onClose={() => setShowAddUserModal(false)}
         onSuccess={() => {
           // Refresh dashboard data when a new user is created
-          loadDashboardData();
-          loadRecentActivity();
+          // loadDashboardData();
+          // loadRecentActivity();
         }}
       />
     </div>

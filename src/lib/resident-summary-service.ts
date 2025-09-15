@@ -182,26 +182,26 @@ export async function getAllApprovedCollections(): Promise<ApprovedCollectionLis
     .in('pickup_id', pickupIds) : { data: [] as any[] } as any;
 
   // Fetch materials
-  const materialIds = Array.from(new Set((items || []).map(i => i.material_id))).filter(Boolean) as string[];
+  const materialIds = Array.from(new Set((items || []).map((i: any) => i.material_id))).filter(Boolean) as string[];
   const { data: materials } = materialIds.length > 0 ? await supabase
     .from('materials')
     .select('id, name, rate_per_kg')
     .in('id', materialIds) : { data: [] as any[] } as any;
-  const materialById = new Map((materials || []).map(m => [m.id, m]));
+  const materialById: Map<string, any> = new Map((materials || []).map((m: any) => [m.id, m]));
 
   // Fetch users
   const { data: profiles } = userIds.length > 0 ? await supabase
     .from('profiles')
     .select('id, full_name, email')
     .in('id', userIds) : { data: [] as any[] } as any;
-  const profileById = new Map((profiles || []).map(u => [u.id, u]));
+  const profileById: Map<string, any> = new Map((profiles || []).map((u: any) => [u.id, u]));
 
   // Build list items by mapping each pickup item
   const approvedById = new Map((pickups || []).map(p => [p.id, p]));
   const itemsList: ApprovedCollectionListItem[] = (items || []).map((it: any) => {
     const pickup = approvedById.get(it.pickup_id);
     const user = pickup ? profileById.get(pickup.customer_id) : undefined;
-    const material = it.material_id ? materialById.get(it.material_id) : undefined;
+    const material: any = it.material_id ? materialById.get(it.material_id) : undefined;
     const rate = Number(it.rate_per_kg ?? material?.rate_per_kg ?? 0) || null;
     const kgs = Number(it.kilograms || 0);
     const amount = rate != null ? kgs * rate : 0;

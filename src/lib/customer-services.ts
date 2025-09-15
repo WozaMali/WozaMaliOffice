@@ -49,7 +49,7 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
           suburb,
           city,
           postal_code,
-          profiles!inner(
+          profiles:profiles!inner(
             id,
             full_name,
             phone,
@@ -67,12 +67,12 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
       }
 
       // Transform the data to match our interface
-      const customers: CustomerSearchResult[] = data?.map(item => ({
+      const customers: CustomerSearchResult[] = data?.map((item: any) => ({
         id: item.id,
         profile_id: item.profile_id,
-        full_name: item.profiles?.full_name || 'Unknown',
-        phone: item.profiles?.phone || '',
-        email: item.profiles?.email || '',
+        full_name: (Array.isArray(item.profiles) ? item.profiles[0]?.full_name : item.profiles?.full_name) || 'Unknown',
+        phone: (Array.isArray(item.profiles) ? item.profiles[0]?.phone : item.profiles?.phone) || '',
+        email: (Array.isArray(item.profiles) ? item.profiles[0]?.email : item.profiles?.email) || '',
         address: `${item.line1}, ${item.suburb}, ${item.city}`,
         suburb: item.suburb,
         city: item.city,
@@ -101,8 +101,10 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
         return [];
       }
 
-      // Get unique profile IDs from the addresses
-      const profileIds = [...new Set(addresses.map(addr => addr.profile_id))];
+      // Get unique profile IDs from the addresses (without using Set spread)
+      const profileIds = addresses
+        .map(addr => addr.profile_id)
+        .filter((id, index, arr) => arr.indexOf(id) === index);
 
       // Fetch profiles for these IDs (only if we have profile IDs)
       let profiles: any[] = [];
@@ -113,7 +115,7 @@ export async function searchCustomersByAddress(address: string): Promise<Custome
           .from('users')
           .select('id, first_name, last_name, phone, email, is_active')
           .in('id', profileIds)
-          .eq('role_id', (await this.getRoleId('customer')))
+          .eq('role_id', (await getRoleId('customer')))
           .eq('is_active', true);
         
         profiles = profilesData || [];

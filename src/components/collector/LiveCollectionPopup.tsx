@@ -51,6 +51,7 @@ interface Material {
   isDonation?: boolean;
   material_id?: string; // Database material ID
   notes?: string; // Add missing notes property
+  category?: string;
 }
 
 interface LiveCollectionData {
@@ -79,6 +80,8 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
   const [scalePhoto, setScalePhoto] = useState<string | null>(null);
   const [recyclablesPhoto, setRecyclablesPhoto] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingMaterials, setIsLoadingMaterials] = useState(false);
+  const [availableMaterials, setAvailableMaterials] = useState<Material[]>([]);
 
   // Fetch materials from database
   const fetchMaterials = async () => {
@@ -127,11 +130,11 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
           console.error('❌ Simple query also failed:', simpleError);
           // Fallback to sample materials if both queries fail
           const fallbackMaterials = [
-            { id: '1', name: 'Aluminum Cans', rate_per_kg: 18.55, isDonation: false, category: 'Metals' },
-            { id: '2', name: 'PET Bottles', rate_per_kg: 1.50, isDonation: true, category: 'Plastics' },
-            { id: '3', name: 'Clear Glass', rate_per_kg: 2.00, isDonation: false, category: 'Glass' },
-            { id: '4', name: 'White Paper', rate_per_kg: 1.20, isDonation: false, category: 'Paper' },
-            { id: '5', name: 'Cardboard', rate_per_kg: 1.00, isDonation: false, category: 'Paper' },
+            { id: '1', name: 'Aluminum Cans', rate_per_kg: 18.55, isDonation: false, category: 'Metals', kilograms: 0, contamination_pct: 0 },
+            { id: '2', name: 'PET Bottles', rate_per_kg: 1.50, isDonation: true, category: 'Plastics', kilograms: 0, contamination_pct: 0 },
+            { id: '3', name: 'Clear Glass', rate_per_kg: 2.00, isDonation: false, category: 'Glass', kilograms: 0, contamination_pct: 0 },
+            { id: '4', name: 'White Paper', rate_per_kg: 1.20, isDonation: false, category: 'Paper', kilograms: 0, contamination_pct: 0 },
+            { id: '5', name: 'Cardboard', rate_per_kg: 1.00, isDonation: false, category: 'Paper', kilograms: 0, contamination_pct: 0 },
           ];
           console.log('🔄 Using fallback materials:', fallbackMaterials);
           setAvailableMaterials(fallbackMaterials);
@@ -142,19 +145,23 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
             name: material.name,
             rate_per_kg: material.current_price_per_unit,
             isDonation: material.current_price_per_unit < 2.0,
-            category: 'Unknown' // We'll get category later if needed
+            category: 'Unknown', // We'll get category later if needed
+            kilograms: 0,
+            contamination_pct: 0
           }));
           console.log('✅ Mapped materials from simple query:', mappedMaterials);
           setAvailableMaterials(mappedMaterials);
         }
       } else {
         console.log('✅ Successfully fetched materials from database:', data);
-        const mappedMaterials = data.map(material => ({
+        const mappedMaterials = data.map((material: any) => ({
           id: material.id,
           name: material.name,
           rate_per_kg: material.current_price_per_unit,
-          isDonation: material.current_price_per_unit < 2.0, // Consider low-value items as donations
-          category: material.materials.name
+          isDonation: material.current_price_per_unit < 2.0,
+          category: (Array.isArray(material.materials) ? material.materials[0]?.name : (material.materials as any)?.name) ?? 'Unknown',
+          kilograms: 0,
+          contamination_pct: 0
         }));
         console.log('✅ Mapped materials:', mappedMaterials);
         setAvailableMaterials(mappedMaterials);
@@ -163,11 +170,11 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
       console.error('❌ Error fetching materials:', error);
       // Fallback to sample materials
       const fallbackMaterials = [
-        { id: '1', name: 'Aluminum Cans', rate_per_kg: 18.55, isDonation: false, category: 'Metals' },
-        { id: '2', name: 'PET Bottles', rate_per_kg: 1.50, isDonation: true, category: 'Plastics' },
-        { id: '3', name: 'Clear Glass', rate_per_kg: 2.00, isDonation: false, category: 'Glass' },
-        { id: '4', name: 'White Paper', rate_per_kg: 1.20, isDonation: false, category: 'Paper' },
-        { id: '5', name: 'Cardboard', rate_per_kg: 1.00, isDonation: false, category: 'Paper' },
+        { id: '1', name: 'Aluminum Cans', rate_per_kg: 18.55, isDonation: false, category: 'Metals', kilograms: 0, contamination_pct: 0 },
+        { id: '2', name: 'PET Bottles', rate_per_kg: 1.50, isDonation: true, category: 'Plastics', kilograms: 0, contamination_pct: 0 },
+        { id: '3', name: 'Clear Glass', rate_per_kg: 2.00, isDonation: false, category: 'Glass', kilograms: 0, contamination_pct: 0 },
+        { id: '4', name: 'White Paper', rate_per_kg: 1.20, isDonation: false, category: 'Paper', kilograms: 0, contamination_pct: 0 },
+        { id: '5', name: 'Cardboard', rate_per_kg: 1.00, isDonation: false, category: 'Paper', kilograms: 0, contamination_pct: 0 },
       ];
       console.log('🔄 Using fallback materials due to error:', fallbackMaterials);
       setAvailableMaterials(fallbackMaterials);
@@ -335,11 +342,12 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
 
     setIsSubmitting(true);
     
+    let progressInterval: NodeJS.Timeout | undefined;
     try {
       console.log('🚀 Submitting live collection to database...');
       
       // Show progress indicator
-      let progressInterval: NodeJS.Timeout | undefined = setInterval(() => {
+      progressInterval = setInterval(() => {
         console.log('⏳ Collection submission in progress...');
       }, 2000);
 
@@ -381,9 +389,8 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
       }
 
       // Clear progress indicator
-      if (progressInterval) {
-        clearInterval(progressInterval);
-      }
+      // Clear progress indicator on error (guarded)
+      try { clearInterval((globalThis as any).progressInterval as any); } catch {}
       
       // Submit the collection with timeout handling
       const result = await submitLiveCollection({
@@ -463,9 +470,9 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
     } catch (error: any) {
       console.error('❌ Error submitting collection:', error);
       
-      // Clear progress indicator on error
+      // Clear progress indicator on error (guarded)
       if (progressInterval) {
-        clearInterval(progressInterval);
+        try { clearInterval(progressInterval); } catch {}
       }
       
       // Provide user-friendly error messages
@@ -546,7 +553,7 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white"
+                      className="border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white mt-2 text-xs"
                       onClick={async () => {
                         try {
                           setIsSearching(true);
@@ -570,7 +577,6 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                           setIsSearching(false);
                         }
                       }}
-                      className="mt-2 text-xs"
                     >
                       Show All Customers
                     </Button>
@@ -579,7 +585,7 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white"
+                      className="border-gray-500 text-gray-300 hover:bg-gray-600 hover:text-white mt-2 text-xs ml-2"
                       onClick={async () => {
                         try {
                           console.log('🔍 Debug: Checking database state...');
@@ -625,7 +631,6 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                           alert('Debug failed - check console');
                         }
                       }}
-                      className="mt-2 text-xs ml-2"
                     >
                       Debug DB State
                     </Button>

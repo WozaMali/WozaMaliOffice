@@ -648,12 +648,4 @@ export const legacyServices = {
 // 8. EXPORT ALL SERVICES
 // ============================================================================
 
-export {
-  userServices,
-  collectionServices,
-  materialServices,
-  walletAdminServices,
-  analyticsServices,
-  realtimeServices,
-  legacyServices
-}
+// Note: individual services are already exported above

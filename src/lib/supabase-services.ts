@@ -193,11 +193,11 @@ export const profileServices = {
       
       // Transform to match MemberWithUserAddresses interface
       return data?.map(user => ({
-        member_id: user.id,
+        id: user.id,
+        email: user.email,
         full_name: `${user.first_name} ${user.last_name}`.trim(),
         phone: user.phone,
-        email: user.email,
-        role: 'member',
+        role: 'customer',
         is_active: true,
         created_at: user.created_at,
         // Create user addresses from direct fields (same as Main App Dashboard)
@@ -255,13 +255,10 @@ export const profileServices = {
             id: row.member_id,
             email: row.email,
             full_name: row.full_name,
-            first_name: row.first_name,
-            last_name: row.last_name,
             phone: row.phone,
             role: row.role,
             is_active: row.member_is_active,
             created_at: row.member_since,
-            updated_at: row.member_since,
             user_addresses: [],
             wallet_balance: row.wallet_balance,
             total_points: row.total_points,

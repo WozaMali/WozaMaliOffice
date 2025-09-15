@@ -39,7 +39,7 @@ export default function UsersPage() {
   // Modal states
   const [editUser, setEditUser] = useState<Profile | null>(null);
   const [viewUser, setViewUser] = useState<Profile | null>(null);
-  const [deleteUser, setDeleteUser] = useState<Profile | null>(null);
+  const [userToDelete, setUserToDelete] = useState<Profile | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Load users and set up real-time subscription
@@ -127,12 +127,12 @@ export default function UsersPage() {
   };
 
   const handleDeleteUser = async () => {
-    if (!deleteUser) return;
+    if (!userToDelete) return;
 
     setDeleteLoading(true);
     try {
-      await deleteUser(deleteUser.id);
-      setDeleteUser(null);
+      await deleteUser(userToDelete.id);
+      setUserToDelete(null);
       // Real-time update will handle the UI update
     } catch (error) {
       console.error('Error deleting user:', error);
@@ -403,7 +403,7 @@ export default function UsersPage() {
                               Edit User
                             </DropdownMenuItem>
                             <DropdownMenuItem 
-                              onClick={() => setDeleteUser(user)}
+                              onClick={() => setUserToDelete(user)}
                               className="text-red-600"
                             >
                               <Trash2 className="w-4 h-4 mr-2" />
@@ -439,11 +439,11 @@ export default function UsersPage() {
       />
 
       <ConfirmDialog
-        isOpen={!!deleteUser}
-        onClose={() => setDeleteUser(null)}
+        isOpen={!!userToDelete}
+        onClose={() => setUserToDelete(null)}
         onConfirm={handleDeleteUser}
         title="Delete User"
-        description={`Are you sure you want to delete ${deleteUser?.full_name || deleteUser?.email}? This action cannot be undone.`}
+        description={`Are you sure you want to delete ${userToDelete?.full_name || userToDelete?.email}? This action cannot be undone.`}
         confirmText="Delete User"
         confirmVariant="destructive"
         loading={deleteLoading}
