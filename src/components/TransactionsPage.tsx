@@ -18,32 +18,32 @@ import {
   XCircle
 } from 'lucide-react';
 import {
-  getAllWalletTransactions,
-  getAllRegularTransactions,
-  deleteWalletTransaction,
-  deleteRegularTransaction,
-  deleteMultipleWalletTransactions,
-  deleteMultipleRegularTransactions,
+  getAllPointsTransactions,
+  getAllMonetaryTransactions,
+  deletePointsTransaction,
+  deleteMonetaryTransaction,
+  deleteMultiplePointsTransactions,
+  deleteMultipleMonetaryTransactions,
   deleteAllTransactions,
-  WalletTransaction,
-  RegularTransaction
+  PointsTransaction,
+  MonetaryTransaction
 } from '@/lib/transactionsService';
 import { DeleteTransactionsDialog } from './DeleteTransactionsDialog';
 
 export default function TransactionsPage() {
-  const [walletTransactions, setWalletTransactions] = useState<WalletTransaction[]>([]);
-  const [regularTransactions, setRegularTransactions] = useState<RegularTransaction[]>([]);
+  const [pointsTransactions, setPointsTransactions] = useState<PointsTransaction[]>([]);
+  const [monetaryTransactions, setMonetaryTransactions] = useState<MonetaryTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [selectedWalletTransactions, setSelectedWalletTransactions] = useState<string[]>([]);
-  const [selectedRegularTransactions, setSelectedRegularTransactions] = useState<string[]>([]);
+  const [selectedPointsTransactions, setSelectedPointsTransactions] = useState<string[]>([]);
+  const [selectedMonetaryTransactions, setSelectedMonetaryTransactions] = useState<string[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
-    type: 'single-wallet' | 'single-regular' | 'bulk-wallet' | 'bulk-regular' | 'all';
+    type: 'single-points' | 'single-monetary' | 'bulk-points' | 'bulk-monetary' | 'all';
     transactionId?: string;
-  }>({ isOpen: false, type: 'single-wallet' });
+  }>({ isOpen: false, type: 'single-points' });
 
   // Load transactions
   useEffect(() => {
@@ -55,21 +55,21 @@ export default function TransactionsPage() {
     setError(null);
 
     try {
-      const [walletResult, regularResult] = await Promise.all([
-        getAllWalletTransactions(),
-        getAllRegularTransactions()
+      const [pointsResult, monetaryResult] = await Promise.all([
+        getAllPointsTransactions(),
+        getAllMonetaryTransactions()
       ]);
 
-      if (walletResult.error) {
-        console.error('Error loading wallet transactions:', walletResult.error);
+      if (pointsResult.error) {
+        console.error('Error loading points transactions:', pointsResult.error);
       } else {
-        setWalletTransactions(walletResult.data || []);
+        setPointsTransactions(pointsResult.data || []);
       }
 
-      if (regularResult.error) {
-        console.error('Error loading regular transactions:', regularResult.error);
+      if (monetaryResult.error) {
+        console.error('Error loading monetary transactions:', monetaryResult.error);
       } else {
-        setRegularTransactions(regularResult.data || []);
+        setMonetaryTransactions(monetaryResult.data || []);
       }
 
     } catch (error) {
@@ -80,35 +80,35 @@ export default function TransactionsPage() {
     }
   };
 
-  const handleDeleteWalletTransaction = (transactionId: string) => {
+  const handleDeletePointsTransaction = (transactionId: string) => {
     setDeleteDialog({
       isOpen: true,
-      type: 'single-wallet',
+      type: 'single-points',
       transactionId
     });
   };
 
-  const handleDeleteRegularTransaction = (transactionId: string) => {
+  const handleDeleteMonetaryTransaction = (transactionId: string) => {
     setDeleteDialog({
       isOpen: true,
-      type: 'single-regular',
+      type: 'single-monetary',
       transactionId
     });
   };
 
-  const handleBulkDeleteWalletTransactions = () => {
-    if (selectedWalletTransactions.length === 0) return;
+  const handleBulkDeletePointsTransactions = () => {
+    if (selectedPointsTransactions.length === 0) return;
     setDeleteDialog({
       isOpen: true,
-      type: 'bulk-wallet'
+      type: 'bulk-points'
     });
   };
 
-  const handleBulkDeleteRegularTransactions = () => {
-    if (selectedRegularTransactions.length === 0) return;
+  const handleBulkDeleteMonetaryTransactions = () => {
+    if (selectedMonetaryTransactions.length === 0) return;
     setDeleteDialog({
       isOpen: true,
-      type: 'bulk-regular'
+      type: 'bulk-monetary'
     });
   };
 
@@ -144,44 +144,44 @@ export default function TransactionsPage() {
       let result;
       
       switch (type) {
-        case 'single-wallet':
+        case 'single-points':
           if (!transactionId) return;
-          result = await deleteWalletTransaction(transactionId);
+          result = await deletePointsTransaction(transactionId);
           if (result.success) {
-            setWalletTransactions(prev => prev.filter(t => t.id !== transactionId));
+            setPointsTransactions(prev => prev.filter(t => t.id !== transactionId));
             setNotice({ type: 'success', message: result.message });
           } else {
             setNotice({ type: 'error', message: result.message });
           }
           break;
           
-        case 'single-regular':
+        case 'single-monetary':
           if (!transactionId) return;
-          result = await deleteRegularTransaction(transactionId);
+          result = await deleteMonetaryTransaction(transactionId);
           if (result.success) {
-            setRegularTransactions(prev => prev.filter(t => t.id !== transactionId));
+            setMonetaryTransactions(prev => prev.filter(t => t.id !== transactionId));
             setNotice({ type: 'success', message: result.message });
           } else {
             setNotice({ type: 'error', message: result.message });
           }
           break;
           
-        case 'bulk-wallet':
-          result = await deleteMultipleWalletTransactions(selectedWalletTransactions);
+        case 'bulk-points':
+          result = await deleteMultiplePointsTransactions(selectedPointsTransactions);
           if (result.success) {
-            setWalletTransactions(prev => prev.filter(t => !selectedWalletTransactions.includes(t.id)));
-            setSelectedWalletTransactions([]);
+            setPointsTransactions(prev => prev.filter(t => !selectedPointsTransactions.includes(t.id)));
+            setSelectedPointsTransactions([]);
             setNotice({ type: 'success', message: result.message });
           } else {
             setNotice({ type: 'error', message: result.message });
           }
           break;
           
-        case 'bulk-regular':
-          result = await deleteMultipleRegularTransactions(selectedRegularTransactions);
+        case 'bulk-monetary':
+          result = await deleteMultipleMonetaryTransactions(selectedMonetaryTransactions);
           if (result.success) {
-            setRegularTransactions(prev => prev.filter(t => !selectedRegularTransactions.includes(t.id)));
-            setSelectedRegularTransactions([]);
+            setMonetaryTransactions(prev => prev.filter(t => !selectedMonetaryTransactions.includes(t.id)));
+            setSelectedMonetaryTransactions([]);
             setNotice({ type: 'success', message: result.message });
           } else {
             setNotice({ type: 'error', message: result.message });
@@ -191,10 +191,10 @@ export default function TransactionsPage() {
         case 'all':
           result = await deleteAllTransactions();
           if (result.success) {
-            setWalletTransactions([]);
-            setRegularTransactions([]);
-            setSelectedWalletTransactions([]);
-            setSelectedRegularTransactions([]);
+            setPointsTransactions([]);
+            setMonetaryTransactions([]);
+            setSelectedPointsTransactions([]);
+            setSelectedMonetaryTransactions([]);
             setNotice({ type: 'success', message: result.message });
           } else {
             setNotice({ type: 'error', message: result.message });
@@ -212,39 +212,39 @@ export default function TransactionsPage() {
     const { type, transactionId } = deleteDialog;
     
     switch (type) {
-      case 'single-wallet':
+      case 'single-points':
         return {
-          title: 'Delete Wallet Transaction',
-          description: 'Are you sure you want to delete this wallet transaction?',
+          title: 'Delete Points Transaction',
+          description: 'Are you sure you want to delete this points transaction?',
           transactionCount: 1,
           isDangerous: false,
           requireConfirmation: false
         };
         
-      case 'single-regular':
+      case 'single-monetary':
         return {
-          title: 'Delete Regular Transaction',
-          description: 'Are you sure you want to delete this regular transaction?',
+          title: 'Delete Monetary Transaction',
+          description: 'Are you sure you want to delete this monetary transaction?',
           transactionCount: 1,
           isDangerous: false,
           requireConfirmation: false
         };
         
-      case 'bulk-wallet':
+      case 'bulk-points':
         return {
-          title: 'Delete Wallet Transactions',
-          description: `Are you sure you want to delete ${selectedWalletTransactions.length} wallet transactions?`,
-          transactionCount: selectedWalletTransactions.length,
+          title: 'Delete Points Transactions',
+          description: `Are you sure you want to delete ${selectedPointsTransactions.length} points transactions?`,
+          transactionCount: selectedPointsTransactions.length,
           isDangerous: true,
           requireConfirmation: true,
           confirmationText: 'DELETE'
         };
         
-      case 'bulk-regular':
+      case 'bulk-monetary':
         return {
-          title: 'Delete Regular Transactions',
-          description: `Are you sure you want to delete ${selectedRegularTransactions.length} regular transactions?`,
-          transactionCount: selectedRegularTransactions.length,
+          title: 'Delete Monetary Transactions',
+          description: `Are you sure you want to delete ${selectedMonetaryTransactions.length} monetary transactions?`,
+          transactionCount: selectedMonetaryTransactions.length,
           isDangerous: true,
           requireConfirmation: true,
           confirmationText: 'DELETE'
@@ -254,7 +254,7 @@ export default function TransactionsPage() {
         return {
           title: 'Delete ALL Transactions',
           description: 'This will permanently delete ALL transactions in the system. This action cannot be undone.',
-          transactionCount: walletTransactions.length + regularTransactions.length,
+          transactionCount: pointsTransactions.length + monetaryTransactions.length,
           isDangerous: true,
           requireConfirmation: true,
           confirmationText: 'DELETE ALL'
@@ -327,43 +327,43 @@ export default function TransactionsPage() {
         </Alert>
       )}
 
-      {/* Wallet Transactions */}
+      {/* Points Transactions */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Wallet className="h-5 w-5" />
-                Wallet Transactions ({walletTransactions.length})
+                Points Transactions ({pointsTransactions.length})
               </CardTitle>
               <CardDescription>Points-based transactions</CardDescription>
             </div>
-            {selectedWalletTransactions.length > 0 && (
+            {selectedPointsTransactions.length > 0 && (
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={handleBulkDeleteWalletTransactions}
-                disabled={deleting === 'bulk-wallet'}
+                onClick={handleBulkDeletePointsTransactions}
+                disabled={deleting === 'bulk-points'}
                 className="flex items-center gap-2"
               >
-                {deleting === 'bulk-wallet' ? (
+                {deleting === 'bulk-points' ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4" />
                 )}
-                Delete Selected ({selectedWalletTransactions.length})
+                Delete Selected ({selectedPointsTransactions.length})
               </Button>
             )}
           </div>
         </CardHeader>
         <CardContent>
-          {walletTransactions.length === 0 ? (
+          {pointsTransactions.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No wallet transactions found
+              No points transactions found
             </div>
           ) : (
             <div className="space-y-2">
-              {walletTransactions.map((transaction) => (
+              {pointsTransactions.map((transaction) => (
                 <div
                   key={transaction.id}
                   className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
@@ -371,12 +371,12 @@ export default function TransactionsPage() {
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
-                      checked={selectedWalletTransactions.includes(transaction.id)}
+                      checked={selectedPointsTransactions.includes(transaction.id)}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedWalletTransactions(prev => [...prev, transaction.id]);
+                          setSelectedPointsTransactions(prev => [...prev, transaction.id]);
                         } else {
-                          setSelectedWalletTransactions(prev => prev.filter(id => id !== transaction.id));
+                          setSelectedPointsTransactions(prev => prev.filter(id => id !== transaction.id));
                         }
                       }}
                     />
@@ -387,7 +387,7 @@ export default function TransactionsPage() {
                         <span className="text-gray-500">→ {transaction.balance_after}</span>
                       </div>
                       <div className="text-sm text-gray-600">
-                        {transaction.description} • {transaction.source_type}
+                        {transaction.description} • {transaction.source || 'Unknown'}
                       </div>
                       <div className="text-xs text-gray-500">
                         {formatDate(transaction.created_at)}
@@ -397,7 +397,7 @@ export default function TransactionsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDeleteWalletTransaction(transaction.id)}
+                    onClick={() => handleDeletePointsTransaction(transaction.id)}
                     disabled={deleting === transaction.id}
                     className="text-red-600 hover:text-red-700"
                   >
@@ -414,43 +414,43 @@ export default function TransactionsPage() {
         </CardContent>
       </Card>
 
-      {/* Regular Transactions */}
+      {/* Monetary Transactions */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="h-5 w-5" />
-                Regular Transactions ({regularTransactions.length})
+                Monetary Transactions ({monetaryTransactions.length})
               </CardTitle>
               <CardDescription>Monetary transactions</CardDescription>
             </div>
-            {selectedRegularTransactions.length > 0 && (
+            {selectedMonetaryTransactions.length > 0 && (
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={handleBulkDeleteRegularTransactions}
-                disabled={deleting === 'bulk-regular'}
+                onClick={handleBulkDeleteMonetaryTransactions}
+                disabled={deleting === 'bulk-monetary'}
                 className="flex items-center gap-2"
               >
-                {deleting === 'bulk-regular' ? (
+                {deleting === 'bulk-monetary' ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Trash2 className="h-4 w-4" />
                 )}
-                Delete Selected ({selectedRegularTransactions.length})
+                Delete Selected ({selectedMonetaryTransactions.length})
               </Button>
             )}
           </div>
         </CardHeader>
         <CardContent>
-          {regularTransactions.length === 0 ? (
+          {monetaryTransactions.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              No regular transactions found
+              No monetary transactions found
             </div>
           ) : (
             <div className="space-y-2">
-              {regularTransactions.map((transaction) => (
+              {monetaryTransactions.map((transaction) => (
                 <div
                   key={transaction.id}
                   className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
@@ -458,12 +458,12 @@ export default function TransactionsPage() {
                   <div className="flex items-center gap-3">
                     <input
                       type="checkbox"
-                      checked={selectedRegularTransactions.includes(transaction.id)}
+                      checked={selectedMonetaryTransactions.includes(transaction.id)}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedRegularTransactions(prev => [...prev, transaction.id]);
+                          setSelectedMonetaryTransactions(prev => [...prev, transaction.id]);
                         } else {
-                          setSelectedRegularTransactions(prev => prev.filter(id => id !== transaction.id));
+                          setSelectedMonetaryTransactions(prev => prev.filter(id => id !== transaction.id));
                         }
                       }}
                     />
@@ -471,10 +471,10 @@ export default function TransactionsPage() {
                       <div className="flex items-center gap-2">
                         <Badge variant="outline">{transaction.type}</Badge>
                         <span className="font-medium">{formatCurrency(transaction.amount)}</span>
-                        <span className="text-gray-500">{transaction.reference}</span>
+                        <span className="text-gray-500">{transaction.reference || 'No reference'}</span>
                       </div>
                       <div className="text-sm text-gray-600">
-                        {transaction.description}
+                        {transaction.description || 'No description'}
                       </div>
                       <div className="text-xs text-gray-500">
                         {formatDate(transaction.created_at)}
@@ -484,7 +484,7 @@ export default function TransactionsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDeleteRegularTransaction(transaction.id)}
+                    onClick={() => handleDeleteMonetaryTransaction(transaction.id)}
                     disabled={deleting === transaction.id}
                     className="text-red-600 hover:text-red-700"
                   >
@@ -504,7 +504,7 @@ export default function TransactionsPage() {
       {/* Delete Confirmation Dialog */}
       <DeleteTransactionsDialog
         isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, type: 'single-wallet' })}
+        onClose={() => setDeleteDialog({ isOpen: false, type: 'single-points' })}
         onConfirm={handleConfirmDelete}
         {...getDialogConfig()}
       />

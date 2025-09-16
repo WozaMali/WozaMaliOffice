@@ -5,26 +5,26 @@
 
 import { supabase } from './supabase';
 
-export interface WalletTransaction {
+export interface PointsTransaction {
   id: string;
   wallet_id: string;
-  transaction_type: string;
+  transaction_type: 'earned' | 'spent' | 'bonus' | 'deduction' | 'transfer' | 'reset' | 'adjustment';
   points: number;
   balance_after: number;
-  source: string;
-  source_id: string;
-  source_type: string;
-  description: string;
+  source?: string;
+  reference_id?: string;
+  description?: string;
+  admin_notes?: string;
   created_at: string;
 }
 
-export interface RegularTransaction {
+export interface MonetaryTransaction {
   id: string;
   wallet_id: string;
   amount: number;
-  type: string;
-  reference: string;
-  description: string;
+  type: 'credit' | 'debit' | 'adjustment';
+  reference?: string;
+  description?: string;
   created_at: string;
 }
 
@@ -36,93 +36,105 @@ export interface DeleteTransactionResult {
 }
 
 /**
- * Get all wallet transactions
+ * Get all points transactions
  */
-export async function getAllWalletTransactions(): Promise<{ data: WalletTransaction[] | null; error: any }> {
+export async function getAllPointsTransactions(): Promise<{ data: PointsTransaction[] | null; error: any }> {
   try {
     const { data, error } = await supabase
-      .from('wallet_transactions')
-      .select('*')
+      .from('points_transactions')
+      .select(`
+        *,
+        wallet:user_wallets(
+          user_id,
+          user:user_profiles(full_name, email)
+        )
+      `)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching wallet transactions:', error);
+      console.error('Error fetching points transactions:', error);
       return { data: null, error };
     }
 
     return { data: data || [], error: null };
   } catch (error) {
-    console.error('Exception in getAllWalletTransactions:', error);
+    console.error('Exception in getAllPointsTransactions:', error);
     return { data: null, error };
   }
 }
 
 /**
- * Get all regular transactions
+ * Get all monetary transactions
  */
-export async function getAllRegularTransactions(): Promise<{ data: RegularTransaction[] | null; error: any }> {
+export async function getAllMonetaryTransactions(): Promise<{ data: MonetaryTransaction[] | null; error: any }> {
   try {
     const { data, error } = await supabase
       .from('transactions')
-      .select('*')
+      .select(`
+        *,
+        wallet:user_wallets(
+          user_id,
+          user:user_profiles(full_name, email)
+        )
+      `)
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching regular transactions:', error);
+      console.error('Error fetching monetary transactions:', error);
       return { data: null, error };
     }
 
     return { data: data || [], error: null };
   } catch (error) {
-    console.error('Exception in getAllRegularTransactions:', error);
+    console.error('Exception in getAllMonetaryTransactions:', error);
     return { data: null, error };
   }
 }
 
 /**
- * Delete a single wallet transaction
+ * Delete a single points transaction
  */
-export async function deleteWalletTransaction(transactionId: string): Promise<DeleteTransactionResult> {
+export async function deletePointsTransaction(transactionId: string): Promise<DeleteTransactionResult> {
   try {
-    console.log('🗑️ Deleting wallet transaction:', transactionId);
+    console.log('🗑️ Deleting points transaction:', transactionId);
 
     const { error } = await supabase
-      .from('wallet_transactions')
+      .from('points_transactions')
       .delete()
       .eq('id', transactionId);
 
     if (error) {
-      console.error('Error deleting wallet transaction:', error);
+      console.error('Error deleting points transaction:', error);
       return {
         success: false,
-        message: `Failed to delete wallet transaction: ${error.message}`,
+        message: `Failed to delete points transaction: ${error.message}`,
         error
       };
     }
 
-    console.log('✅ Wallet transaction deleted successfully');
+    console.log('✅ Points transaction deleted successfully');
     return {
       success: true,
-      message: 'Wallet transaction deleted successfully',
+      message: 'Points transaction deleted successfully',
       deletedCount: 1
     };
 
   } catch (error) {
-    console.error('Exception in deleteWalletTransaction:', error);
+    console.error('Exception in deletePointsTransaction:', error);
     return {
       success: false,
-      message: 'Failed to delete wallet transaction',
+      message: 'Failed to delete points transaction',
       error
     };
   }
 }
 
 /**
- * Delete a single regular transaction
+ * Delete a single monetary transaction
  */
-export async function deleteRegularTransaction(transactionId: string): Promise<DeleteTransactionResult> {
+export async function deleteMonetaryTransaction(transactionId: string): Promise<DeleteTransactionResult> {
   try {
-    console.log('🗑️ Deleting regular transaction:', transactionId);
+    console.log('🗑️ Deleting monetary transaction:', transactionId);
 
     const { error } = await supabase
       .from('transactions')
@@ -130,75 +142,75 @@ export async function deleteRegularTransaction(transactionId: string): Promise<D
       .eq('id', transactionId);
 
     if (error) {
-      console.error('Error deleting regular transaction:', error);
+      console.error('Error deleting monetary transaction:', error);
       return {
         success: false,
-        message: `Failed to delete regular transaction: ${error.message}`,
+        message: `Failed to delete monetary transaction: ${error.message}`,
         error
       };
     }
 
-    console.log('✅ Regular transaction deleted successfully');
+    console.log('✅ Monetary transaction deleted successfully');
     return {
       success: true,
-      message: 'Regular transaction deleted successfully',
+      message: 'Monetary transaction deleted successfully',
       deletedCount: 1
     };
 
   } catch (error) {
-    console.error('Exception in deleteRegularTransaction:', error);
+    console.error('Exception in deleteMonetaryTransaction:', error);
     return {
       success: false,
-      message: 'Failed to delete regular transaction',
+      message: 'Failed to delete monetary transaction',
       error
     };
   }
 }
 
 /**
- * Delete multiple wallet transactions
+ * Delete multiple points transactions
  */
-export async function deleteMultipleWalletTransactions(transactionIds: string[]): Promise<DeleteTransactionResult> {
+export async function deleteMultiplePointsTransactions(transactionIds: string[]): Promise<DeleteTransactionResult> {
   try {
-    console.log('🗑️ Deleting multiple wallet transactions:', transactionIds);
+    console.log('🗑️ Deleting multiple points transactions:', transactionIds);
 
     const { error } = await supabase
-      .from('wallet_transactions')
+      .from('points_transactions')
       .delete()
       .in('id', transactionIds);
 
     if (error) {
-      console.error('Error deleting multiple wallet transactions:', error);
+      console.error('Error deleting multiple points transactions:', error);
       return {
         success: false,
-        message: `Failed to delete wallet transactions: ${error.message}`,
+        message: `Failed to delete points transactions: ${error.message}`,
         error
       };
     }
 
-    console.log('✅ Multiple wallet transactions deleted successfully');
+    console.log('✅ Multiple points transactions deleted successfully');
     return {
       success: true,
-      message: `${transactionIds.length} wallet transactions deleted successfully`,
+      message: `${transactionIds.length} points transactions deleted successfully`,
       deletedCount: transactionIds.length
     };
 
   } catch (error) {
-    console.error('Exception in deleteMultipleWalletTransactions:', error);
+    console.error('Exception in deleteMultiplePointsTransactions:', error);
     return {
       success: false,
-      message: 'Failed to delete wallet transactions',
+      message: 'Failed to delete points transactions',
       error
     };
   }
 }
 
 /**
- * Delete multiple regular transactions
+ * Delete multiple monetary transactions
  */
-export async function deleteMultipleRegularTransactions(transactionIds: string[]): Promise<DeleteTransactionResult> {
+export async function deleteMultipleMonetaryTransactions(transactionIds: string[]): Promise<DeleteTransactionResult> {
   try {
-    console.log('🗑️ Deleting multiple regular transactions:', transactionIds);
+    console.log('🗑️ Deleting multiple monetary transactions:', transactionIds);
 
     const { error } = await supabase
       .from('transactions')
@@ -206,26 +218,26 @@ export async function deleteMultipleRegularTransactions(transactionIds: string[]
       .in('id', transactionIds);
 
     if (error) {
-      console.error('Error deleting multiple regular transactions:', error);
+      console.error('Error deleting multiple monetary transactions:', error);
       return {
         success: false,
-        message: `Failed to delete regular transactions: ${error.message}`,
+        message: `Failed to delete monetary transactions: ${error.message}`,
         error
       };
     }
 
-    console.log('✅ Multiple regular transactions deleted successfully');
+    console.log('✅ Multiple monetary transactions deleted successfully');
     return {
       success: true,
-      message: `${transactionIds.length} regular transactions deleted successfully`,
+      message: `${transactionIds.length} monetary transactions deleted successfully`,
       deletedCount: transactionIds.length
     };
 
   } catch (error) {
-    console.error('Exception in deleteMultipleRegularTransactions:', error);
+    console.error('Exception in deleteMultipleMonetaryTransactions:', error);
     return {
       success: false,
-      message: 'Failed to delete regular transactions',
+      message: 'Failed to delete monetary transactions',
       error
     };
   }
@@ -238,31 +250,31 @@ export async function deleteAllTransactions(): Promise<DeleteTransactionResult> 
   try {
     console.log('🗑️ Deleting ALL transactions (use with caution!)');
 
-    // Delete wallet transactions
-    const { error: walletError } = await supabase
-      .from('wallet_transactions')
+    // Delete points transactions
+    const { error: pointsError } = await supabase
+      .from('points_transactions')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
 
-    if (walletError) {
-      console.error('Error deleting all wallet transactions:', walletError);
+    if (pointsError) {
+      console.error('Error deleting all points transactions:', pointsError);
     }
 
-    // Delete regular transactions
-    const { error: regularError } = await supabase
+    // Delete monetary transactions
+    const { error: monetaryError } = await supabase
       .from('transactions')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
 
-    if (regularError) {
-      console.error('Error deleting all regular transactions:', regularError);
+    if (monetaryError) {
+      console.error('Error deleting all monetary transactions:', monetaryError);
     }
 
-    if (walletError || regularError) {
+    if (pointsError || monetaryError) {
       return {
         success: false,
         message: 'Some transactions could not be deleted',
-        error: { walletError, regularError }
+        error: { pointsError, monetaryError }
       };
     }
 
@@ -290,31 +302,31 @@ export async function deleteTransactionsBySource(sourceId: string): Promise<Dele
   try {
     console.log('🗑️ Deleting transactions by source:', sourceId);
 
-    // Delete wallet transactions
-    const { error: walletError } = await supabase
-      .from('wallet_transactions')
+    // Delete points transactions
+    const { error: pointsError } = await supabase
+      .from('points_transactions')
       .delete()
-      .eq('source_id', sourceId);
+      .eq('reference_id', sourceId);
 
-    if (walletError) {
-      console.error('Error deleting wallet transactions by source:', walletError);
+    if (pointsError) {
+      console.error('Error deleting points transactions by source:', pointsError);
     }
 
-    // Delete regular transactions
-    const { error: regularError } = await supabase
+    // Delete monetary transactions
+    const { error: monetaryError } = await supabase
       .from('transactions')
       .delete()
-      .eq('source_id', sourceId);
+      .eq('reference', sourceId);
 
-    if (regularError) {
-      console.error('Error deleting regular transactions by source:', regularError);
+    if (monetaryError) {
+      console.error('Error deleting monetary transactions by source:', monetaryError);
     }
 
-    if (walletError || regularError) {
+    if (pointsError || monetaryError) {
       return {
         success: false,
         message: 'Some transactions could not be deleted',
-        error: { walletError, regularError }
+        error: { pointsError, monetaryError }
       };
     }
 
