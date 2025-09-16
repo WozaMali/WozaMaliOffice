@@ -39,6 +39,11 @@ import ResidentSummaryPage from '@/components/admin/ResidentSummaryPage';
 import AdminGreenScholarFund from '@/components/admin/AdminGreenScholarFund';
 import AddUserModal from '@/components/admin/AddUserModal';
 import BeneficiariesPage from './Beneficiaries';
+import { NotificationToast } from '@/components/NotificationToast';
+import { useNotifications } from '@/hooks/useNotifications';
+import { notificationManager } from '@/lib/notificationManager';
+import { NotificationSettings } from '@/components/NotificationSettings';
+import { ResetTransactionsDialog } from '@/components/ResetTransactionsDialog';
 import {
   getPickups, 
   getPayments, 
@@ -303,6 +308,17 @@ function DashboardContent({ onPageChange, onAddUser }: {
 
     const collectionsChannel = supabase
       .channel('unified_collections_changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'unified_collections' }, (payload) => {
+        console.log('📡 New collection detected:', payload.new);
+        loadDashboardData();
+        
+        // Trigger notification for new collection
+        notificationManager.addNotification({
+          type: 'collection',
+          title: 'New Collection Submitted',
+          message: `Collection from ${payload.new?.customer_name || 'Unknown'} - ${payload.new?.total_weight_kg || 0}kg`
+        });
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'unified_collections' }, () => {
         console.log('📡 Unified collections change, refreshing dashboard...');
         loadDashboardData();
@@ -317,10 +333,31 @@ function DashboardContent({ onPageChange, onAddUser }: {
       })
       .subscribe();
 
+    // Subscribe to withdrawal requests
+    const withdrawalRequestsChannel = supabase
+      .channel('withdrawal_requests_changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'withdrawal_requests' }, (payload) => {
+        console.log('📡 New withdrawal request detected:', payload.new);
+        loadDashboardData();
+        
+        // Trigger notification for new withdrawal request
+        notificationManager.addNotification({
+          type: 'withdrawal',
+          title: 'New Withdrawal Request',
+          message: `Withdrawal request for R${payload.new?.amount || 0} from user ${payload.new?.user_id || 'Unknown'}`
+        });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawal_requests' }, () => {
+        console.log('📡 Withdrawal requests change, refreshing dashboard...');
+        loadDashboardData();
+      })
+      .subscribe();
+
     return () => {
       subscriptions.forEach(sub => sub.unsubscribe());
       collectionsChannel.unsubscribe();
       walletsChannel.unsubscribe();
+      withdrawalRequestsChannel.unsubscribe();
     };
   }, []);
 
@@ -890,6 +927,8 @@ function CollectionsContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [details, setDetails] = useState<any>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [selectedCollectionForReset, setSelectedCollectionForReset] = useState<{ id: string; name: string } | null>(null);
 
   const getDisplayName = (fullName?: string, email?: string) => {
     const cleaned = (fullName || '').trim();
@@ -1045,6 +1084,20 @@ function CollectionsContent() {
       setRows(prev => prev);
       setNotice({ type: 'error', message: 'Failed to delete collection.' });
     }
+  };
+
+  const handleResetTransactions = (collection: any) => {
+    setSelectedCollectionForReset({
+      id: collection.id,
+      name: `${getDisplayName(collection.customer?.full_name, collection.customer?.email)} - ${collection.weight_kg || 0}kg`
+    });
+    setResetDialogOpen(true);
+  };
+
+  const handleResetSuccess = () => {
+    setNotice({ type: 'success', message: 'Transactions reset successfully. Collection status updated.' });
+    // Refresh the collections data
+    window.location.reload(); // Simple refresh for now
   };
 
   const closeDetails = () => {
@@ -1212,6 +1265,15 @@ function CollectionsContent() {
                           <button className="text-blue-600 hover:text-blue-900" onClick={() => openDetails(collection.id)}>
                             View
                           </button>
+                          {collection.status === 'approved' && (
+                            <button 
+                              className="text-orange-600 hover:text-orange-900" 
+                              onClick={() => handleResetTransactions(collection)}
+                              title="Reset transactions for this collection"
+                            >
+                              Reset
+                            </button>
+                          )}
                           <button className="text-red-600 hover:text-red-900" onClick={() => handleDelete(collection.id)}>
                             Delete
                           </button>
@@ -1328,6 +1390,20 @@ function CollectionsContent() {
           </div>
         </div>
       )}
+
+      {/* Reset Transactions Dialog */}
+      {selectedCollectionForReset && (
+        <ResetTransactionsDialog
+          isOpen={resetDialogOpen}
+          onClose={() => {
+            setResetDialogOpen(false);
+            setSelectedCollectionForReset(null);
+          }}
+          collectionId={selectedCollectionForReset.id}
+          collectionName={selectedCollectionForReset.name}
+          onSuccess={handleResetSuccess}
+        />
+      )}
     </div>
   );
 }
@@ -1344,13 +1420,17 @@ function ConfigContent() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">System Configuration</h1>
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center py-8 text-gray-500">
-            System configuration interface will be implemented here
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <NotificationSettings />
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center py-8 text-gray-500">
+              Additional system configuration options will be implemented here
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -1361,6 +1441,7 @@ export default function AdminDashboardClient() {
   const [isClient, setIsClient] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const { notifications, removeNotification } = useNotifications();
 
   useEffect(() => {
     setIsClient(true);
@@ -1486,6 +1567,17 @@ export default function AdminDashboardClient() {
           // loadRecentActivity();
         }}
       />
+
+      {/* Notification Toasts */}
+      {notifications.map((notification) => (
+        <NotificationToast
+          key={notification.id}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
     </div>
   );
 }

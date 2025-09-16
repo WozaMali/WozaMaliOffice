@@ -4,6 +4,9 @@
 -- This function provides a secure way to delete collections and all related records
 -- using SECURITY DEFINER to bypass RLS policies
 
+-- Drop existing function if it exists (to handle return type changes)
+DROP FUNCTION IF EXISTS admin_delete_collection(UUID);
+
 CREATE OR REPLACE FUNCTION admin_delete_collection(_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
