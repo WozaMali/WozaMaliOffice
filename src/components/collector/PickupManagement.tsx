@@ -45,62 +45,24 @@ interface Pickup {
   notes?: string;
 }
 
-const SAMPLE_PICKUPS: Pickup[] = [
-  {
-    id: '1',
-    customerName: 'John Smith',
-    customerPhone: '+27 82 123 4567',
-    address: '123 Main Street, Johannesburg',
-    status: 'completed',
-    totalKg: 15.5,
-    totalValue: 38.75,
-    materials: [
-      { name: 'Plastic Bottles', kilograms: 8.2, photos: ['photo1.jpg', 'photo2.jpg'] },
-      { name: 'Cardboard', kilograms: 7.3, photos: ['photo3.jpg'] }
-    ],
-    createdAt: '2024-01-15T10:30:00Z',
-    notes: 'Customer was very helpful with sorting materials'
-  },
-  {
-    id: '2',
-    customerName: 'Sarah Johnson',
-    customerPhone: '+27 83 456 7890',
-    address: '456 Oak Avenue, Cape Town',
-    status: 'approved',
-    totalKg: 22.1,
-    totalValue: 55.25,
-    materials: [
-      { name: 'Glass', kilograms: 12.5, photos: ['photo4.jpg'] },
-      { name: 'Metal Cans', kilograms: 9.6, photos: ['photo5.jpg', 'photo6.jpg'] }
-    ],
-    createdAt: '2024-01-14T14:15:00Z',
-    notes: 'Large collection, well organized'
-  },
-  {
-    id: '3',
-    customerName: 'Mike Wilson',
-    customerPhone: '+27 84 789 1234',
-    address: '789 Pine Road, Durban',
-    status: 'pending',
-    totalKg: 18.7,
-    totalValue: 46.75,
-    materials: [
-      { name: 'Paper', kilograms: 10.2, photos: ['photo7.jpg'] },
-      { name: 'Plastic Bottles', kilograms: 8.5, photos: ['photo8.jpg'] }
-    ],
-    createdAt: '2024-01-16T09:45:00Z',
-    notes: 'Ready for collection tomorrow'
-  }
-];
+import { getCollectorPickups, getAllPickups, updatePickupStatus, Pickup } from '@/lib/pickupService';
 
 export default function PickupManagement() {
   const [activeTab, setActiveTab] = useState('list');
-  const [pickups, setPickups] = useState<Pickup[]>(SAMPLE_PICKUPS);
-  const [filteredPickups, setFilteredPickups] = useState<Pickup[]>(SAMPLE_PICKUPS);
+  const [pickups, setPickups] = useState<Pickup[]>([]);
+  const [filteredPickups, setFilteredPickups] = useState<Pickup[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedPickup, setSelectedPickup] = useState<Pickup | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Load pickups on component mount
+  useEffect(() => {
+    loadPickups();
+  }, []);
+
+  // Filter pickups when search or status changes
   useEffect(() => {
     let filtered = pickups;
 
@@ -120,6 +82,34 @@ export default function PickupManagement() {
 
     setFilteredPickups(filtered);
   }, [pickups, searchTerm, statusFilter]);
+
+  const loadPickups = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // For now, we'll use getAllPickups since we don't have collector context
+      // In a real app, you'd get the collector ID from auth context
+      const { data, error } = await getAllPickups({
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        search: searchTerm || undefined
+      });
+
+      if (error) {
+        console.error('Error loading pickups:', error);
+        setError('Failed to load pickups');
+        setPickups([]);
+      } else {
+        setPickups(data || []);
+      }
+    } catch (err) {
+      console.error('Exception loading pickups:', err);
+      setError('Failed to load pickups');
+      setPickups([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     const baseClasses = "px-2 py-1 text-xs font-medium rounded-full";
@@ -299,21 +289,41 @@ export default function PickupManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Customer</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Location</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Materials</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Weight</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Value</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600"></div>
+                <span className="text-gray-600">Loading pickups...</span>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="text-red-600 mb-2">⚠️ {error}</div>
+                <button 
+                  onClick={loadPickups}
+                  className="text-orange-600 hover:text-orange-700 underline"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Customer</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Location</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Materials</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Weight</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Value</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Date</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
                 {filteredPickups.map((pickup) => (
                   <tr key={pickup.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4">
@@ -407,6 +417,7 @@ export default function PickupManagement() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
 

@@ -19,6 +19,15 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { 
+  getAllRewards, 
+  createReward, 
+  updateReward, 
+  deleteReward, 
+  toggleRewardStatus,
+  Reward,
+  CreateRewardData 
+} from '@/lib/rewardsService';
 
 interface Reward {
   id: string;
@@ -39,55 +48,31 @@ export default function RewardsPage() {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // Mock data for demonstration
+  // Load rewards from database
   useEffect(() => {
-    const mockRewards: Reward[] = [
-      {
-        id: '1',
-        name: 'R50 Voucher',
-        description: 'R50 cash voucher for any major retailer',
-        points_required: 50,
-        category: 'cash',
-        is_active: true,
-        created_at: '2024-01-15T10:00:00Z',
-        updated_at: '2024-01-15T10:00:00Z'
-      },
-      {
-        id: '2',
-        name: 'Free Collection',
-        description: 'One free collection service (up to 20kg)',
-        points_required: 100,
-        category: 'service',
-        is_active: true,
-        created_at: '2024-01-15T10:00:00Z',
-        updated_at: '2024-01-15T10:00:00Z'
-      },
-      {
-        id: '3',
-        name: 'Eco Kit',
-        description: 'Starter recycling kit with bins and bags',
-        points_required: 200,
-        category: 'product',
-        is_active: true,
-        created_at: '2024-01-15T10:00:00Z',
-        updated_at: '2024-01-15T10:00:00Z'
-      },
-      {
-        id: '4',
-        name: 'Premium Collection',
-        description: 'Priority collection service with same-day pickup',
-        points_required: 500,
-        category: 'service',
-        is_active: false,
-        created_at: '2024-01-15T10:00:00Z',
-        updated_at: '2024-01-15T10:00:00Z'
-      }
-    ];
-
-    setRewards(mockRewards);
-    setFilteredRewards(mockRewards);
-    setLoading(false);
+    loadRewards();
   }, []);
+
+  const loadRewards = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await getAllRewards();
+      if (error) {
+        console.error('Error loading rewards:', error);
+        setRewards([]);
+        setFilteredRewards([]);
+      } else {
+        setRewards(data || []);
+        setFilteredRewards(data || []);
+      }
+    } catch (error) {
+      console.error('Exception loading rewards:', error);
+      setRewards([]);
+      setFilteredRewards([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter rewards based on search and filters
   useEffect(() => {
