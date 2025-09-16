@@ -44,6 +44,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { notificationManager } from '@/lib/notificationManager';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { ResetTransactionsDialog } from '@/components/ResetTransactionsDialog';
+import TransactionsPage from '@/components/TransactionsPage';
 import {
   getPickups, 
   getPayments, 
@@ -76,6 +77,7 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
     { name: 'Green Scholar Fund', page: 'green-scholar', icon: TreePine },
     { name: 'Collections', page: 'collections', icon: Calendar },
     { name: 'Pickups', page: 'pickups', icon: Package },
+    { name: 'Transactions', page: 'transactions', icon: Wallet },
     { name: 'Analytics', page: 'analytics', icon: TrendingUp },
     { name: 'Config', page: 'config', icon: Settings },
   ];
@@ -1065,24 +1067,41 @@ function CollectionsContent() {
   const handleDelete = async (collectionId: string) => {
     const confirmed = typeof window !== 'undefined' ? window.confirm('Delete this collection and all related records? This cannot be undone.') : true;
     if (!confirmed) return;
+    
+    console.log('🗑️ Starting deletion of collection:', collectionId);
+    
     try {
       // Optimistic remove
       const prevRows = rows;
       setRows(prev => prev.filter(c => c.id !== collectionId));
+      
+      console.log('🔄 Calling deleteCollectionDeep...');
       const ok = await deleteCollectionDeep(collectionId);
+      
       if (ok) {
-        setNotice({ type: 'success', message: 'Collection deleted.' });
-        try { clearPickupsCache(); } catch {}
-        // Refresh dashboard data after deletion
-        // try { await loadDashboardData(); } catch {}
+        console.log('✅ Collection deleted successfully');
+        setNotice({ type: 'success', message: 'Collection deleted successfully.' });
+        try { 
+          clearPickupsCache(); 
+          console.log('✅ Pickups cache cleared');
+        } catch (cacheError) {
+          console.warn('⚠️ Failed to clear pickups cache:', cacheError);
+        }
+        
+        // Refresh the page to show updated data
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       } else {
+        console.error('❌ deleteCollectionDeep returned false');
         setRows(prevRows);
-        setNotice({ type: 'error', message: 'Failed to delete collection.' });
+        setNotice({ type: 'error', message: 'Failed to delete collection. Please check the console for details.' });
       }
     } catch (e) {
+      console.error('❌ Exception in handleDelete:', e);
       // Restore on exception
-      setRows(prev => prev);
-      setNotice({ type: 'error', message: 'Failed to delete collection.' });
+      setRows(prevRows);
+      setNotice({ type: 'error', message: `Failed to delete collection: ${e instanceof Error ? e.message : 'Unknown error'}` });
     }
   };
 
@@ -1515,6 +1534,8 @@ export default function AdminDashboardClient() {
         return <CollectionsContent />;
       case 'pickups':
         return <PickupsContent />;
+      case 'transactions':
+        return <TransactionsPage />;
       case 'analytics':
         return <AnalyticsContent />;
       case 'config':

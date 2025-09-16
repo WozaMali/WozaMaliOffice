@@ -1424,28 +1424,55 @@ export async function getMaterialPerformance() {
 
 export async function deleteCollectionDeep(collectionId: string): Promise<boolean> {
   console.log('🗑️ Deleting collection and related records via server route:', collectionId);
+  
+  if (!collectionId || typeof collectionId !== 'string') {
+    console.error('❌ Invalid collectionId provided:', collectionId);
+    return false;
+  }
+  
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeout = setTimeout(() => {
+      console.warn('⚠️ Delete request timed out after 15 seconds');
+      controller.abort();
+    }, 15000); // 15s timeout
+    
+    console.log('🔄 Making API request to /api/admin/delete-collection...');
     const res = await fetch('/api/admin/delete-collection', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ collectionId }),
       signal: controller.signal
     });
+    
     clearTimeout(timeout);
+    
+    console.log('📡 API response received:', {
+      status: res.status,
+      statusText: res.statusText,
+      ok: res.ok
+    });
+    
     if (!res.ok) {
       const msg = await res.json().catch(() => ({}));
-      console.error('Delete API failed:', {
+      console.error('❌ Delete API failed:', {
         status: res.status,
         statusText: res.statusText,
         response: msg
       });
       return false;
     }
+    
+    const responseData = await res.json().catch(() => ({}));
+    console.log('✅ Delete API succeeded:', responseData);
     return true;
+    
   } catch (error) {
-    console.error('❌ Exception in deleteCollectionDeep:', error);
+    if (error.name === 'AbortError') {
+      console.error('❌ Delete request was aborted (timeout)');
+    } else {
+      console.error('❌ Exception in deleteCollectionDeep:', error);
+    }
     return false;
   }
 }
