@@ -418,13 +418,11 @@ export const walletAdminServices = {
   // Get user points transactions
   async getUserPointsTransactions(userId: string): Promise<PointsTransaction[]> {
     try {
-      const wallet = await this.getUserWallet(userId)
-      if (!wallet) return []
-
       const { data, error } = await supabase
-        .from('points_transactions')
+        .from('wallet_transactions')
         .select('*')
-        .eq('wallet_id', wallet.id)
+        .eq('user_id', userId)
+        .gt('points', 0)
         .order('created_at', { ascending: false })
 
       if (error) throw error

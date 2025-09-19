@@ -67,8 +67,8 @@ export default function DonatePage() {
 
             <Card className="text-center">
               <CardHeader>
-                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <School className="h-8 w-8 text-purple-600" />
+                <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <School className="h-8 w-8 text-yellow-600" />
                 </div>
                 <CardTitle className="text-xl">3. Educational Impact</CardTitle>
               </CardHeader>

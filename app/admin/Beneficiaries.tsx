@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { School, Home, Filter, Check, X, Search, Link as LinkIcon, Eye } from 'lucide-react';
+import { School, Home, Filter, Check, X, Search, Link as LinkIcon, Eye, Users } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface SchoolRow {
@@ -151,173 +151,402 @@ export default function BeneficiariesPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Beneficiary Management</h1>
-          <p className="text-gray-600 mt-1">Manage schools, child-headed homes, requests, and applications</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Beneficiary Management</h1>
+            <p className="text-gray-600">Manage schools, child-headed homes, requests, and applications</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <School className="w-4 h-4 mr-2" />
+              {schools.length} Schools
+            </Badge>
+            <Badge className="text-sm bg-gradient-to-r from-green-600 to-green-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Home className="w-4 h-4 mr-2" />
+              {homes.length} Homes
+            </Badge>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <Input 
+                placeholder="Search beneficiaries..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="pl-10 w-80 border-gray-300 focus:border-blue-500 focus:ring-blue-500" 
+              />
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Search className="h-4 w-4 text-gray-400" />
-          <Input placeholder="Search" value={search} onChange={e => setSearch(e.target.value)} className="w-80" />
-        </div>
-      </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-        <TabsList>
-          <TabsTrigger value="schools">Schools</TabsTrigger>
-          <TabsTrigger value="homes">Child Homes</TabsTrigger>
-          <TabsTrigger value="requests">Requests</TabsTrigger>
-          <TabsTrigger value="applications">Applications</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="schools">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2"><School className="h-5 w-5 text-blue-600" /> Schools</CardTitle>
-              <div className="flex gap-2">
-                <Button variant="outline"><Filter className="h-4 w-4 mr-2" />Filter</Button>
-                <AddSchoolButton onCreated={loadAll} />
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-blue-900">Total Schools</CardTitle>
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                <School className="h-5 w-5 text-white" />
               </div>
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <div className="text-center text-gray-500 py-8">Loading...</div>
-              ) : error ? (
-                <div className="text-center text-red-600 py-8">{error}</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredSchools.map(s => (
-                    <div key={s.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold">{s.name}</div>
-                        <Badge variant={s.is_active ? 'default' : 'secondary'}>{s.is_active ? 'Active' : 'Inactive'}</Badge>
-                      </div>
-                      <div className="text-sm text-gray-600 mt-1">{s.city}, {s.province}</div>
-                      <div className="text-sm text-gray-600">{s.student_count} students</div>
-                      <div className="text-xs text-gray-500 mt-2">Type: {s.school_type}</div>
-                      <div className="flex gap-2 mt-3">
-                        <Button size="sm" variant="outline">View</Button>
-                        <EditSchoolButton school={s} onSaved={loadAll} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="text-3xl font-bold text-blue-600 mb-1">
+                {schools.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-blue-700 font-medium">
+                Registered schools
+              </p>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="homes">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2"><Home className="h-5 w-5 text-green-600" /> Child-Headed Homes</CardTitle>
-              <div className="flex gap-2">
-                <Button variant="outline"><Filter className="h-4 w-4 mr-2" />Filter</Button>
-                <AddHomeButton onCreated={loadAll} />
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-green-900">Child Homes</CardTitle>
+              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <Home className="h-5 w-5 text-white" />
               </div>
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <div className="text-center text-gray-500 py-8">Loading...</div>
-              ) : error ? (
-                <div className="text-center text-red-600 py-8">{error}</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {filteredHomes.map(h => (
-                    <div key={h.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold">{h.name}</div>
-                        <Badge variant={h.is_active ? 'default' : 'secondary'}>{h.is_active ? 'Active' : 'Inactive'}</Badge>
-                      </div>
-                      <div className="text-sm text-gray-600 mt-1">{h.city}, {h.province}</div>
-                      <div className="text-sm text-gray-600">{h.child_count} children</div>
-                      <div className="flex gap-2 mt-3">
-                        <Button size="sm" variant="outline">View</Button>
-                        <EditHomeButton home={h} onSaved={loadAll} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="text-3xl font-bold text-green-600 mb-1">
+                {homes.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-green-700 font-medium">
+                Child-headed homes
+              </p>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="requests">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Funding Requests</CardTitle>
-                <AddRequestButton onCreated={loadAll} schools={schools} homes={homes} />
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-yellow-900">Funding Requests</CardTitle>
+              <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                <Filter className="h-5 w-5 text-white" />
               </div>
             </CardHeader>
             <CardContent>
-              {requests.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">No requests yet</div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredRequests.map(r => (
-                    <div key={r.id} className="border rounded-lg p-4 flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{r.title}</div>
-                        <div className="text-sm text-gray-500">{r.requester_type} • {new Date(r.created_at).toLocaleDateString()}</div>
-                        <div className="text-sm text-gray-600 mt-1">{r.reason}</div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="text-sm text-gray-500">Amount</div>
-                          <div className="text-lg font-semibold">R {r.amount_requested.toLocaleString()}</div>
-                          <div className="mt-1"> <Badge variant={r.status === 'pending' ? 'secondary' : r.status === 'approved' ? 'default' : 'destructive'}>{r.status}</Badge> </div>
+              <div className="text-3xl font-bold text-yellow-600 mb-1">
+                {requests.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-yellow-700 font-medium">
+                Pending requests
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-purple-900">Applications</CardTitle>
+              <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                <Check className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-purple-600 mb-1">
+                {applications.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-purple-700 font-medium">
+                Student applications
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+          <TabsList className="grid w-full grid-cols-4 bg-white shadow-lg">
+            <TabsTrigger value="schools" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-blue-600 data-[state=active]:text-white">Schools</TabsTrigger>
+            <TabsTrigger value="homes" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-green-600 data-[state=active]:text-white">Child Homes</TabsTrigger>
+            <TabsTrigger value="requests" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-yellow-500 data-[state=active]:to-yellow-600 data-[state=active]:text-white">Requests</TabsTrigger>
+            <TabsTrigger value="applications" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-purple-600 data-[state=active]:text-white">Applications</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="schools">
+            <Card className="border-0 shadow-xl bg-white">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                      <School className="h-5 w-5 text-blue-600" /> 
+                      Schools ({filteredSchools.length})
+                    </CardTitle>
+                    <p className="text-sm text-gray-600 mt-1">Manage registered schools and their information</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="border-gray-300 hover:bg-gray-50">
+                      <Filter className="h-4 w-4 mr-2" />Filter
+                    </Button>
+                    <AddSchoolButton onCreated={loadAll} />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {loading ? (
+                  <div className="flex items-center justify-center h-64">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                  </div>
+                ) : error ? (
+                  <div className="text-center text-red-600 py-8">
+                    <p>Error loading schools: {error}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredSchools.map(s => (
+                      <div key={s.id} className="border-0 shadow-lg rounded-lg p-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="font-semibold text-gray-900 text-lg">{s.name}</div>
+                          <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                            s.is_active 
+                              ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                              : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                          }`}>
+                            {s.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
                         </div>
-                        {r.status === 'pending' && (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => updateRequestStatus(r.id, 'rejected')}>
-                              <X className="h-4 w-4 mr-1" /> Reject
-                            </Button>
-                            <Button size="sm" onClick={() => updateRequestStatus(r.id, 'approved')}>
-                              <Check className="h-4 w-4 mr-1" /> Approve
+                        <div className="space-y-2 text-sm text-gray-600">
+                          <div className="flex items-center gap-2">
+                            <School className="h-4 w-4 text-blue-500" />
+                            {s.city}, {s.province}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-green-500" />
+                            {s.student_count} students
+                          </div>
+                          <div className="text-xs text-gray-500 mt-2">Type: {s.school_type}</div>
+                        </div>
+                        <div className="flex gap-2 mt-4">
+                          <Button size="sm" variant="outline" className="border-gray-300 hover:bg-gray-50">View</Button>
+                          <EditSchoolButton school={s} onSaved={loadAll} />
+                        </div>
+                      </div>
+                    ))}
+                    {filteredSchools.length === 0 && (
+                      <div className="col-span-full text-center py-12">
+                        <School className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-lg font-medium text-gray-500">No schools found</p>
+                        <p className="text-sm text-gray-400">Try adjusting your search criteria</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="homes">
+            <Card className="border-0 shadow-xl bg-white">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                      <Home className="h-5 w-5 text-green-600" /> 
+                      Child-Headed Homes ({filteredHomes.length})
+                    </CardTitle>
+                    <p className="text-sm text-gray-600 mt-1">Manage child-headed homes and their information</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="border-gray-300 hover:bg-gray-50">
+                      <Filter className="h-4 w-4 mr-2" />Filter
+                    </Button>
+                    <AddHomeButton onCreated={loadAll} />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {loading ? (
+                  <div className="flex items-center justify-center h-64">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+                  </div>
+                ) : error ? (
+                  <div className="text-center text-red-600 py-8">
+                    <p>Error loading homes: {error}</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {filteredHomes.map(h => (
+                      <div key={h.id} className="border-0 shadow-lg rounded-lg p-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="font-semibold text-gray-900 text-lg">{h.name}</div>
+                          <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                            h.is_active 
+                              ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                              : 'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                          }`}>
+                            {h.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </div>
+                        <div className="space-y-2 text-sm text-gray-600">
+                          <div className="flex items-center gap-2">
+                            <Home className="h-4 w-4 text-green-500" />
+                            {h.city}, {h.province}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-blue-500" />
+                            {h.child_count} children
+                          </div>
+                        </div>
+                        <div className="flex gap-2 mt-4">
+                          <Button size="sm" variant="outline" className="border-gray-300 hover:bg-gray-50">View</Button>
+                          <EditHomeButton home={h} onSaved={loadAll} />
+                        </div>
+                      </div>
+                    ))}
+                    {filteredHomes.length === 0 && (
+                      <div className="col-span-full text-center py-12">
+                        <Home className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-lg font-medium text-gray-500">No homes found</p>
+                        <p className="text-sm text-gray-400">Try adjusting your search criteria</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="requests">
+            <Card className="border-0 shadow-xl bg-white">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-semibold text-gray-900">
+                      Funding Requests ({filteredRequests.length})
+                    </CardTitle>
+                    <p className="text-sm text-gray-600 mt-1">Review and manage funding requests from schools and homes</p>
+                  </div>
+                  <AddRequestButton onCreated={loadAll} schools={schools} homes={homes} />
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {requests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Filter className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-lg font-medium text-gray-500">No requests yet</p>
+                    <p className="text-sm text-gray-400">Funding requests will appear here when submitted</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredRequests.map(r => (
+                      <div key={r.id} className="border-0 shadow-lg rounded-lg p-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-900 text-lg mb-2">{r.title}</div>
+                            <div className="flex items-center gap-4 text-sm text-gray-500 mb-2">
+                              <Badge className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                                r.requester_type === 'school' 
+                                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                                  : 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                              }`}>
+                                {r.requester_type}
+                              </Badge>
+                              <span>{new Date(r.created_at).toLocaleDateString()}</span>
+                            </div>
+                            <div className="text-sm text-gray-600">{r.reason}</div>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <div className="text-right">
+                              <div className="text-sm text-gray-500 mb-1">Amount</div>
+                              <div className="text-2xl font-bold text-gray-900">R {r.amount_requested.toLocaleString()}</div>
+                              <div className="mt-2">
+                                <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                                  r.status === 'pending' 
+                                    ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white'
+                                    : r.status === 'approved' 
+                                    ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                                    : 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+                                }`}>
+                                  {r.status}
+                                </Badge>
+                              </div>
+                            </div>
+                            {r.status === 'pending' && (
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => updateRequestStatus(r.id, 'rejected')} className="text-red-600 border-red-300 hover:bg-red-50">
+                                  <X className="h-4 w-4 mr-1" /> Reject
+                                </Button>
+                                <Button size="sm" onClick={() => updateRequestStatus(r.id, 'approved')} className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white">
+                                  <Check className="h-4 w-4 mr-1" /> Approve
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {filteredRequests.length === 0 && requests.length > 0 && (
+                      <div className="text-center py-12">
+                        <Filter className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-lg font-medium text-gray-500">No requests match your search</p>
+                        <p className="text-sm text-gray-400">Try adjusting your search criteria</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="applications">
+            <Card className="border-0 shadow-xl bg-white">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-semibold text-gray-900">
+                      Student Applications ({filteredApplications.length})
+                    </CardTitle>
+                    <p className="text-sm text-gray-600 mt-1">Review and manage student scholarship applications</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {applications.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Check className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-lg font-medium text-gray-500">No applications yet</p>
+                    <p className="text-sm text-gray-400">Student applications will appear here when submitted</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredApplications.map(a => (
+                      <div key={a.id} className="border-0 shadow-lg rounded-lg p-6 bg-gradient-to-br from-white to-gray-50 hover:shadow-xl transition-all duration-300">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-900 text-lg mb-2">{a.full_name}</div>
+                            <div className="flex items-center gap-4 text-sm text-gray-500 mb-2">
+                              <span>{a.email || a.phone_number || 'No contact'}</span>
+                              <span>•</span>
+                              <span>{new Date(a.created_at).toLocaleDateString()}</span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {a.school_name || '—'}{a.grade ? ` • Grade ${a.grade}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                              a.status === 'pending' 
+                                ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white'
+                                : a.status === 'approved' 
+                                ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
+                                : 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+                            }`}>
+                              {a.status}
+                            </Badge>
+                            <Button size="sm" variant="outline" onClick={() => setViewing(a)} className="border-gray-300 hover:bg-gray-50">
+                              <Eye className="h-4 w-4 mr-1" /> View
                             </Button>
                           </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="applications">
-          <Card>
-            <CardHeader>
-              <CardTitle>Applications</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {applications.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">No applications yet</div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredApplications.map(a => (
-                    <div key={a.id} className="border rounded-lg p-4 flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{a.full_name}</div>
-                        <div className="text-sm text-gray-500">{a.email || a.phone_number || 'No contact'} • {new Date(a.created_at).toLocaleDateString()}</div>
-                        <div className="text-sm text-gray-600 mt-1">{a.school_name || '—'}{a.grade ? ` • Grade ${a.grade}` : ''}</div>
+                    ))}
+                    {filteredApplications.length === 0 && applications.length > 0 && (
+                      <div className="text-center py-12">
+                        <Check className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                        <p className="text-lg font-medium text-gray-500">No applications match your search</p>
+                        <p className="text-sm text-gray-400">Try adjusting your search criteria</p>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <Badge variant={a.status === 'pending' ? 'secondary' : a.status === 'approved' ? 'default' : 'destructive'}>{a.status}</Badge>
-                        <Button size="sm" variant="outline" onClick={() => setViewing(a)}>
-                          <Eye className="h-4 w-4 mr-1" /> View
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
           {viewing && (
             <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -418,8 +647,9 @@ export default function BeneficiariesPage() {
               </div>
             </div>
           )}
-        </TabsContent>
-      </Tabs>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

@@ -56,11 +56,28 @@ export class GreenScholarFundService {
 		}
 
 		// 2) Fallback to green_scholar_transactions (unified naming first)
+		// Exclude transactions that are in deleted_transactions table
 		let pet = 0, donations = 0, disbursed = 0
 		{
-			const { data } = await supabase
+			// Get all active transaction IDs (not in deleted_transactions)
+			const { data: deletedIds } = await supabase
+				.from('deleted_transactions')
+				.select('original_transaction_id')
+				.not('original_transaction_id', 'is', null)
+			
+			const excludedIds = (deletedIds || []).map((d: any) => d.original_transaction_id).filter(Boolean)
+			
+			// Build query to exclude deleted transactions
+			let query = supabase
 				.from('green_scholar_transactions')
-				.select('amount, transaction_type')
+				.select('id, amount, transaction_type')
+			
+			// Exclude deleted transactions if any exist
+			if (excludedIds.length > 0) {
+				query = query.not('id', 'in', excludedIds)
+			}
+			
+			const { data } = await query
 			if (Array.isArray(data)) {
 				const sum = (arr: any[], key: string) => arr.filter(r => r.transaction_type === key).reduce((s, r: any) => s + Number(r.amount || 0), 0)
 				pet = sum(data, 'pet_contribution') || sum(data, 'pet_donation') || 0
@@ -70,12 +87,28 @@ export class GreenScholarFundService {
 		}
 
 		// 3) Last-resort fallback: derive PET revenue directly from approved collections materials
+		// Exclude collections that are soft deleted
 		if (!pet) {
 			try {
-				const { data: approved } = await supabase
+				// Get deleted collection IDs to exclude
+				const { data: deletedCollections } = await supabase
+					.from('deleted_transactions')
+					.select('original_collection_id')
+					.not('original_collection_id', 'is', null)
+				
+				const excludedCollectionIds = (deletedCollections || []).map((d: any) => d.original_collection_id).filter(Boolean)
+				
+				let collectionsQuery = supabase
 					.from('unified_collections')
 					.select('id')
 					.in('status', ['approved','completed'])
+				
+				// Exclude deleted collections if any exist
+				if (excludedCollectionIds.length > 0) {
+					collectionsQuery = collectionsQuery.not('id', 'in', excludedCollectionIds)
+				}
+				
+				const { data: approved } = await collectionsQuery
 				const ids = Array.isArray(approved) ? approved.map((r: any) => r.id) : []
 				if (ids.length > 0) {
 					const { data: mats } = await supabase
@@ -233,6 +266,39 @@ export class GreenScholarFundService {
 			distributions: Number(r.distributions || 0),
 			net_change: Number(r.net_change || 0),
 		}))
+	}
+
+	static async deleteDisbursement(disbursementId: string): Promise<{ success: boolean; message: string }> {
+		try {
+			// Try to delete from unified ledger first
+			const { error: unifiedError } = await supabase
+				.from('green_scholar_transactions')
+				.delete()
+				.eq('id', disbursementId)
+				.in('transaction_type', ['distribution', 'expense'])
+
+			if (!unifiedError) {
+				return { success: true, message: 'Disbursement deleted successfully' }
+			}
+
+			// Fallback to disbursements table
+			const { error: disbursementError } = await supabase
+				.from('green_scholar_disbursements')
+				.delete()
+				.eq('id', disbursementId)
+
+			if (disbursementError) {
+				throw disbursementError
+			}
+
+			return { success: true, message: 'Disbursement deleted successfully' }
+		} catch (error) {
+			console.error('Error deleting disbursement:', error)
+			return { 
+				success: false, 
+				message: `Failed to delete disbursement: ${error instanceof Error ? error.message : 'Unknown error'}` 
+			}
+		}
 	}
 }
 

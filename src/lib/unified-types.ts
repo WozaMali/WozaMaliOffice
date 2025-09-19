@@ -181,14 +181,12 @@ export interface UserWallet {
 
 export interface PointsTransaction {
   id: string
-  wallet_id: string
-  transaction_type: 'earned' | 'spent' | 'bonus' | 'deduction' | 'transfer' | 'reset' | 'adjustment'
+  user_id: string
+  transaction_type: string
   points: number
-  balance_after: number
-  source?: string
-  reference_id?: string
+  amount: number
   description?: string
-  admin_notes?: string
+  source_id?: string
   created_at: string
 }
 

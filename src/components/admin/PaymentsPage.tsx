@@ -156,7 +156,7 @@ export default function PaymentsPage() {
       case 'wallet':
         return `${baseClasses} bg-blue-100 text-blue-800`;
       case 'bank_transfer':
-        return `${baseClasses} bg-purple-100 text-purple-800`;
+        return `${baseClasses} bg-yellow-100 text-yellow-800`;
       case 'cash':
         return `${baseClasses} bg-green-100 text-green-800`;
       case 'mobile_money':
@@ -180,279 +180,334 @@ export default function PaymentsPage() {
   const pendingAmount = withdrawals.filter(p => p.status === 'pending').reduce((sum, p) => sum + (p.amount || 0), 0);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Payment Management</h1>
-          <p className="text-gray-600 mt-2">Manage withdrawals and payment processing</p>
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{withdrawals.length}</div>
-            <p className="text-xs text-muted-foreground">
-              All time
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalPending}</div>
-            <p className="text-xs text-muted-foreground">
-              Awaiting approval
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Amount</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
-            <p className="text-xs text-muted-foreground">
-              Processed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Amount</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(pendingAmount)}</div>
-            <p className="text-xs text-muted-foreground">
-              Awaiting approval
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Additional Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {withdrawals.filter(w => w.status === 'approved' || w.status === 'completed').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Successfully processed
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rejected</CardTitle>
-            <XCircle className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {withdrawals.filter(w => w.status === 'rejected' || w.status === 'cancelled').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Declined requests
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Approved Amount</CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(withdrawals.filter(w => w.status === 'approved' || w.status === 'completed').reduce((sum, w) => sum + (w.amount || 0), 0))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Total approved
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rejected Amount</CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(withdrawals.filter(w => w.status === 'rejected' || w.status === 'cancelled').reduce((sum, w) => sum + (w.amount || 0), 0))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Total rejected
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
-            <Filter className="w-5 h-5 text-white" />
-            Filters & Search
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-white" />
-              <Input
-                placeholder="Search payments..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={methodFilter} onValueChange={setMethodFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by method" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Methods</SelectItem>
-                <SelectItem value="wallet">Wallet</SelectItem>
-                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="mobile_money">Mobile Money</SelectItem>
-              </SelectContent>
-            </Select>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Payment Management</h1>
+            <p className="text-gray-600">Manage withdrawals and payment processing</p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex items-center gap-3">
+            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <CreditCard className="w-4 h-4 mr-2" />
+              {withdrawals.length} Total Payments
+            </Badge>
+            <Badge className="text-sm bg-gradient-to-r from-yellow-600 to-yellow-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Clock className="w-4 h-4 mr-2" />
+              {totalPending} Pending
+            </Badge>
+          </div>
+        </div>
 
-      {/* Payments Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-white">Withdrawals ({filteredWithdrawals.length})</CardTitle>
-          <CardDescription className="text-white">
-            Review and process payment requests
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-white">Customer</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Amount</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Method</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Status</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Reference</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWithdrawals.map((row) => (
-                  <tr key={row.id} className="border-b border-gray-100 hover:bg-orange-500 transition-colors duration-200 group">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-white group-hover:text-gray-900" />
-                        <div>
-                          <div className="font-medium text-white group-hover:text-gray-900">
-                            {row.owner_name || row.user?.full_name || 'Unknown'}
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-blue-900">Total Payments</CardTitle>
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                <CreditCard className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-blue-600 mb-1">
+                {withdrawals.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-blue-700 font-medium">
+                All time payments
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-yellow-900">Pending</CardTitle>
+              <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-yellow-600 mb-1">
+                {totalPending.toLocaleString()}
+              </div>
+              <p className="text-sm text-yellow-700 font-medium">
+                Awaiting approval
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-green-900">Total Amount</CardTitle>
+              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600 mb-1">
+                {formatCurrency(totalAmount)}
+              </div>
+              <p className="text-sm text-green-700 font-medium">
+                Total processed
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-purple-900">Pending Amount</CardTitle>
+              <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                <Wallet className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-purple-600 mb-1">
+                {formatCurrency(pendingAmount)}
+              </div>
+              <p className="text-sm text-purple-700 font-medium">
+                Awaiting approval
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Additional Status Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-emerald-50 to-emerald-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-emerald-900">Approved</CardTitle>
+              <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                <CheckCircle className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-emerald-600 mb-1">
+                {withdrawals.filter(w => w.status === 'approved' || w.status === 'completed').length.toLocaleString()}
+              </div>
+              <p className="text-sm text-emerald-700 font-medium">
+                Successfully processed
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-red-50 to-red-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-red-900">Rejected</CardTitle>
+              <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center shadow-lg">
+                <XCircle className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-red-600 mb-1">
+                {withdrawals.filter(w => w.status === 'rejected' || w.status === 'cancelled').length.toLocaleString()}
+              </div>
+              <p className="text-sm text-red-700 font-medium">
+                Declined requests
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-green-900">Approved Amount</CardTitle>
+              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600 mb-1">
+                {formatCurrency(withdrawals.filter(w => w.status === 'approved' || w.status === 'completed').reduce((sum, w) => sum + (w.amount || 0), 0))}
+              </div>
+              <p className="text-sm text-green-700 font-medium">
+                Total approved
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-orange-50 to-orange-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-orange-900">Rejected Amount</CardTitle>
+              <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                <TrendingDown className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-orange-600 mb-1">
+                {formatCurrency(withdrawals.filter(w => w.status === 'rejected' || w.status === 'cancelled').reduce((sum, w) => sum + (w.amount || 0), 0))}
+              </div>
+              <p className="text-sm text-orange-700 font-medium">
+                Total rejected
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters Card */}
+        <Card className="border-0 shadow-xl bg-white mb-6">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <CardTitle className="flex items-center gap-2 text-gray-900">
+              <Filter className="w-5 h-5" />
+              Filters & Search
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search payments..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={methodFilter} onValueChange={setMethodFilter}>
+                <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                  <SelectValue placeholder="Filter by method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Methods</SelectItem>
+                  <SelectItem value="wallet">Wallet</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Payments Table */}
+        <Card className="border-0 shadow-xl bg-white">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold text-gray-900">Withdrawals ({filteredWithdrawals.length})</CardTitle>
+                <p className="text-sm text-gray-600 mt-1">Review and process payment requests</p>
+              </div>
+              <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                <CreditCard className="w-4 h-4 mr-2" />
+                {filteredWithdrawals.length} Payments
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Method</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredWithdrawals.map((row) => (
+                    <tr key={row.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                              <User className="h-5 w-5 text-white" />
+                            </div>
                           </div>
-                          <div className="text-sm text-white group-hover:text-gray-700">
-                            {row.user?.email || row.user_id || 'N/A'}
+                          <div className="ml-4">
+                            <div className="text-sm font-semibold text-gray-900">
+                              {row.owner_name || row.user?.full_name || 'Unknown'}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {row.user?.email || row.user_id || 'N/A'}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-white group-hover:text-gray-900">
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
                           {formatCurrency(row.amount)}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={getMethodBadge(row.payout_method || 'bank_transfer')}>
-                        {row.payout_method || 'bank_transfer'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <Badge className={getStatusBadge(row.status)}>
-                        <div className="flex items-center gap-1">
-                          {getStatusIcon(row.status)}
-                          {row.status}
                         </div>
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-white group-hover:text-gray-700">
-                      {row.id}
-                    </td>
-                    <td className="py-3 px-4 text-sm text-white group-hover:text-gray-700">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-white group-hover:text-gray-900" />
-                        {formatDate(row.created_at)}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setSelectedPayment(row)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        {row.status === 'pending' && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-green-600 border-green-600 hover:bg-green-50"
-                              onClick={() => handleStatusUpdate(row.id, 'approved')}
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="text-red-600 border-red-600 hover:bg-red-50"
-                              onClick={() => handleStatusUpdate(row.id, 'rejected')}
-                            >
-                              <XCircle className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                          row.payout_method === 'wallet' ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white' :
+                          row.payout_method === 'bank_transfer' ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white' :
+                          row.payout_method === 'cash' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
+                          row.payout_method === 'mobile_money' ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white' :
+                          'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                        }`}>
+                          {row.payout_method || 'bank_transfer'}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                          row.status === 'approved' || row.status === 'completed' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
+                          row.status === 'rejected' || row.status === 'cancelled' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
+                          row.status === 'pending' ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white' :
+                          'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                        }`}>
+                          <div className="flex items-center gap-1">
+                            {getStatusIcon(row.status)}
+                            {row.status}
+                          </div>
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {row.id.slice(0, 8)}...
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                          {formatDate(row.created_at)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedPayment(row)}
+                            className="border-gray-300 hover:bg-gray-50"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          {row.status === 'pending' && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-green-600 border-green-600 hover:bg-green-50"
+                                onClick={() => handleStatusUpdate(row.id, 'approved')}
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 border-red-600 hover:bg-red-50"
+                                onClick={() => handleStatusUpdate(row.id, 'rejected')}
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
                   </tr>
                 ))}
               </tbody>
@@ -573,6 +628,7 @@ export default function PaymentsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

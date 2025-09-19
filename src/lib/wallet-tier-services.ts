@@ -59,7 +59,7 @@ export const WALLET_TIERS: WalletTier[] = [
     name: 'Platinum Collector',
     min_balance: 1000,
     max_balance: 9999,
-    color: 'bg-purple-100 text-purple-800',
+    color: 'bg-yellow-100 text-yellow-800',
     benefits: ['VIP collection service', 'Personal account manager', 'Custom rewards', 'Annual bonus'],
     icon: '💎'
   },

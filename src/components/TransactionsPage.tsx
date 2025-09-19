@@ -150,6 +150,8 @@ export default function TransactionsPage() {
           if (result.success) {
             setPointsTransactions(prev => prev.filter(t => t.id !== transactionId));
             setNotice({ type: 'success', message: result.message });
+            // Refresh the data to ensure UI is in sync
+            setTimeout(() => loadTransactions(), 1000);
           } else {
             setNotice({ type: 'error', message: result.message });
           }
@@ -161,6 +163,8 @@ export default function TransactionsPage() {
           if (result.success) {
             setMonetaryTransactions(prev => prev.filter(t => t.id !== transactionId));
             setNotice({ type: 'success', message: result.message });
+            // Refresh the data to ensure UI is in sync
+            setTimeout(() => loadTransactions(), 1000);
           } else {
             setNotice({ type: 'error', message: result.message });
           }
@@ -283,37 +287,117 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Transactions Management</h1>
-          <p className="text-gray-600">Manage wallet and regular transactions</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Transactions Management</h1>
+            <p className="text-gray-600">Manage wallet and regular transactions across the system</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-sm text-gray-500">Total Transactions</div>
+              <div className="text-2xl font-bold text-blue-600">{pointsTransactions.length + monetaryTransactions.length}</div>
+            </div>
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <Wallet className="h-8 w-8 text-white" />
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={loadTransactions}
-            disabled={loading}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={handleDeleteAllTransactions}
-            disabled={deleting === 'all'}
-            className="flex items-center gap-2"
-          >
-            {deleting === 'all' ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-            Delete All
-          </Button>
-        </div>
-      </div>
 
-      {/* Notice */}
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-blue-900">Total Transactions</CardTitle>
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                <Wallet className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-blue-600 mb-1">
+                {(pointsTransactions.length + monetaryTransactions.length).toLocaleString()}
+              </div>
+              <p className="text-sm text-blue-700 font-medium">
+                All time transactions
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-green-900">Monetary Transactions</CardTitle>
+              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <CreditCard className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600 mb-1">
+                {monetaryTransactions.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-green-700 font-medium">
+                Cash transactions
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-purple-900">Points Transactions</CardTitle>
+              <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                <DollarSign className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-purple-600 mb-1">
+                {pointsTransactions.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-purple-700 font-medium">
+                Points-based transactions
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-orange-50 to-orange-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-orange-900">Actions</CardTitle>
+              <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                <Trash2 className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadTransactions}
+                  disabled={loading}
+                  className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                >
+                  <Loader2 className="h-4 w-4 mr-1" />
+                  Refresh
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDeleteAllTransactions}
+                  disabled={deleting === 'all'}
+                  className="text-red-600 border-red-600 hover:bg-red-50"
+                >
+                  {deleting === 'all' ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-1" />
+                  )}
+                  Delete All
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Notice */}
       {notice && (
         <Alert className={notice.type === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
           {notice.type === 'success' ? (
@@ -327,187 +411,314 @@ export default function TransactionsPage() {
         </Alert>
       )}
 
-      {/* Points Transactions */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Wallet className="h-5 w-5" />
-                Points Transactions ({pointsTransactions.length})
-              </CardTitle>
-              <CardDescription>Points-based transactions</CardDescription>
-            </div>
-            {selectedPointsTransactions.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDeletePointsTransactions}
-                disabled={deleting === 'bulk-points'}
-                className="flex items-center gap-2"
-              >
-                {deleting === 'bulk-points' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                Delete Selected ({selectedPointsTransactions.length})
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {pointsTransactions.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No points transactions found
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {pointsTransactions.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedPointsTransactions.includes(transaction.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPointsTransactions(prev => [...prev, transaction.id]);
-                        } else {
-                          setSelectedPointsTransactions(prev => prev.filter(id => id !== transaction.id));
-                        }
-                      }}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{transaction.transaction_type}</Badge>
-                        <span className="font-medium">{transaction.points} points</span>
-                        <span className="text-gray-500">→ {transaction.balance_after}</span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {transaction.description} • {transaction.source || 'Unknown'}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {formatDate(transaction.created_at)}
-                      </div>
-                    </div>
-                  </div>
+        {/* Monetary Transactions */}
+        <Card className="border-0 shadow-xl bg-white mb-6">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-green-600" />
+                  Monetary Transactions ({monetaryTransactions.length})
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-1">Cash-based transactions and payments</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge className="text-sm bg-gradient-to-r from-green-600 to-green-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                  <CreditCard className="w-4 h-4 mr-2" />
+                  {monetaryTransactions.length} Transactions
+                </Badge>
+                {selectedMonetaryTransactions.length > 0 && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    onClick={() => handleDeletePointsTransaction(transaction.id)}
-                    disabled={deleting === transaction.id}
-                    className="text-red-600 hover:text-red-700"
+                    onClick={handleBulkDeleteMonetaryTransactions}
+                    disabled={deleting === 'bulk-monetary'}
+                    className="text-red-600 border-red-600 hover:bg-red-50"
                   >
-                    {deleting === transaction.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                    {deleting === 'bulk-monetary' ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                     ) : (
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-1" />
                     )}
+                    Delete Selected ({selectedMonetaryTransactions.length})
                   </Button>
-                </div>
-              ))}
+                )}
+              </div>
             </div>
-          )}
-        </CardContent>
+          </CardHeader>
+          <CardContent className="p-0">
+            {monetaryTransactions.length === 0 ? (
+              <div className="text-center py-12">
+                <CreditCard className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No monetary transactions found</h3>
+                <p className="text-gray-500">No cash-based transactions have been recorded yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <input
+                          type="checkbox"
+                          checked={selectedMonetaryTransactions.length === monetaryTransactions.length && monetaryTransactions.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedMonetaryTransactions(monetaryTransactions.map(t => t.id));
+                            } else {
+                              setSelectedMonetaryTransactions([]);
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {monetaryTransactions.map((transaction) => (
+                      <tr key={transaction.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={selectedMonetaryTransactions.includes(transaction.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedMonetaryTransactions(prev => [...prev, transaction.id]);
+                              } else {
+                                setSelectedMonetaryTransactions(prev => prev.filter(id => id !== transaction.id));
+                              }
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge className="text-xs font-semibold px-3 py-1 rounded-full shadow-sm bg-gradient-to-r from-green-500 to-green-600 text-white">
+                            {transaction.transaction_type}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                              <DollarSign className="h-4 w-4 text-white" />
+                            </div>
+                            <span className="text-sm font-bold text-green-600">
+                              {formatCurrency(transaction.amount)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                              <Wallet className="h-4 w-4 text-white" />
+                            </div>
+                            <span className="text-sm font-medium text-gray-900">
+                              {transaction.points} pts
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900">
+                            {transaction.description || 'No description'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Source: {transaction.source_id || 'No source'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                            {formatDate(transaction.created_at)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteMonetaryTransaction(transaction.id)}
+                            disabled={deleting === transaction.id}
+                            className="text-red-600 border-red-600 hover:bg-red-50"
+                          >
+                            {deleting === transaction.id ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 mr-1" />
+                            )}
+                            Delete
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
       </Card>
 
-      {/* Monetary Transactions */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Monetary Transactions ({monetaryTransactions.length})
-              </CardTitle>
-              <CardDescription>Monetary transactions</CardDescription>
-            </div>
-            {selectedMonetaryTransactions.length > 0 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBulkDeleteMonetaryTransactions}
-                disabled={deleting === 'bulk-monetary'}
-                className="flex items-center gap-2"
-              >
-                {deleting === 'bulk-monetary' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                Delete Selected ({selectedMonetaryTransactions.length})
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {monetaryTransactions.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No monetary transactions found
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {monetaryTransactions.map((transaction) => (
-                <div
-                  key={transaction.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedMonetaryTransactions.includes(transaction.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedMonetaryTransactions(prev => [...prev, transaction.id]);
-                        } else {
-                          setSelectedMonetaryTransactions(prev => prev.filter(id => id !== transaction.id));
-                        }
-                      }}
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{transaction.type}</Badge>
-                        <span className="font-medium">{formatCurrency(transaction.amount)}</span>
-                        <span className="text-gray-500">{transaction.reference || 'No reference'}</span>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {transaction.description || 'No description'}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {formatDate(transaction.created_at)}
-                      </div>
-                    </div>
-                  </div>
+        {/* Points Transactions */}
+        <Card className="border-0 shadow-xl bg-white">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-purple-600" />
+                  Points Transactions ({pointsTransactions.length})
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-1">Points-based transactions and rewards</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge className="text-sm bg-gradient-to-r from-purple-600 to-purple-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                  <Wallet className="w-4 h-4 mr-2" />
+                  {pointsTransactions.length} Transactions
+                </Badge>
+                {selectedPointsTransactions.length > 0 && (
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    onClick={() => handleDeleteMonetaryTransaction(transaction.id)}
-                    disabled={deleting === transaction.id}
-                    className="text-red-600 hover:text-red-700"
+                    onClick={handleBulkDeletePointsTransactions}
+                    disabled={deleting === 'bulk-points'}
+                    className="text-red-600 border-red-600 hover:bg-red-50"
                   >
-                    {deleting === transaction.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                    {deleting === 'bulk-points' ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                     ) : (
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-1" />
                     )}
+                    Delete Selected ({selectedPointsTransactions.length})
                   </Button>
-                </div>
-              ))}
+                )}
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="p-0">
+            {pointsTransactions.length === 0 ? (
+              <div className="text-center py-12">
+                <Wallet className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No points transactions found</h3>
+                <p className="text-gray-500">No points-based transactions have been recorded yet.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <input
+                          type="checkbox"
+                          checked={selectedPointsTransactions.length === pointsTransactions.length && pointsTransactions.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedPointsTransactions(pointsTransactions.map(t => t.id));
+                            } else {
+                              setSelectedPointsTransactions([]);
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {pointsTransactions.map((transaction) => (
+                      <tr key={transaction.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            checked={selectedPointsTransactions.includes(transaction.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedPointsTransactions(prev => [...prev, transaction.id]);
+                              } else {
+                                setSelectedPointsTransactions(prev => prev.filter(id => id !== transaction.id));
+                              }
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge className="text-xs font-semibold px-3 py-1 rounded-full shadow-sm bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+                            {transaction.transaction_type}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                              <Wallet className="h-4 w-4 text-white" />
+                            </div>
+                            <span className="text-sm font-bold text-purple-600">
+                              {transaction.points} pts
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                              <DollarSign className="h-4 w-4 text-white" />
+                            </div>
+                            <span className="text-sm font-medium text-gray-900">
+                              {formatCurrency(transaction.amount)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-sm text-gray-900">
+                            {transaction.description || 'No description'}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Source: {transaction.source_id || 'No source'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                            {formatDate(transaction.created_at)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeletePointsTransaction(transaction.id)}
+                            disabled={deleting === transaction.id}
+                            className="text-red-600 border-red-600 hover:bg-red-50"
+                          >
+                            {deleting === transaction.id ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 mr-1" />
+                            )}
+                            Delete
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Delete Confirmation Dialog */}
-      <DeleteTransactionsDialog
-        isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, type: 'single-points' })}
-        onConfirm={handleConfirmDelete}
-        {...getDialogConfig()}
-      />
+        {/* Delete Confirmation Dialog */}
+        <DeleteTransactionsDialog
+          isOpen={deleteDialog.isOpen}
+          onClose={() => setDeleteDialog({ isOpen: false, type: 'single-points' })}
+          onConfirm={handleConfirmDelete}
+          {...getDialogConfig()}
+        />
+      </div>
     </div>
   );
 }

@@ -253,157 +253,223 @@ export default function ResidentSummaryPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Resident Summary</h1>
-          <p className="text-white mt-2">Manage and track resident-related collections</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Resident Summary</h1>
+            <p className="text-gray-600">Manage and track resident-related collections</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Package className="w-4 h-4 mr-2" />
+              {pickups.length} Total Records
+            </Badge>
+            <Badge className="text-sm bg-gradient-to-r from-yellow-600 to-yellow-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Clock className="w-4 h-4 mr-2" />
+              {pickups.filter(p => p.status === 'submitted').length} Pending
+            </Badge>
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Total Records</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-blue-900">Total Records</CardTitle>
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                <Package className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-blue-600 mb-1">
+                {pickups.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-blue-700 font-medium">
+                All time collections
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-yellow-900">Pending</CardTitle>
+              <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-yellow-600 mb-1">
+                {pickups.filter(p => p.status === 'submitted').length.toLocaleString()}
+              </div>
+              <p className="text-sm text-yellow-700 font-medium">
+                Awaiting approval
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-green-900">Total Weight</CardTitle>
+              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <Scale className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-600 mb-1">
+                {formatWeight(pickups.reduce((sum, p) => sum + (p.total_kg || 0), 0))}
+              </div>
+              <p className="text-sm text-green-700 font-medium">
+                Recycled material
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-semibold text-purple-900">Total Value</CardTitle>
+              <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-purple-600 mb-1">
+                {formatCurrency(pickups.reduce((sum, p) => sum + (p.total_value || 0), 0))}
+              </div>
+              <p className="text-sm text-purple-700 font-medium">
+                Revenue generated
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters Card */}
+        <Card className="border-0 shadow-xl bg-white mb-6">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <CardTitle className="flex items-center gap-2 text-gray-900">
+              <Filter className="w-5 h-5" />
+              Filters & Search
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{pickups.length}</div>
-            <p className="text-xs text-white">All time</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{pickups.filter(p => p.status === 'submitted').length}</div>
-            <p className="text-xs text-white">Awaiting approval</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Total Weight</CardTitle>
-            <Scale className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{formatWeight(pickups.reduce((sum, p) => sum + (p.total_kg || 0), 0))}</div>
-            <p className="text-xs text-white">Recycled</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Total Value</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">{formatCurrency(pickups.reduce((sum, p) => sum + (p.total_value || 0), 0))}</div>
-            <p className="text-xs text-white">Generated</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
-            <Filter className="w-5 h-5" />
-            Filters & Search
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search residents or addresses..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search residents or addresses..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="submitted">Submitted</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="submitted">Submitted</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
-            <User className="w-5 h-5" />
-            Resident Summary ({customerSummaries.length})
-          </CardTitle>
-          <CardDescription className="text-white">Aggregated totals per resident based on current filters</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-white">Resident</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Email</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Collections</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Total Weight</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Total Value</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Last Activity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customerSummaries.map((row) => (
-                  <tr key={(row.customerId || row.email || Math.random().toString())} className="group border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-white" />
-                        <div className="font-medium text-white">{fullNameByEmail[row.email] || row.name}</div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-white">{row.email || '-'}</td>
-                    <td className="py-3 px-4 text-white">{row.count}</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Scale className="w-4 h-4 text-white" />
-                        <span className="font-medium text-white">{formatWeight(row.totalKg || 0)}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Banknote className="w-4 h-4 text-white" />
-                        <span className="font-medium text-white">{formatCurrency(row.totalValue || 0)}</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-white">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-white" />
-                        {row.lastDate ? formatDate(row.lastDate) : '-'}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {customerSummaries.length === 0 && (
+        {/* Resident Summary Table */}
+        <Card className="border-0 shadow-xl bg-white">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-gray-900">
+                  <User className="w-5 h-5" />
+                  Resident Summary ({customerSummaries.length})
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-1">Aggregated totals per resident based on current filters</p>
+              </div>
+              <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                <User className="w-4 h-4 mr-2" />
+                {customerSummaries.length} Residents
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-gray-500">No residents match your filters</td>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resident</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collections</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Weight</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Value</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Activity</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Pickups table and modal removed as requested */}
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {customerSummaries.map((row) => (
+                    <tr key={(row.customerId || row.email || Math.random().toString())} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                              <User className="h-5 w-5 text-white" />
+                            </div>
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-semibold text-gray-900">
+                              {fullNameByEmail[row.email] || row.name}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {row.email || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge className="text-xs font-semibold px-3 py-1 rounded-full shadow-sm bg-gradient-to-r from-green-500 to-green-600 text-white">
+                          {row.count} Collections
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Scale className="h-4 w-4 text-gray-400 mr-2" />
+                          <span className="text-sm font-medium text-gray-900">{formatWeight(row.totalKg || 0)}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Banknote className="h-4 w-4 text-gray-400 mr-2" />
+                          <span className="text-sm font-medium text-gray-900">{formatCurrency(row.totalValue || 0)}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                          {row.lastDate ? formatDate(row.lastDate) : '-'}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {customerSummaries.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                        <div className="flex flex-col items-center">
+                          <User className="h-12 w-12 text-gray-400 mb-3" />
+                          <p className="text-lg font-medium">No residents match your filters</p>
+                          <p className="text-sm">Try adjusting your search or filter criteria</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

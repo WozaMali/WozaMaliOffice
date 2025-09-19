@@ -29,6 +29,7 @@ interface AdminLayoutProps {
 
 const navigationItems = [
   { name: 'Dashboard', href: '/admin', icon: Home, current: true },
+  { name: 'Team Members', href: '/admin/team-members', icon: Users, current: false },
   { name: 'Users', href: '/admin/users', icon: Users, current: false },
   { name: 'Collections', href: '/admin/collections', icon: Recycle, current: false },
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, current: false },
@@ -46,8 +47,8 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
   const router = useRouter();
 
   useEffect(() => {
-    // Check if user is admin
-    if (profile && profile.role !== 'ADMIN' && profile.role !== 'admin') {
+    // Check if user is admin or super admin
+    if (profile && !['ADMIN', 'admin', 'super_admin', 'SUPER_ADMIN'].includes(profile.role)) {
       router.push('/?error=unauthorized');
     }
   }, [profile, router]);
@@ -55,10 +56,14 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
   const handleLogout = async () => {
     setIsLoading(true);
     try {
+      console.log('🚪 AdminLayout: Starting logout process...');
       await logout();
+      console.log('✅ AdminLayout: Logout successful, redirecting to home');
       router.push('/');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('❌ AdminLayout: Logout error:', error);
+      // Still redirect even if logout fails
+      router.push('/');
     } finally {
       setIsLoading(false);
     }
@@ -80,7 +85,7 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
     );
   }
 
-  if (profile.role !== 'ADMIN' && profile.role !== 'admin') {
+  if (!['ADMIN', 'admin', 'super_admin', 'SUPER_ADMIN'].includes(profile.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

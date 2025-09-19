@@ -21,9 +21,11 @@ import {
   Calendar,
   User,
   Truck,
-  Banknote
+  Banknote,
+  X
 } from 'lucide-react';
 import { getPickups, subscribeToPickups, updatePickupStatus, assignCollectorToCollection, deleteCollectionDeep, clearPickupsCache, formatDate, formatCurrency, formatWeight, TransformedPickup } from '@/lib/admin-services';
+import { softDeleteCollection } from '@/lib/soft-delete-service';
 import { supabase } from '@/lib/supabase';
 
 function getDisplayName(fullName?: string, email?: string): string {
@@ -281,85 +283,105 @@ export default function PickupsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Pickup Management</h1>
-          <p className="text-white mt-2">Manage and track all pickup requests</p>
-        </div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Pickup Management</h1>
+            <p className="text-gray-600">Manage and track all pickup requests from residents</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-sm text-gray-500">Total Pickups</div>
+              <div className="text-2xl font-bold text-blue-600">{pickups.length}</div>
+            </div>
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <Package className="h-8 w-8 text-white" />
+            </div>
+          </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Total Pickups</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-blue-900">Total Pickups</CardTitle>
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                <Package className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{pickups.length}</div>
-            <p className="text-xs text-white">
-              All time
+              <div className="text-3xl font-bold text-blue-600 mb-1">
+                {pickups.length.toLocaleString()}
+              </div>
+              <p className="text-sm text-blue-700 font-medium">
+                All time pickups
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Pending</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-yellow-900">Pending</CardTitle>
+              <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
-              {pickups.filter(p => p.status === 'submitted').length}
+              <div className="text-3xl font-bold text-yellow-600 mb-1">
+                {pickups.filter(p => p.status === 'submitted').length.toLocaleString()}
             </div>
-            <p className="text-xs text-white">
+              <p className="text-sm text-yellow-700 font-medium">
               Awaiting approval
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Total Weight</CardTitle>
-            <Scale className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-green-900">Total Weight</CardTitle>
+              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <Scale className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+              <div className="text-3xl font-bold text-green-600 mb-1">
               {formatWeight(pickups.reduce((sum, p) => sum + (p.total_kg || 0), 0))}
             </div>
-            <p className="text-xs text-white">
-              Recycled
+              <p className="text-sm text-green-700 font-medium">
+                Recycled material
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Total Value</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-purple-900">Total Value</CardTitle>
+              <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">
+              <div className="text-3xl font-bold text-purple-600 mb-1">
               {formatCurrency(pickups.reduce((sum, p) => sum + (p.total_value || 0), 0))}
             </div>
-            <p className="text-xs text-white">
-              Generated
+              <p className="text-sm text-purple-700 font-medium">
+                Revenue generated
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-white">
+        {/* Filters Card */}
+        <Card className="border-0 shadow-xl bg-white mb-6">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <CardTitle className="flex items-center gap-2 text-gray-900">
             <Filter className="w-5 h-5" />
             Filters & Search
           </CardTitle>
         </CardHeader>
-        <CardContent>
+          <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -367,12 +389,12 @@ export default function PickupsPage() {
                 placeholder="Search pickups..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                  className="pl-10 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
               />
             </div>
             
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
+                <SelectTrigger className="border-gray-300 focus:border-blue-500 focus:ring-blue-500">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
               <SelectContent>
@@ -387,25 +409,34 @@ export default function PickupsPage() {
       </Card>
 
       {/* Pickups Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pickups ({filteredPickups.length})</CardTitle>
-          <CardDescription>
-            Review and manage pickup requests
-          </CardDescription>
+        <Card className="border-0 shadow-xl bg-white">
+          <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                  <Package className="h-5 w-5 text-blue-600" />
+                  Pickups ({filteredPickups.length})
+                </CardTitle>
+                <p className="text-sm text-gray-600 mt-1">Review and manage pickup requests from residents</p>
+              </div>
+              <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                <Package className="w-4 h-4 mr-2" />
+                {filteredPickups.length} Pickups
+              </Badge>
+            </div>
         </CardHeader>
-        <CardContent>
+          <CardContent className="p-0">
           {filteredPickups.length === 0 ? (
             <div className="text-center py-12">
               <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-white mb-2">No pickups found</h3>
-              <p className="text-gray-400 mb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No pickups found</h3>
+                <p className="text-gray-500 mb-4">
                 {pickups.length === 0 
                   ? "No pickup data is available. This could mean:" 
                   : "No pickups match your current filters."}
               </p>
               {pickups.length === 0 && (
-                <div className="text-sm text-gray-300 space-y-1">
+                  <div className="text-sm text-gray-400 space-y-1">
                   <p>• No collections have been submitted yet</p>
                   <p>• Database tables may not exist or be accessible</p>
                   <p>• Check browser console for detailed error messages</p>
@@ -414,122 +445,144 @@ export default function PickupsPage() {
               <Button 
                 onClick={loadPickups} 
                 variant="outline" 
-                className="mt-4"
+                  className="mt-4 border-gray-300 hover:bg-gray-50"
               >
                 Refresh Data
               </Button>
             </div>
           ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-medium text-white">Resident</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Collector</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Location</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Weight</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Value</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Status</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-white">Actions</th>
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resident</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collector</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+                <tbody className="bg-white divide-y divide-gray-200">
                 {filteredPickups.map((pickup) => (
-                  <tr key={pickup.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-white" />
-                        <div>
-                          <div className="font-medium text-white">
-                            {fullNameByEmail[pickup.customer?.email || ''] || getDisplayName(pickup.customer?.full_name, pickup.customer?.email)}
+                    <tr key={pickup.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                              <User className="h-5 w-5 text-white" />
+                            </div>
                           </div>
-                          <div className="text-sm text-white">
+                          <div className="ml-4">
+                            <div className="text-sm font-semibold text-gray-900">
+                              {fullNameByEmail[pickup.customer?.email || ''] || getDisplayName(pickup.customer?.full_name, pickup.customer?.email)}
+                            </div>
+                            <div className="text-sm text-gray-500">
                             {pickup.customer?.email}
+                            </div>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center shadow-lg">
+                              <Truck className="h-5 w-5 text-white" />
                       </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Truck className="w-4 h-4 text-white" />
-                        <div>
-                          <div className="font-medium text-white">
-                            {pickup.collector?.full_name || 'Unassigned'}
                           </div>
-                          <div className="text-sm text-white">
+                          <div className="ml-4">
+                            <div className="text-sm font-semibold text-gray-900">
+                              {pickup.collector?.full_name || 'Unassigned'}
+                            </div>
+                            <div className="text-sm text-gray-500">
                             {pickup.collector?.email}
+                            </div>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                            <MapPin className="h-4 w-4 text-white" />
                       </div>
-                      {/* Removed manual Collector ID input per request */}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-white" />
-                        <div className="text-sm text-white">
+                          <div className="text-sm text-gray-900">
                           {pickup.address?.line1}, {pickup.address?.suburb}
                         </div>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Scale className="w-4 h-4 text-white" />
-                        <span className="font-medium text-white">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                            <Scale className="h-4 w-4 text-white" />
+                          </div>
+                          <span className="text-sm font-medium text-gray-900">
                           {formatWeight(pickup.total_kg || 0)}
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <Banknote className="w-4 h-4 text-white" />
-                        <span className="font-medium text-white">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                            <Banknote className="h-4 w-4 text-white" />
+                          </div>
+                          <span className="text-sm font-bold text-green-600">
                           {formatCurrency(pickup.total_value || 0)}
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 px-4">
-                      <Badge className={getStatusBadge(pickup.status)}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                          pickup.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
+                          pickup.status === 'rejected' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
+                          pickup.status === 'submitted' ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white' :
+                          'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                        }`}>
                         <div className="flex items-center gap-1">
                           {getStatusIcon(pickup.status)}
                           {pickup.status}
                         </div>
                       </Badge>
                     </td>
-                    <td className="py-3 px-4 text-sm text-white">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-white" />
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <div className="flex items-center">
+                          <Calendar className="h-4 w-4 text-gray-400 mr-2" />
                         {formatDate((pickup as any).created_at)}
                       </div>
                     </td>
-                    <td className="py-3 px-4">
+                      <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedPickup(pickup)}
+                            className="text-blue-600 border-blue-600 hover:bg-blue-50"
                         >
-                          <Eye className="w-4 h-4" />
+                            <Eye className="w-4 h-4 mr-1" />
+                            View
                         </Button>
                         <Button
-                          variant="destructive"
+                            variant="outline"
                           size="sm"
                           onClick={async () => {
-                            const confirmed = typeof window !== 'undefined' ? window.confirm('Delete this collection and all related records?') : true;
+                            const confirmed = typeof window !== 'undefined' ? window.confirm('Move this collection to deleted transactions? This will hide it from Main App and Office views, but it can be restored later.') : true;
                             if (!confirmed) return;
                             // Optimistic remove
                             const prev = pickups;
                             setPickups(p => p.filter(x => x.id !== pickup.id));
-                            const ok = await deleteCollectionDeep(pickup.id);
-                            if (!ok) {
+                            const result = await softDeleteCollection(pickup.id, 'Deleted by super admin from Pickups page');
+                            if (!result.success) {
                               setPickups(prev);
-                              alert('Failed to delete collection');
+                              alert(`Failed to delete collection: ${result.message}`);
                             } else {
                               try { clearPickupsCache(); } catch {}
                               try { await loadPickups(); } catch {}
                             }
                           }}
+                            className="text-red-600 border-red-600 hover:bg-red-50"
                         >
+                            <X className="w-4 h-4 mr-1" />
                           Delete
                         </Button>
                         {((pickup.status as string) === 'pending' || pickup.status === 'submitted') && (
@@ -540,7 +593,8 @@ export default function PickupsPage() {
                               className="text-green-600 border-green-600 hover:bg-green-50"
                               onClick={() => handleStatusUpdate(pickup.id, 'approved')}
                             >
-                              <CheckCircle className="w-4 h-4" />
+                                <CheckCircle className="w-4 h-4 mr-1" />
+                                Approve
                             </Button>
                             <Button
                               variant="outline"
@@ -548,7 +602,8 @@ export default function PickupsPage() {
                               className="text-red-600 border-red-600 hover:bg-red-50"
                               onClick={() => handleStatusUpdate(pickup.id, 'rejected')}
                             >
-                              <XCircle className="w-4 h-4" />
+                                <XCircle className="w-4 h-4 mr-1" />
+                                Reject
                             </Button>
                           </>
                         )}
@@ -562,6 +617,7 @@ export default function PickupsPage() {
           )}
         </CardContent>
       </Card>
+      </div>
 
       {/* Approval Modal */}
       {selectedPickup && (

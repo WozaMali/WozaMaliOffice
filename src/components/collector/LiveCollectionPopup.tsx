@@ -898,7 +898,7 @@ export default function LiveCollectionPopup({ isOpen, onClose, initialData }: Pr
                       <p className="text-sm text-gray-400">Customer Value</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-purple-400">R {donationValue.toFixed(2)}</p>
+                      <p className="text-2xl font-bold text-yellow-400">R {donationValue.toFixed(2)}</p>
                       <p className="text-sm text-gray-400">Donation Value</p>
                     </div>
                   </div>

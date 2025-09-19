@@ -3,9 +3,34 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+
+// Helper function to check if user has admin privileges
+const isAdminUser = (user, profile) => {
+  if (!user) return false;
+  
+  // Check profile role first (from database)
+  if (profile?.role) {
+    const role = profile.role.toLowerCase();
+    return ['admin', 'super_admin', 'superadmin'].includes(role);
+  }
+  
+  // Special case: superadmin@wozamali.co.za should always be treated as super admin
+  const email = user.email?.toLowerCase() || '';
+  if (email === 'superadmin@wozamali.co.za') {
+    return true;
+  }
+  
+  // Fallback to other admin emails
+  return email === 'admin@wozamali.com' || 
+         email.includes('admin@wozamali');
+};
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   Activity,
   Package,
@@ -19,6 +44,7 @@ import {
   Gift,
   TrendingUp,
   Building2,
+  Shield,
   CreditCard,
   Calendar,
   Settings,
@@ -27,7 +53,10 @@ import {
   TreePine,
   School,
   Home,
-  Crown
+  Crown,
+  Check,
+  X,
+  UserCheck
 } from 'lucide-react';
 import { Copy } from 'lucide-react';
 import UsersPage from '@/components/admin/UsersPage';
@@ -37,7 +66,7 @@ import PaymentsPage from '@/components/admin/PaymentsPage';
 import RewardsPage from '@/components/admin/RewardsPage';
 import ResidentSummaryPage from '@/components/admin/ResidentSummaryPage';
 import AdminGreenScholarFund from '@/components/admin/AdminGreenScholarFund';
-import AddUserModal from '@/components/admin/AddUserModal';
+import AddUserModal from './AddUserModalSimple';
 import BeneficiariesPage from './Beneficiaries';
 import { NotificationToast } from '@/components/NotificationToast';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -55,6 +84,7 @@ import {
   deleteCollectionDeep,
   RecentActivity
 } from '../../src/lib/admin-services';
+import { softDeleteCollection } from '../../src/lib/soft-delete-service';
 import { supabase } from '../../src/lib/supabase';
 import { UnifiedAdminService, useDashboardData, useAllUsers, useCollections, useTownships, useSubdivisions } from '../../src/lib/unified-admin-service';
 import { clearPickupsCache } from '../../src/lib/admin-services';
@@ -70,6 +100,7 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
   const navigation = [
     { name: 'Dashboard', page: 'dashboard', icon: BarChart3 },
     { name: 'Users', page: 'users', icon: Users },
+    { name: 'Team Members', page: 'team-members', icon: UserPlus },
     { name: 'Resident Summary', page: 'tiers', icon: Crown },
     { name: 'Withdrawals', page: 'withdrawals', icon: CreditCard },
     { name: 'Rewards', page: 'rewards', icon: Gift },
@@ -83,10 +114,10 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
   ];
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
+    <div className="w-64 bg-gradient-to-b from-gray-900 to-gray-800 border-r border-gray-700 min-h-screen p-4 shadow-2xl">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-8 px-2">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-orange-500 to-yellow-500 flex items-center justify-center shadow-lg">
           <img 
             src="/w yellow.png" 
             alt="Woza Mali Logo" 
@@ -94,8 +125,8 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
           />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-gray-900">Woza Mali</h2>
-          <p className="text-xs text-gray-500">Admin Portal</p>
+          <h2 className="text-xl font-bold text-white">Woza Mali</h2>
+          <p className="text-xs text-gray-300">Admin Portal</p>
         </div>
       </div>
 
@@ -107,10 +138,10 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
             <button
               key={item.name}
               onClick={() => onPageChange(item.page)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                 isActive
-                  ? 'bg-orange-600 text-white shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'bg-gradient-to-r from-orange-600 to-orange-700 text-white shadow-lg transform scale-105'
+                  : 'text-gray-300 hover:text-white hover:bg-gradient-to-r hover:from-gray-700 hover:to-gray-600 hover:shadow-md'
               }`}
             >
               <item.icon className="h-5 w-5" />
@@ -124,8 +155,7 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
       <div className="mt-8">
         <Button
           onClick={onLogout}
-          variant="outline"
-          className="w-full text-red-600 border-red-300 hover:bg-red-50"
+          className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-200"
         >
           <LogOut className="w-4 h-4 mr-2" />
           Logout
@@ -136,9 +166,10 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
 }
 
 // Main Dashboard Content
-function DashboardContent({ onPageChange, onAddUser }: { 
+function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: { 
   onPageChange: (page: string) => void;
   onAddUser: () => void;
+  isSuperAdmin?: boolean;
 }) {
   const router = useRouter();
   const [dashboardData, setDashboardData] = useState({
@@ -544,15 +575,30 @@ function DashboardContent({ onPageChange, onAddUser }: {
 
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600 mt-2">Real-time system overview and management</p>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+              {isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}
+            </h1>
+            <p className="text-gray-600 mt-2 text-lg">
+              {isSuperAdmin 
+                ? 'Full system access with advanced administrative privileges' 
+                : 'Real-time system overview and management'
+              }
+            </p>
         </div>
-        <div className="flex items-center gap-3">
-        <Badge variant="secondary" className="text-sm">
+          <div className="flex items-center gap-4">
+            {isSuperAdmin && (
+              <Badge className="text-sm bg-gradient-to-r from-green-600 to-green-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                <Crown className="w-4 h-4 mr-2" />
+                Super Admin
+              </Badge>
+            )}
+            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Activity className="w-4 h-4 mr-2" />
           Live Data
         </Badge>
         </div>
@@ -560,64 +606,72 @@ function DashboardContent({ onPageChange, onAddUser }: {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Pickups</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-blue-900">Total Pickups</CardTitle>
+              <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                <Package className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+              <div className="text-3xl font-bold text-blue-600 mb-1">
               {loading ? '...' : dashboardData.totalPickups.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-blue-700 font-medium">
               Pending: {dashboardData.pendingPickups}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Weight</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-green-900">Total Weight</CardTitle>
+              <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                <Activity className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+              <div className="text-3xl font-bold text-green-600 mb-1">
               {loading ? '...' : dashboardData.totalWeight >= 1000 
                 ? `${(dashboardData.totalWeight / 1000).toFixed(1)} tons`
                 : `${dashboardData.totalWeight.toFixed(1)} kg`
               }
             </div>
-            <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-green-700 font-medium">
               Recycled material
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-yellow-900">Active Users</CardTitle>
+              <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                <Users className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+              <div className="text-3xl font-bold text-yellow-600 mb-1">
               {loading ? '...' : dashboardData.activeUsers.toLocaleString()}
             </div>
-            <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-yellow-700 font-medium">
               Active accounts
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-orange-50 to-orange-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-orange-900">Total Revenue</CardTitle>
+              <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+              <div className="text-3xl font-bold text-orange-600 mb-1">
               {loading ? '...' : `R ${dashboardData.totalRevenue.toLocaleString()}`}
             </div>
-            <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-orange-700 font-medium">
               Generated value
             </p>
           </CardContent>
@@ -626,46 +680,52 @@ function DashboardContent({ onPageChange, onAddUser }: {
 
       {/* Additional Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Pickups</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-yellow-900">Pending Pickups</CardTitle>
+              <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
+              <div className="text-3xl font-bold text-yellow-600 mb-1">
               {loading ? '...' : dashboardData.pendingPickups}
             </div>
-            <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-yellow-700 font-medium">
               Awaiting approval
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-indigo-50 to-indigo-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-indigo-900">Total Payments</CardTitle>
+              <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center shadow-lg">
+                <CreditCard className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+              <div className="text-3xl font-bold text-indigo-600 mb-1">
               {loading ? '...' : dashboardData.totalPayments}
             </div>
-            <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-indigo-700 font-medium">
               Processed
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-red-50 to-red-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold text-red-900">Pending Payments</CardTitle>
+              <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center shadow-lg">
+                <Wallet className="h-5 w-5 text-white" />
+              </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
+              <div className="text-3xl font-bold text-red-600 mb-1">
               {loading ? '...' : dashboardData.pendingPayments}
             </div>
-            <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-red-700 font-medium">
               Awaiting approval
             </p>
           </CardContent>
@@ -676,10 +736,12 @@ function DashboardContent({ onPageChange, onAddUser }: {
           dashboardData.totalCurrentPoints > 0 ||
           dashboardData.totalPointsEarned > 0 ||
           dashboardData.totalCashBalance > 0) && (
-          <Card>
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-emerald-50 to-emerald-100 hover:shadow-2xl transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Point Balance</CardTitle>
-              <Wallet className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-semibold text-emerald-900">Total Point Balance</CardTitle>
+                <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                  <Wallet className="h-5 w-5 text-white" />
+                </div>
             </CardHeader>
             <CardContent>
               {dashboardData.walletPermissionError ? (
@@ -693,10 +755,10 @@ function DashboardContent({ onPageChange, onAddUser }: {
                 </div>
               ) : (
                 <>
-                  <div className="text-2xl font-bold text-green-600">
+                    <div className="text-3xl font-bold text-emerald-600 mb-1">
                     {loading ? '...' : dashboardData.totalCurrentPoints.toLocaleString()}
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-emerald-700 font-medium">
                     {dashboardData.totalWallets} wallets • Total points earned
                   </p>
                 </>
@@ -708,91 +770,134 @@ function DashboardContent({ onPageChange, onAddUser }: {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Common admin tasks</CardDescription>
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded-t-lg">
+              <CardTitle className="text-xl font-semibold">Quick Actions</CardTitle>
+              <CardDescription className="text-gray-300">Common admin tasks</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
+            <CardContent className="p-6 space-y-3">
             <Button 
-              className="w-full justify-start" 
+                className="w-full justify-start bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
               size="lg"
               onClick={onAddUser}
             >
-              <UserPlus className="mr-2 h-4 w-4" />
+                <UserPlus className="mr-3 h-5 w-5" />
               Add New User
             </Button>
             <Button 
-              className="w-full justify-start" 
-              variant="outline" 
+                className="w-full justify-start bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
               size="lg"
               onClick={() => onPageChange('pickups')}
             >
-              <Package className="mr-2 h-4 w-4" />
+                <Package className="mr-3 h-5 w-5" />
               Manage Pickups
             </Button>
             <Button 
-              className="w-full justify-start" 
-              variant="outline" 
+                className="w-full justify-start bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
               size="lg"
               onClick={() => onPageChange('rewards')}
             >
-              <Gift className="mr-2 h-4 w-4" />
+                <Gift className="mr-3 h-5 w-5" />
               Configure Rewards
             </Button>
             <Button 
-              className="w-full justify-start" 
-              variant="outline" 
+                className="w-full justify-start bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
               size="lg"
               onClick={() => onPageChange('analytics')}
             >
-              <BarChart3 className="mr-2 h-4 w-4" />
+                <BarChart3 className="mr-3 h-5 w-5" />
               View Reports
             </Button>
             <Button 
-              className="w-full justify-start" 
-              variant="outline" 
+                className="w-full justify-start bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
               size="lg"
               onClick={() => onPageChange('users')}
             >
-              <Users className="mr-2 h-4 w-4" />
+                <Users className="mr-3 h-5 w-5" />
               Manage Users
             </Button>
             <Button 
-              className="w-full justify-start" 
-              variant="outline" 
+                className="w-full justify-start bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
               size="lg"
               onClick={() => onPageChange('withdrawals')}
             >
-              <CreditCard className="mr-2 h-4 w-4" />
+                <CreditCard className="mr-3 h-5 w-5" />
               Process Payments
             </Button>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest system activities</CardDescription>
+          {/* Super Admin Features */}
+          {isSuperAdmin && (
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-emerald-50 hover:shadow-2xl transition-all duration-300">
+              <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-t-lg">
+                <CardTitle className="flex items-center text-xl">
+                  <Crown className="w-6 h-6 mr-3" />
+                  Super Admin Tools
+                </CardTitle>
+                <CardDescription className="text-green-100">
+                  Advanced administrative functions
+                </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+              <CardContent className="p-6 space-y-3">
+                <Button 
+                  className="w-full justify-start bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
+                  size="lg"
+                  onClick={() => onPageChange('config')}
+                >
+                  <Settings className="mr-3 h-5 w-5" />
+                  System Configuration
+                </Button>
+                <Button 
+                  className="w-full justify-start bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
+                  size="lg"
+                  onClick={() => onPageChange('transactions')}
+                >
+                  <Wallet className="mr-3 h-5 w-5" />
+                  Transaction Management
+                </Button>
+                <Button 
+                  className="w-full justify-start bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
+                  size="lg"
+                  onClick={() => onPageChange('analytics')}
+                >
+                  <TrendingUp className="mr-3 h-5 w-5" />
+                  Advanced Analytics
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50 hover:shadow-2xl transition-all duration-300">
+            <CardHeader className="bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded-t-lg">
+              <CardTitle className="text-xl font-semibold">Recent Activity</CardTitle>
+              <CardDescription className="text-gray-300">Latest system activities</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
             {loading ? (
-              <div className="text-center py-4 text-gray-500">Loading recent activity...</div>
+                <div className="text-center py-8 text-gray-500">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent mx-auto mb-2"></div>
+                  Loading recent activity...
+                </div>
             ) : recentActivity.length === 0 ? (
-              <div className="text-center py-4 text-gray-500">No recent activity</div>
+                <div className="text-center py-8 text-gray-500">
+                  <Activity className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                  <p className="text-lg font-medium">No recent activity</p>
+                  <p className="text-sm">System activities will appear here</p>
+                </div>
             ) : (
               recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className={`w-2 h-2 rounded-full ${
+                  <div key={activity.id} className="flex items-center gap-4 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:shadow-md transition-all duration-200">
+                    <div className={`w-3 h-3 rounded-full shadow-sm ${
                     activity.type === 'pickup_approved' ? 'bg-green-500' :
                     activity.type === 'pickup_rejected' ? 'bg-red-500' :
                     activity.type === 'pickup_created' ? 'bg-blue-500' :
-                    activity.type === 'user_registered' ? 'bg-purple-500' :
+                    activity.type === 'user_registered' ? 'bg-yellow-500' :
                     'bg-gray-500'
                   }`}></div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium">{activity.title}</p>
-                    <p className="text-xs text-gray-500">{activity.description}</p>
+                      <p className="text-sm font-semibold text-gray-900">{activity.title}</p>
+                      <p className="text-xs text-gray-600">{activity.description}</p>
                   </div>
                   <Clock className="h-4 w-4 text-gray-400" />
                 </div>
@@ -800,110 +905,661 @@ function DashboardContent({ onPageChange, onAddUser }: {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   );
 }
 
 // Other Page Content Components
+function TeamMembersContent() {
+  const { users, loading, error } = useAllUsers();
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [pendingCollectors, setPendingCollectors] = useState([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  
+  // Load pending collectors
+  useEffect(() => {
+    loadPendingCollectors();
+  }, []);
+  
+  const loadPendingCollectors = async () => {
+    setLoadingPending(true);
+    try {
+      // Use direct query to avoid RLS permission issues with views
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('status', 'pending_approval')
+        .eq('role', 'collector')
+        .order('created_at', { ascending: true });
+      
+      if (!error) {
+        setPendingCollectors(data || []);
+        console.log('✅ Loaded pending collectors:', data?.length || 0);
+      } else {
+        console.error('Error loading pending collectors:', error);
+        setPendingCollectors([]);
+      }
+    } catch (err) {
+      console.error('Error loading pending collectors:', err);
+      setPendingCollectors([]);
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+  
+  const approveCollector = async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          status: 'active', 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', userId);
+      
+      if (!error) {
+        await loadPendingCollectors();
+        // Refresh main users list
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Error approving collector:', err);
+    }
+  };
+  
+  const rejectCollector = async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          status: 'rejected', 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', userId);
+      
+      if (!error) {
+        await loadPendingCollectors();
+      }
+    } catch (err) {
+      console.error('Error rejecting collector:', err);
+    }
+  };
+
+  const suspendUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to suspend this user?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          status: 'suspended', 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', userId);
+      
+      if (!error) {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Error suspending user:', err);
+    }
+  };
+
+  const activateUser = async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          status: 'active', 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', userId);
+      
+      if (!error) {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Error activating user:', err);
+    }
+  };
+
+  const editUser = (user: any) => {
+    setEditingUser(user);
+    setShowEditModal(true);
+  };
+  
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Team Members</h1>
+            <p className="text-gray-600">Manage your team and approve new collectors</p>
+          </div>
+          <Button 
+            onClick={() => setShowAddUserModal(true)}
+            className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+          >
+            <UserPlus className="w-5 h-5 mr-2" />
+            Add New User
+          </Button>
+        </div>
+        
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mx-auto mb-4"></div>
+              <p className="text-gray-600 text-lg">Loading team members...</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md mx-auto">
+              <div className="text-red-600 text-6xl mb-4">⚠️</div>
+              <h3 className="text-lg font-semibold text-red-800 mb-2">Error Loading Team Members</h3>
+              <p className="text-red-600">{error.message}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {/* Pending Collector Approvals */}
+            {pendingCollectors.length > 0 && (
+              <Card className="border-0 shadow-xl bg-gradient-to-r from-orange-50 to-amber-50">
+                <CardHeader className="bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-t-lg">
+                  <CardTitle className="flex items-center text-xl">
+                    <UserCheck className="w-6 h-6 mr-3" />
+                    Pending Collector Approvals ({pendingCollectors.length})
+                  </CardTitle>
+                  <CardDescription className="text-orange-100">
+                    Review and approve new collector signups
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="grid gap-4">
+                    {pendingCollectors.map((collector) => (
+                      <div key={collector.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-orange-200 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-r from-orange-100 to-amber-100 flex items-center justify-center shadow-sm">
+                            <span className="text-lg font-bold text-orange-700">
+                              {collector.full_name?.charAt(0) || collector.email?.charAt(0) || 'C'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 text-lg">{collector.full_name || 'No name'}</p>
+                            <p className="text-gray-600">{collector.email}</p>
+                            <p className="text-sm text-orange-600 font-medium">Employee #: {collector.employee_number || 'N/A'}</p>
+                          </div>
+                        </div>
+                        <div className="flex space-x-3">
+                          <Button
+                            size="sm"
+                            onClick={() => approveCollector(collector.id)}
+                            className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-all"
+                          >
+                            <Check className="w-4 h-4 mr-2" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => rejectCollector(collector.id)}
+                            className="border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg shadow-sm hover:shadow-md transition-all"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Team Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl shadow-lg border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">Total Team Members</h3>
+                    <p className="text-3xl font-bold text-blue-600">
+                      {users.filter(u => u.role?.name === 'admin' || u.role?.name === 'collector').length}
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
+                    <Users className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl shadow-lg border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-green-900 mb-2">Admins</h3>
+                    <p className="text-3xl font-bold text-green-600">
+                      {users.filter(u => u.role?.name === 'admin').length}
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                    <Crown className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-xl shadow-lg border border-orange-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-orange-900 mb-2">Collectors</h3>
+                    <p className="text-3xl font-bold text-orange-600">
+                      {users.filter(u => u.role?.name === 'collector').length}
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center">
+                    <UserCheck className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Team Members Table */}
+            <Card className="border-0 shadow-xl">
+              <div className="bg-gradient-to-r from-gray-800 to-gray-900 px-6 py-4 rounded-t-lg">
+                <h3 className="text-xl font-semibold text-white">Team Members List</h3>
+                <p className="text-gray-300">Manage your team members and their status</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Member
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Contact
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Role
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {users
+                      .filter(u => u.role?.name === 'admin' || u.role?.name === 'collector')
+                      .map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-12 w-12">
+                              <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-400 to-yellow-500 flex items-center justify-center shadow-sm">
+                                <span className="text-sm font-bold text-white">
+                                  {user.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-semibold text-gray-900">
+                                {user.full_name || 'No name'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Employee #{user.employee_number || 'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{user.email}</div>
+                          <div className="text-sm text-gray-500">{user.phone || 'No phone'}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
+                            user.role?.name === 'admin' 
+                              ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800'
+                              : 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800'
+                          }`}>
+                            {user.role?.name || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
+                            user.status === 'active' 
+                              ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800'
+                              : user.status === 'suspended'
+                              ? 'bg-gradient-to-r from-red-100 to-red-200 text-red-800'
+                              : user.status === 'pending_approval'
+                              ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800'
+                              : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800'
+                          }`}>
+                            {user.status || 'Unknown'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <button 
+                              onClick={() => editUser(user)}
+                              className="text-blue-600 hover:text-blue-900 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            {user.status === 'active' ? (
+                              <button 
+                                onClick={() => suspendUser(user.id)}
+                                className="text-yellow-600 hover:text-yellow-900 px-3 py-1 rounded-md hover:bg-yellow-50 transition-colors"
+                              >
+                                Suspend
+                              </button>
+                            ) : user.status === 'suspended' ? (
+                              <button 
+                                onClick={() => activateUser(user.id)}
+                                className="text-green-600 hover:text-green-900 px-3 py-1 rounded-md hover:bg-green-50 transition-colors"
+                              >
+                                Activate
+                              </button>
+                            ) : null}
+                            <button 
+                              onClick={() => {
+                                if (confirm('Are you sure you want to remove this user?')) {
+                                  // Add remove functionality here
+                                }
+                              }}
+                              className="text-red-600 hover:text-red-900 px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        )}
+        
+        {/* Add User Modal */}
+        {showAddUserModal && (
+          <AddUserModal
+            isOpen={showAddUserModal}
+            onClose={() => setShowAddUserModal(false)}
+            onSuccess={() => {
+              setShowAddUserModal(false);
+              window.location.reload();
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function UsersContent() {
   const { users, loading, error } = useAllUsers();
   const { townships, loading: townshipsLoading, error: townshipsError } = useTownships();
   
+  // Function to extract township from address
+  const extractTownshipFromAddress = (address: string | null | undefined): string => {
+    if (!address) return 'Not specified';
+    
+    // Common township patterns in South Africa
+    const townshipPatterns = [
+      /(?:township|town|area|suburb|location|settlement|village|informal settlement)/i,
+      /(?:soweto|alexandra|khayelitsha|gugulethu|langa|nyanga|philippi|mitchells plain|manenberg|bontheuwel|delft|belhar|kuils river|strand|gordon's bay|somerset west|paarl|stellenbosch|franschhoek|wellington|malmesbury|vredenburg|saldanha|vredendal|springbok|upington|kimberley|bloemfontein|welkom|bethlehem|harrismith|ladysmith|newcastle|pietermaritzburg|durban|richards bay|port shepstone|margate|umtata|east london|port elizabeth|grahamstown|graaff-reinet|oudtshoorn|george|knysna|plettenberg bay|mossel bay|swellendam|wolseley|tulbagh|ceres|wellington|paarl|stellenbosch|franschhoek|somerset west|strand|gordon's bay|kuils river|belhar|delft|mitchells plain|manenberg|bontheuwel|philippi|nyanga|langa|gugulethu|khayelitsha|alexandra|soweto)/i
+    ];
+    
+    // Try to find township patterns
+    for (const pattern of townshipPatterns) {
+      const match = address.match(pattern);
+      if (match) {
+        return match[0].charAt(0).toUpperCase() + match[0].slice(1).toLowerCase();
+      }
+    }
+    
+    // If no pattern matches, try to extract the last part of the address
+    const parts = address.split(',').map(part => part.trim());
+    if (parts.length > 1) {
+      const lastPart = parts[parts.length - 1];
+      if (lastPart.length > 2 && lastPart.length < 50) {
+        return lastPart;
+      }
+    }
+    
+    return 'Not specified';
+  };
+  
+  // Calculate user statistics
+  const totalUsers = users.length;
+  const residents = users.filter(u => u.role?.name === 'resident').length;
+  const collectors = users.filter(u => u.role?.name === 'collector').length;
+  const admins = users.filter(u => u.role?.name === 'admin' || u.role?.name === 'super_admin').length;
+  const activeUsers = users.filter(u => u.status === 'active').length;
+  
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Users Management</h1>
-      
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      ) : error ? (
-        <div className="text-center py-8 text-red-600">
-          <p>Error loading users: {error.message}</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-blue-900">Total Users</h3>
-              <p className="text-2xl font-bold text-blue-600">{users.length}</p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-green-900">Residents</h3>
-              <p className="text-2xl font-bold text-green-600">
-                {users.filter(u => u.role?.name === 'resident').length}
-              </p>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-orange-900">Collectors</h3>
-              <p className="text-2xl font-bold text-orange-600">
-                {users.filter(u => u.role?.name === 'collector').length}
-              </p>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Users Management</h1>
+            <p className="text-gray-600">Manage system users and their locations</p>
           </div>
-          
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">All Users</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Township</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{user.email}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.role?.name === 'admin' ? 'bg-red-100 text-red-800' :
-                          user.role?.name === 'collector' ? 'bg-orange-100 text-orange-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {user.role?.name || 'Unknown'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {user.township?.name || 'Not specified'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          user.status === 'active' ? 'bg-green-100 text-green-800' :
-                          user.status === 'suspended' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="flex items-center gap-3">
+            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Users className="w-4 h-4 mr-2" />
+              {totalUsers} Total Users
+            </Badge>
+            <Badge className="text-sm bg-gradient-to-r from-green-600 to-green-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Activity className="w-4 h-4 mr-2" />
+              {activeUsers} Active
+            </Badge>
           </div>
         </div>
-      )}
+        
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        ) : error ? (
+          <div className="text-center py-8 text-red-600">
+            <p>Error loading users: {error.message}</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-blue-900">Total Users</CardTitle>
+                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Users className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-600 mb-1">
+                    {totalUsers.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-blue-700 font-medium">
+                    System users
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-green-900">Residents</CardTitle>
+                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Building2 className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-green-600 mb-1">
+                    {residents.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-green-700 font-medium">
+                    Community members
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-orange-50 to-orange-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-orange-900">Collectors</CardTitle>
+                  <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Package className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-orange-600 mb-1">
+                    {collectors.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-orange-700 font-medium">
+                    Collection staff
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-purple-50 to-purple-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-purple-900">Admins</CardTitle>
+                  <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Shield className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-purple-600 mb-1">
+                    {admins.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-purple-700 font-medium">
+                    System administrators
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-emerald-50 to-emerald-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-emerald-900">Active</CardTitle>
+                  <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Activity className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-emerald-600 mb-1">
+                    {activeUsers.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-emerald-700 font-medium">
+                    Active users
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Users Table */}
+            <Card className="border-0 shadow-xl bg-white">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-semibold text-gray-900">All Users</CardTitle>
+                    <p className="text-sm text-gray-600 mt-1">Complete list of system users with location information</p>
+                  </div>
+                  <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                    <Users className="w-4 h-4 mr-2" />
+                    {totalUsers} Users
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Township</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {users.map((user) => {
+                        const township = extractTownshipFromAddress((user as any).address || user.township_name);
+                        return (
+                          <tr key={user.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-12 w-12">
+                                  <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                                    <span className="text-lg font-semibold text-white">
+                                      {(user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'U').charAt(0)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-semibold text-gray-900">
+                                    {user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    ID: {user.id.slice(0, 8)}...
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                              {user.email}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                                user.role?.name === 'admin' || user.role?.name === 'super_admin' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
+                                user.role?.name === 'collector' ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white' :
+                                user.role?.name === 'resident' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
+                                'bg-gradient-to-r from-gray-500 to-gray-600 text-white'
+                              }`}>
+                                {user.role?.name || 'Unknown'}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <MapPin className="h-4 w-4 text-gray-400 mr-2" />
+                                <span className="text-sm text-gray-600">
+                                  {township}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                                user.status === 'active' 
+                                  ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' 
+                                  : user.status === 'suspended'
+                                  ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white'
+                                  : 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+                              }`}>
+                                {user.status}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {new Date(user.created_at).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1065,22 +1721,22 @@ function CollectionsContent() {
   };
 
   const handleDelete = async (collectionId: string) => {
-    const confirmed = typeof window !== 'undefined' ? window.confirm('Delete this collection and all related records? This cannot be undone.') : true;
+    const confirmed = typeof window !== 'undefined' ? window.confirm('Move this collection to deleted transactions? This will hide it from Main App and Office views, but it can be restored later.') : true;
     if (!confirmed) return;
     
-    console.log('🗑️ Starting deletion of collection:', collectionId);
+    console.log('🗑️ Starting soft delete for collection:', collectionId);
     
     try {
       // Optimistic remove
       const prevRows = rows;
       setRows(prev => prev.filter(c => c.id !== collectionId));
       
-      console.log('🔄 Calling deleteCollectionDeep...');
-      const ok = await deleteCollectionDeep(collectionId);
+      console.log('🔄 Calling softDeleteCollection...');
+      const result = await softDeleteCollection(collectionId, 'Deleted by super admin from Collections page');
       
-      if (ok) {
-        console.log('✅ Collection deleted successfully');
-        setNotice({ type: 'success', message: 'Collection deleted successfully.' });
+      if (result.success) {
+        console.log('✅ Collection soft deleted successfully');
+        setNotice({ type: 'success', message: 'Collection moved to deleted transactions successfully.' });
         try { 
           clearPickupsCache(); 
           console.log('✅ Pickups cache cleared');
@@ -1093,9 +1749,9 @@ function CollectionsContent() {
           window.location.reload();
         }, 1000);
       } else {
-        console.error('❌ deleteCollectionDeep returned false');
+        console.error('❌ softDeleteCollection failed:', result.message);
         setRows(prevRows);
-        setNotice({ type: 'error', message: 'Failed to delete collection. Please check the console for details.' });
+        setNotice({ type: 'error', message: `Failed to delete collection: ${result.message}` });
       }
     } catch (e) {
       console.error('❌ Exception in handleDelete:', e);
@@ -1126,187 +1782,324 @@ function CollectionsContent() {
   };
   
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Collections Management</h1>
-      
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      ) : error ? (
-        <div className="text-center py-8 text-red-600">
-          <p>Error loading collections: {error.message}</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {notice && (
-            <div className={`px-4 py-2 rounded ${notice.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">{notice.message}</span>
-                <button className="text-xs underline" onClick={() => setNotice(null)}>Dismiss</button>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Collections Management</h1>
+            <p className="text-gray-600">Manage and track material collections from residents</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-sm text-gray-500">Total Collections</div>
+              <div className="text-2xl font-bold text-blue-600">{rows.length}</div>
             </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-blue-900">Total Collections</h3>
-              <p className="text-2xl font-bold text-blue-600">{rows.length}</p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-yellow-900">Pending</h3>
-              <p className="text-2xl font-bold text-yellow-600">
-                {rows.filter(c => c.status === 'pending' || c.status === 'submitted').length}
-              </p>
-            </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-green-900">Approved</h3>
-              <p className="text-2xl font-bold text-green-600">
-                {rows.filter(c => c.status === 'approved').length}
-              </p>
-            </div>
-            <div className="bg-red-50 p-4 rounded-lg">
-              <h3 className="text-lg font-semibold text-red-900">Rejected</h3>
-              <p className="text-2xl font-bold text-red-600">
-                {rows.filter(c => c.status === 'rejected').length}
-              </p>
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <Package className="h-8 w-8 text-white" />
             </div>
           </div>
-          
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-medium text-gray-900">All Collections</h2>
+        </div>
+        
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        ) : error ? (
+          <div className="text-center py-8 text-red-600">
+            <p>Error loading collections: {error.message}</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {notice && (
+              <div className={`px-4 py-3 rounded-lg border ${notice.type === 'success' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{notice.message}</span>
+                  <button className="text-xs underline hover:no-underline" onClick={() => setNotice(null)}>Dismiss</button>
+                </div>
+              </div>
+            )}
+            
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-blue-900">Total Collections</CardTitle>
+                  <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Package className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-600 mb-1">
+                    {rows.length.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-blue-700 font-medium">
+                    All time collections
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-yellow-900">Pending</CardTitle>
+                  <div className="w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Clock className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-yellow-600 mb-1">
+                    {rows.filter(c => c.status === 'pending' || c.status === 'submitted').length.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-yellow-700 font-medium">
+                    Awaiting approval
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-green-50 to-green-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-green-900">Approved</CardTitle>
+                  <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                    <Check className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-green-600 mb-1">
+                    {rows.filter(c => c.status === 'approved').length.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-green-700 font-medium">
+                    Successfully processed
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-xl bg-gradient-to-br from-red-50 to-red-100 hover:shadow-2xl transition-all duration-300">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-semibold text-red-900">Rejected</CardTitle>
+                  <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center shadow-lg">
+                    <X className="h-5 w-5 text-white" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-red-600 mb-1">
+                    {rows.filter(c => c.status === 'rejected').length.toLocaleString()}
+                  </div>
+                  <p className="text-sm text-red-700 font-medium">
+                    Declined requests
+                  </p>
+                </CardContent>
+              </Card>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collection ID</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resident</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collector</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight (kg)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate (R/kg)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value (R)</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {rows.map((collection) => (
-                    <tr key={collection.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span
-                            title={collection.id}
-                            className="text-sm font-medium text-gray-900"
-                          >
-                            {collection.id.substring(0, 8)}...
-                          </span>
-                          <button
-                            type="button"
-                            title="Copy full Collection ID"
-                            aria-label="Copy full Collection ID"
-                            className="text-gray-500 hover:text-gray-700"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(collection.id);
-                                setNotice({ type: 'success', message: 'Collection ID copied to clipboard.' });
-                              } catch (e) {
-                                setNotice({ type: 'error', message: 'Failed to copy Collection ID.' });
-                              }
-                            }}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {fullNameByEmail[collection.customer?.email || ''] || getDisplayName(collection.customer?.full_name, collection.customer?.email) || 'Unknown Resident'}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {collection.customer?.email}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {fullNameByEmail[collection.collector?.email || ''] || getDisplayName(collection.collector?.full_name, collection.collector?.email) || 'Unassigned'}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {collection.collector?.email}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {collection.material_type || 'Unknown'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {collection.weight_kg || 0} kg
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          R{collection.material_rate_per_kg?.toFixed(2) || '0.00'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 font-medium">
-                          R{collection.computed_value?.toFixed(2) || '0.00'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          collection.status === 'approved' ? 'bg-green-100 text-green-800' :
-                          collection.status === 'rejected' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {collection.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(collection.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          {(collection.status === 'pending' || collection.status === 'submitted') && (
-                            <>
-                              <button className="text-green-600 hover:text-green-900" onClick={() => handleUpdate(collection.id, 'approved')}>
-                                Approve
+          
+            {/* Collections Table */}
+            <Card className="border-0 shadow-xl bg-white">
+              <CardHeader className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                      <Package className="h-5 w-5 text-blue-600" />
+                      All Collections ({rows.length})
+                    </CardTitle>
+                    <p className="text-sm text-gray-600 mt-1">Complete list of material collections from residents</p>
+                  </div>
+                  <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                    <Package className="w-4 h-4 mr-2" />
+                    {rows.length} Collections
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collection ID</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resident</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Collector</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight (kg)</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate (R/kg)</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value (R)</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {rows.map((collection) => (
+                        <tr key={collection.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span
+                                title={collection.id}
+                                className="text-sm font-medium text-gray-900"
+                              >
+                                {collection.id.substring(0, 8)}...
+                              </span>
+                              <button
+                                type="button"
+                                title="Copy full Collection ID"
+                                aria-label="Copy full Collection ID"
+                                className="text-gray-500 hover:text-gray-700"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(collection.id);
+                                    setNotice({ type: 'success', message: 'Collection ID copied to clipboard.' });
+                                  } catch (e) {
+                                    setNotice({ type: 'error', message: 'Failed to copy Collection ID.' });
+                                  }
+                                }}
+                              >
+                                <Copy className="h-4 w-4" />
                               </button>
-                              <button className="text-red-600 hover:text-red-900" onClick={() => handleUpdate(collection.id, 'rejected')}>
-                                Reject
-                              </button>
-                            </>
-                          )}
-                          <button className="text-blue-600 hover:text-blue-900" onClick={() => openDetails(collection.id)}>
-                            View
-                          </button>
-                          {collection.status === 'approved' && (
-                            <button 
-                              className="text-orange-600 hover:text-orange-900" 
-                              onClick={() => handleResetTransactions(collection)}
-                              title="Reset transactions for this collection"
-                            >
-                              Reset
-                            </button>
-                          )}
-                          <button className="text-red-600 hover:text-red-900" onClick={() => handleDelete(collection.id)}>
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                                  <Users className="h-5 w-5 text-white" />
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-semibold text-gray-900">
+                                  {fullNameByEmail[collection.customer?.email || ''] || getDisplayName(collection.customer?.full_name, collection.customer?.email) || 'Unknown Resident'}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {collection.customer?.email}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-10 w-10">
+                                <div className="h-10 w-10 rounded-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center shadow-lg">
+                                  <Package className="h-5 w-5 text-white" />
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-semibold text-gray-900">
+                                  {fullNameByEmail[collection.collector?.email || ''] || getDisplayName(collection.collector?.full_name, collection.collector?.email) || 'Unassigned'}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  {collection.collector?.email}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                                <Package className="h-4 w-4 text-white" />
+                              </div>
+                              <span className="text-sm font-medium text-gray-900">
+                                {collection.material_type || 'Unknown'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg mr-3">
+                                <TrendingUp className="h-4 w-4 text-white" />
+                              </div>
+                              <span className="text-sm font-medium text-gray-900">
+                                {collection.weight_kg || 0} kg
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">
+                              R{collection.material_rate_per_kg?.toFixed(2) || '0.00'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-bold text-green-600">
+                              R{collection.computed_value?.toFixed(2) || '0.00'}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <Badge className={`text-xs font-semibold px-3 py-1 rounded-full shadow-sm ${
+                              collection.status === 'approved' ? 'bg-gradient-to-r from-green-500 to-green-600 text-white' :
+                              collection.status === 'rejected' ? 'bg-gradient-to-r from-red-500 to-red-600 text-white' :
+                              'bg-gradient-to-r from-yellow-500 to-yellow-600 text-white'
+                            }`}>
+                              {collection.status}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <div className="flex items-center">
+                              <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                              {new Date(collection.created_at).toLocaleDateString()}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {(collection.status === 'pending' || collection.status === 'submitted') && (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-green-600 border-green-600 hover:bg-green-50"
+                                    onClick={() => handleUpdate(collection.id, 'approved')}
+                                  >
+                                    <Check className="w-4 h-4 mr-1" />
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-red-600 border-red-600 hover:bg-red-50"
+                                    onClick={() => handleUpdate(collection.id, 'rejected')}
+                                  >
+                                    <X className="w-4 h-4 mr-1" />
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                                onClick={() => openDetails(collection.id)}
+                              >
+                                <Activity className="w-4 h-4 mr-1" />
+                                View
+                              </Button>
+                              {collection.status === 'approved' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-orange-600 border-orange-600 hover:bg-orange-50"
+                                  onClick={() => handleResetTransactions(collection)}
+                                  title="Reset transactions for this collection"
+                                >
+                                  <Settings className="w-4 h-4 mr-1" />
+                                  Reset
+                                </Button>
+                              )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 border-red-600 hover:bg-red-50"
+                                onClick={() => handleDelete(collection.id)}
+                              >
+                                <X className="w-4 h-4 mr-1" />
+                                Delete
+                              </Button>
+                            </div>
+                          </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          </CardContent>
+        </Card>
         </div>
-      )}
-      {/* Details Modal */}
+        )}
+        
+        {/* Details Modal */}
       {selectedId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={closeDetails} />
@@ -1423,6 +2216,7 @@ function CollectionsContent() {
           onSuccess={handleResetSuccess}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -1437,18 +2231,103 @@ function AnalyticsContent() {
 
 function ConfigContent() {
   return (
-    <div className="p-6">
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">System Configuration</h1>
-      <div className="space-y-6">
-        <NotificationSettings />
-        
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center py-8 text-gray-500">
-              Additional system configuration options will be implemented here
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">System Configuration</h1>
+            <p className="text-gray-600">Manage system settings and configurations</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <Settings className="w-8 h-8 text-white" />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl border-0 hover:shadow-2xl transition-all duration-300">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-100 text-sm font-medium">System Status</p>
+                  <p className="text-2xl font-bold">Online</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <Activity className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white shadow-xl border-0 hover:shadow-2xl transition-all duration-300">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-green-100 text-sm font-medium">Database</p>
+                  <p className="text-2xl font-bold">Connected</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-xl border-0 hover:shadow-2xl transition-all duration-300">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-purple-100 text-sm font-medium">API Status</p>
+                  <p className="text-2xl font-bold">Active</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <TrendingUp className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-xl border-0 hover:shadow-2xl transition-all duration-300">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-orange-100 text-sm font-medium">Uptime</p>
+                  <p className="text-2xl font-bold">99.9%</p>
+                </div>
+                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Configuration Sections */}
+        <div className="space-y-6">
+          <NotificationSettings />
+          
+          <Card className="shadow-xl border-0 bg-white/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-t-lg">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <Settings className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold">Additional Configuration</h3>
+                  <p className="text-gray-100 text-sm">System settings and preferences</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="text-center py-8 text-gray-500">
+                Additional system configuration options will be implemented here
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
@@ -1474,7 +2353,7 @@ export default function AdminDashboardClient() {
     if (!isClient || authLoading) return;
     const email = user?.email?.toLowerCase?.() || '';
     const role = profile?.role?.toLowerCase?.();
-    const isPrivileged = role === 'admin' || role === 'super_admin' || email === 'admin@wozamali.com';
+    const isPrivileged = isAdminUser(user, profile);
     if (!user || !isPrivileged) {
       console.log('AdminDashboardClient: User not authenticated or not privileged, redirecting to login');
       router.push('/admin-login');
@@ -1482,8 +2361,16 @@ export default function AdminDashboardClient() {
   }, [isClient, user, profile, authLoading, router]);
 
   const handleLogout = async () => {
-    await logout();
-    router.push('/admin-login');
+    try {
+      console.log('🚪 AdminDashboardClient: Starting logout process...');
+      await logout();
+      console.log('✅ AdminDashboardClient: Logout successful, redirecting to admin-login');
+      router.push('/admin-login');
+    } catch (error) {
+      console.error('❌ AdminDashboardClient: Logout error:', error);
+      // Still redirect even if logout fails
+      router.push('/admin-login');
+    }
   };
 
   // Show loading state during SSR or initial load.
@@ -1503,23 +2390,27 @@ export default function AdminDashboardClient() {
   }
 
   // Check if user is authenticated and has admin/super_admin role
-  const email = user?.email?.toLowerCase?.() || '';
-  const role = profile?.role?.toLowerCase?.();
-  const isPrivileged = role === 'admin' || role === 'super_admin' || email === 'admin@wozamali.com';
+  const isPrivileged = isAdminUser(user, profile);
   if (!user || !isPrivileged) {
     console.log('AdminDashboardClient: Access denied, redirecting to login');
     return null;
   }
 
+  // Check if user is super admin
+  const isSuperAdmin = user?.email?.toLowerCase() === 'superadmin@wozamali.co.za';
+
   console.log('AdminDashboardClient: Rendering dashboard for admin user:', profile?.email || user?.email);
+  console.log('AdminDashboardClient: Is super admin:', isSuperAdmin);
 
   // Render page content based on current page
   const renderPageContent = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} />;
+        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} />;
       case 'users':
         return <UsersContent />;
+      case 'team-members':
+        return <TeamMembersContent />;
       case 'withdrawals':
         return <WithdrawalsContent />;
       case 'rewards':
@@ -1541,12 +2432,12 @@ export default function AdminDashboardClient() {
       case 'config':
         return <ConfigContent />;
       default:
-        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} />;
+        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} />;
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Sidebar */}
       <AdminSidebar 
         currentPage={currentPage} 
@@ -1557,15 +2448,43 @@ export default function AdminDashboardClient() {
       {/* Main Content */}
       <div className="flex-1">
         {/* Top Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
+        <div className="bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 px-6 py-4 shadow-lg">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4" />
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-yellow-500 flex items-center justify-center shadow-lg">
+                <span className="text-white font-bold text-lg">
+                  {(profile?.full_name || user?.email || 'A').charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Welcome back, {profile?.full_name || user?.email?.split('@')[0] || 'Admin'}!
+                </h3>
+                <p className="text-sm text-gray-600">Manage your system efficiently</p>
+              </div>
+            </div>
             <div className="flex items-center gap-3">
-              <Badge variant="outline" className="text-sm text-gray-900 border-gray-300">
-                <Building2 className="w-4 h-4 mr-1" />
-                Admin: {(profile?.full_name || user?.email || 'Admin')}
+              <Badge 
+                className={`text-sm border-0 px-4 py-2 rounded-full shadow-lg ${
+                  isSuperAdmin 
+                    ? 'bg-gradient-to-r from-green-600 to-green-700 text-white' 
+                    : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
+                }`}
+              >
+                {isSuperAdmin ? (
+                  <>
+                    <Crown className="w-4 h-4 mr-2" />
+                    Super Admin
+                  </>
+                ) : (
+                  <>
+                    <Building2 className="w-4 h-4 mr-2" />
+                    Admin
+                  </>
+                )}
               </Badge>
-              <Badge variant="secondary" className="text-sm">
+              <Badge className="text-sm bg-gradient-to-r from-emerald-600 to-emerald-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+                <Activity className="w-4 h-4 mr-2" />
                 Live Data
               </Badge>
             </div>

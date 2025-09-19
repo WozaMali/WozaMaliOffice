@@ -1,54 +1,49 @@
 -- ============================================================================
--- FIX ROLE CONSTRAINT IN PROFILES TABLE
+-- FIX ROLE CONSTRAINT ISSUE
 -- ============================================================================
 
--- First, let's see what the current role constraint allows
+-- First, let's see what's in the roles table
+SELECT 'Roles table contents:' as info;
+SELECT * FROM roles;
+
+-- Check if the collector role ID exists
+SELECT 'Checking if collector role exists:' as info;
+SELECT * FROM roles WHERE id = '8d5db8bb-52a3-4865-bb18-e1805249c4a2';
+
+-- If the role doesn't exist, let's see what roles are available
+SELECT 'Available roles:' as info;
+SELECT id, name, description FROM roles;
+
+-- Check the foreign key constraint details
+SELECT 'Foreign key constraints on users table:' as info;
 SELECT 
-    conname as constraint_name,
-    pg_get_constraintdef(oid) as constraint_definition
-FROM pg_constraint 
-WHERE conrelid = 'profiles'::regclass 
-AND contype = 'c';
+    tc.constraint_name, 
+    tc.table_name, 
+    kcu.column_name, 
+    ccu.table_name AS foreign_table_name,
+    ccu.column_name AS foreign_column_name 
+FROM 
+    information_schema.table_constraints AS tc 
+    JOIN information_schema.key_column_usage AS kcu
+      ON tc.constraint_name = kcu.constraint_name
+      AND tc.table_schema = kcu.table_schema
+    JOIN information_schema.constraint_column_usage AS ccu
+      ON ccu.constraint_name = tc.constraint_name
+      AND ccu.table_schema = tc.table_schema
+WHERE tc.constraint_type = 'FOREIGN KEY' 
+AND tc.table_name='users'
+AND kcu.column_name LIKE '%role%';
 
--- Check what roles currently exist in the table
-SELECT DISTINCT role FROM profiles;
-
--- Check the exact constraint definition
-SELECT 
-    tc.constraint_name,
-    tc.table_name,
-    kcu.column_name,
-    cc.check_clause
-FROM information_schema.table_constraints tc
-JOIN information_schema.check_constraints cc ON tc.constraint_name = cc.constraint_name
-JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
-WHERE tc.table_name = 'profiles' 
-AND tc.constraint_type = 'CHECK'
-AND kcu.column_name = 'role';
-
--- Drop the existing constraint (we'll recreate it)
-ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
-
--- Create a new constraint that allows our roles
-ALTER TABLE profiles ADD CONSTRAINT profiles_role_check 
-CHECK (role IN ('ADMIN', 'STAFF', 'COLLECTOR', 'CUSTOMER'));
-
--- Now try to insert the sample data again
-INSERT INTO profiles (id, email, username, first_name, last_name, role, is_active)
+-- If the collector role doesn't exist, create it
+INSERT INTO roles (id, name, description, created_at, updated_at)
 VALUES (
-  gen_random_uuid(),
-  'admin@wozamali.com',
-  'admin',
-  'System',
-  'Administrator',
-  'ADMIN',
-  true
-) ON CONFLICT (email) DO NOTHING;
+    '8d5db8bb-52a3-4865-bb18-e1805249c4a2',
+    'collector',
+    'Waste collector role',
+    NOW(),
+    NOW()
+) ON CONFLICT (id) DO NOTHING;
 
--- Verify the insert worked
-SELECT id, email, username, first_name, last_name, role, is_active 
-FROM profiles 
-WHERE email = 'admin@wozamali.com';
-
--- Show all profiles to confirm
-SELECT * FROM profiles;
+-- Verify the role was created
+SELECT 'After creating collector role:' as info;
+SELECT * FROM roles WHERE id = '8d5db8bb-52a3-4865-bb18-e1805249c4a2';

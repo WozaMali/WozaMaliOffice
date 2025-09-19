@@ -7,24 +7,23 @@ import { supabase } from './supabase';
 
 export interface PointsTransaction {
   id: string;
-  wallet_id: string;
-  transaction_type: 'earned' | 'spent' | 'bonus' | 'deduction' | 'transfer' | 'reset' | 'adjustment';
+  user_id: string;
+  transaction_type: string;
   points: number;
-  balance_after: number;
-  source?: string;
-  reference_id?: string;
+  amount: number;
   description?: string;
-  admin_notes?: string;
+  source_id?: string;
   created_at: string;
 }
 
 export interface MonetaryTransaction {
   id: string;
-  wallet_id: string;
+  user_id: string;
+  transaction_type: string;
   amount: number;
-  type: 'credit' | 'debit' | 'adjustment';
-  reference?: string;
+  points: number;
   description?: string;
+  source_id?: string;
   created_at: string;
 }
 
@@ -36,19 +35,21 @@ export interface DeleteTransactionResult {
 }
 
 /**
- * Get all points transactions
+ * Get all points transactions (from wallet_transactions where points > 0)
  */
 export async function getAllPointsTransactions(): Promise<{ data: PointsTransaction[] | null; error: any }> {
   try {
     const { data, error } = await supabase
-      .from('points_transactions')
+      .from('wallet_transactions')
       .select(`
         *,
-        wallet:user_wallets(
-          user_id,
-          user:user_profiles(full_name, email)
+        user:users(
+          id,
+          full_name,
+          email
         )
       `)
+      .gt('points', 0)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -64,19 +65,21 @@ export async function getAllPointsTransactions(): Promise<{ data: PointsTransact
 }
 
 /**
- * Get all monetary transactions
+ * Get all monetary transactions (from wallet_transactions where amount > 0)
  */
 export async function getAllMonetaryTransactions(): Promise<{ data: MonetaryTransaction[] | null; error: any }> {
   try {
     const { data, error } = await supabase
-      .from('transactions')
+      .from('wallet_transactions')
       .select(`
         *,
-        wallet:user_wallets(
-          user_id,
-          user:user_profiles(full_name, email)
+        user:users(
+          id,
+          full_name,
+          email
         )
       `)
+      .gt('amount', 0)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -98,18 +101,111 @@ export async function deletePointsTransaction(transactionId: string): Promise<De
   try {
     console.log('🗑️ Deleting points transaction:', transactionId);
 
-    const { error } = await supabase
-      .from('points_transactions')
+    // First, get the transaction details to find the source_id
+    const { data: transaction, error: fetchError } = await supabase
+      .from('wallet_transactions')
+      .select('id, source_id, points, amount, user_id')
+      .eq('id', transactionId)
+      .gt('points', 0)
+      .single();
+
+    if (fetchError || !transaction) {
+      console.error('Error fetching transaction details:', fetchError);
+      return {
+        success: false,
+        message: `Transaction not found: ${fetchError?.message || 'Unknown error'}`,
+        error: fetchError
+      };
+    }
+
+    // Delete the wallet transaction
+    console.log('🗑️ Attempting to delete transaction with ID:', transactionId);
+    const { error, count } = await supabase
+      .from('wallet_transactions')
       .delete()
-      .eq('id', transactionId);
+      .eq('id', transactionId)
+      .gt('points', 0);
 
     if (error) {
-      console.error('Error deleting points transaction:', error);
+      console.error('❌ Error deleting points transaction:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
       return {
         success: false,
         message: `Failed to delete points transaction: ${error.message}`,
         error
       };
+    }
+
+    console.log('✅ Transaction deletion successful. Rows affected:', count);
+
+    // If the transaction has a source_id, delete the related collection records
+    if (transaction.source_id) {
+      console.log('🔄 Deleting related collection records for source_id:', transaction.source_id);
+      
+      // Delete from unified_collections table
+      const { error: unifiedError } = await supabase
+        .from('unified_collections')
+        .delete()
+        .eq('id', transaction.source_id);
+
+      if (unifiedError) {
+        console.warn('Warning: Could not delete from unified_collections:', unifiedError);
+      } else {
+        console.log('✅ Deleted from unified_collections');
+      }
+
+      // Delete from collections table
+      const { error: collectionsError } = await supabase
+        .from('collections')
+        .delete()
+        .eq('id', transaction.source_id);
+
+      if (collectionsError) {
+        console.warn('Warning: Could not delete from collections:', collectionsError);
+      } else {
+        console.log('✅ Deleted from collections');
+      }
+
+      // Delete related collection_photos
+      const { error: photosError } = await supabase
+        .from('collection_photos')
+        .delete()
+        .eq('collection_id', transaction.source_id);
+
+      if (photosError) {
+        console.warn('Warning: Could not delete collection_photos:', photosError);
+      } else {
+        console.log('✅ Deleted collection_photos');
+      }
+
+      // Delete related collection_materials
+      const { error: materialsError } = await supabase
+        .from('collection_materials')
+        .delete()
+        .eq('collection_id', transaction.source_id);
+
+      if (materialsError) {
+        console.warn('Warning: Could not delete collection_materials:', materialsError);
+      } else {
+        console.log('✅ Deleted collection_materials');
+      }
+
+      // Delete related wallet_update_queue entries
+      const { error: queueError } = await supabase
+        .from('wallet_update_queue')
+        .delete()
+        .eq('collection_id', transaction.source_id);
+
+      if (queueError) {
+        console.warn('Warning: Could not delete wallet_update_queue:', queueError);
+      } else {
+        console.log('✅ Deleted wallet_update_queue entries');
+      }
     }
 
     console.log('✅ Points transaction deleted successfully');
@@ -136,18 +232,111 @@ export async function deleteMonetaryTransaction(transactionId: string): Promise<
   try {
     console.log('🗑️ Deleting monetary transaction:', transactionId);
 
-    const { error } = await supabase
-      .from('transactions')
+    // First, get the transaction details to find the source_id
+    const { data: transaction, error: fetchError } = await supabase
+      .from('wallet_transactions')
+      .select('id, source_id, points, amount, user_id')
+      .eq('id', transactionId)
+      .gt('amount', 0)
+      .single();
+
+    if (fetchError || !transaction) {
+      console.error('Error fetching transaction details:', fetchError);
+      return {
+        success: false,
+        message: `Transaction not found: ${fetchError?.message || 'Unknown error'}`,
+        error: fetchError
+      };
+    }
+
+    // Delete the wallet transaction
+    console.log('🗑️ Attempting to delete transaction with ID:', transactionId);
+    const { error, count } = await supabase
+      .from('wallet_transactions')
       .delete()
-      .eq('id', transactionId);
+      .eq('id', transactionId)
+      .gt('amount', 0);
 
     if (error) {
-      console.error('Error deleting monetary transaction:', error);
+      console.error('❌ Error deleting monetary transaction:', error);
+      console.error('Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
       return {
         success: false,
         message: `Failed to delete monetary transaction: ${error.message}`,
         error
       };
+    }
+
+    console.log('✅ Transaction deletion successful. Rows affected:', count);
+
+    // If the transaction has a source_id, delete the related collection records
+    if (transaction.source_id) {
+      console.log('🔄 Deleting related collection records for source_id:', transaction.source_id);
+      
+      // Delete from unified_collections table
+      const { error: unifiedError } = await supabase
+        .from('unified_collections')
+        .delete()
+        .eq('id', transaction.source_id);
+
+      if (unifiedError) {
+        console.warn('Warning: Could not delete from unified_collections:', unifiedError);
+      } else {
+        console.log('✅ Deleted from unified_collections');
+      }
+
+      // Delete from collections table
+      const { error: collectionsError } = await supabase
+        .from('collections')
+        .delete()
+        .eq('id', transaction.source_id);
+
+      if (collectionsError) {
+        console.warn('Warning: Could not delete from collections:', collectionsError);
+      } else {
+        console.log('✅ Deleted from collections');
+      }
+
+      // Delete related collection_photos
+      const { error: photosError } = await supabase
+        .from('collection_photos')
+        .delete()
+        .eq('collection_id', transaction.source_id);
+
+      if (photosError) {
+        console.warn('Warning: Could not delete collection_photos:', photosError);
+      } else {
+        console.log('✅ Deleted collection_photos');
+      }
+
+      // Delete related collection_materials
+      const { error: materialsError } = await supabase
+        .from('collection_materials')
+        .delete()
+        .eq('collection_id', transaction.source_id);
+
+      if (materialsError) {
+        console.warn('Warning: Could not delete collection_materials:', materialsError);
+      } else {
+        console.log('✅ Deleted collection_materials');
+      }
+
+      // Delete related wallet_update_queue entries
+      const { error: queueError } = await supabase
+        .from('wallet_update_queue')
+        .delete()
+        .eq('collection_id', transaction.source_id);
+
+      if (queueError) {
+        console.warn('Warning: Could not delete wallet_update_queue:', queueError);
+      } else {
+        console.log('✅ Deleted wallet_update_queue entries');
+      }
     }
 
     console.log('✅ Monetary transaction deleted successfully');
@@ -174,10 +363,37 @@ export async function deleteMultiplePointsTransactions(transactionIds: string[])
   try {
     console.log('🗑️ Deleting multiple points transactions:', transactionIds);
 
+    // First, get all transaction details to find source_ids
+    const { data: transactions, error: fetchError } = await supabase
+      .from('wallet_transactions')
+      .select('id, source_id, points, amount, user_id')
+      .in('id', transactionIds)
+      .gt('points', 0);
+
+    if (fetchError) {
+      console.error('Error fetching transaction details:', fetchError);
+      return {
+        success: false,
+        message: `Failed to fetch transaction details: ${fetchError.message}`,
+        error: fetchError
+      };
+    }
+
+    // Group transactions by source_id for efficient updates
+    const sourceUpdates = new Map<string, number>();
+    transactions?.forEach(transaction => {
+      if (transaction.source_id) {
+        const currentAmount = sourceUpdates.get(transaction.source_id) || 0;
+        sourceUpdates.set(transaction.source_id, currentAmount + (transaction.amount || 0));
+      }
+    });
+
+    // Delete the wallet transactions
     const { error } = await supabase
-      .from('points_transactions')
+      .from('wallet_transactions')
       .delete()
-      .in('id', transactionIds);
+      .in('id', transactionIds)
+      .gt('points', 0);
 
     if (error) {
       console.error('Error deleting multiple points transactions:', error);
@@ -186,6 +402,71 @@ export async function deleteMultiplePointsTransactions(transactionIds: string[])
         message: `Failed to delete points transactions: ${error.message}`,
         error
       };
+    }
+
+    // Delete collection records for each affected source_id
+    for (const [sourceId, totalAmountToSubtract] of sourceUpdates) {
+      console.log('🔄 Deleting collection records for source_id:', sourceId);
+      
+      // Delete from unified_collections table
+      const { error: unifiedError } = await supabase
+        .from('unified_collections')
+        .delete()
+        .eq('id', sourceId);
+
+      if (unifiedError) {
+        console.warn('Warning: Could not delete from unified_collections for source_id', sourceId, ':', unifiedError);
+      } else {
+        console.log('✅ Deleted from unified_collections for source_id', sourceId);
+      }
+
+      // Delete from collections table
+      const { error: collectionsError } = await supabase
+        .from('collections')
+        .delete()
+        .eq('id', sourceId);
+
+      if (collectionsError) {
+        console.warn('Warning: Could not delete from collections for source_id', sourceId, ':', collectionsError);
+      } else {
+        console.log('✅ Deleted from collections for source_id', sourceId);
+      }
+
+      // Delete related collection_photos
+      const { error: photosError } = await supabase
+        .from('collection_photos')
+        .delete()
+        .eq('collection_id', sourceId);
+
+      if (photosError) {
+        console.warn('Warning: Could not delete collection_photos for source_id', sourceId, ':', photosError);
+      } else {
+        console.log('✅ Deleted collection_photos for source_id', sourceId);
+      }
+
+      // Delete related collection_materials
+      const { error: materialsError } = await supabase
+        .from('collection_materials')
+        .delete()
+        .eq('collection_id', sourceId);
+
+      if (materialsError) {
+        console.warn('Warning: Could not delete collection_materials for source_id', sourceId, ':', materialsError);
+      } else {
+        console.log('✅ Deleted collection_materials for source_id', sourceId);
+      }
+
+      // Delete related wallet_update_queue entries
+      const { error: queueError } = await supabase
+        .from('wallet_update_queue')
+        .delete()
+        .eq('collection_id', sourceId);
+
+      if (queueError) {
+        console.warn('Warning: Could not delete wallet_update_queue for source_id', sourceId, ':', queueError);
+      } else {
+        console.log('✅ Deleted wallet_update_queue entries for source_id', sourceId);
+      }
     }
 
     console.log('✅ Multiple points transactions deleted successfully');
@@ -212,10 +493,37 @@ export async function deleteMultipleMonetaryTransactions(transactionIds: string[
   try {
     console.log('🗑️ Deleting multiple monetary transactions:', transactionIds);
 
+    // First, get all transaction details to find source_ids
+    const { data: transactions, error: fetchError } = await supabase
+      .from('wallet_transactions')
+      .select('id, source_id, points, amount, user_id')
+      .in('id', transactionIds)
+      .gt('amount', 0);
+
+    if (fetchError) {
+      console.error('Error fetching transaction details:', fetchError);
+      return {
+        success: false,
+        message: `Failed to fetch transaction details: ${fetchError.message}`,
+        error: fetchError
+      };
+    }
+
+    // Group transactions by source_id for efficient updates
+    const sourceUpdates = new Map<string, number>();
+    transactions?.forEach(transaction => {
+      if (transaction.source_id) {
+        const currentAmount = sourceUpdates.get(transaction.source_id) || 0;
+        sourceUpdates.set(transaction.source_id, currentAmount + (transaction.amount || 0));
+      }
+    });
+
+    // Delete the wallet transactions
     const { error } = await supabase
-      .from('transactions')
+      .from('wallet_transactions')
       .delete()
-      .in('id', transactionIds);
+      .in('id', transactionIds)
+      .gt('amount', 0);
 
     if (error) {
       console.error('Error deleting multiple monetary transactions:', error);
@@ -224,6 +532,71 @@ export async function deleteMultipleMonetaryTransactions(transactionIds: string[
         message: `Failed to delete monetary transactions: ${error.message}`,
         error
       };
+    }
+
+    // Delete collection records for each affected source_id
+    for (const [sourceId, totalAmountToSubtract] of sourceUpdates) {
+      console.log('🔄 Deleting collection records for source_id:', sourceId);
+      
+      // Delete from unified_collections table
+      const { error: unifiedError } = await supabase
+        .from('unified_collections')
+        .delete()
+        .eq('id', sourceId);
+
+      if (unifiedError) {
+        console.warn('Warning: Could not delete from unified_collections for source_id', sourceId, ':', unifiedError);
+      } else {
+        console.log('✅ Deleted from unified_collections for source_id', sourceId);
+      }
+
+      // Delete from collections table
+      const { error: collectionsError } = await supabase
+        .from('collections')
+        .delete()
+        .eq('id', sourceId);
+
+      if (collectionsError) {
+        console.warn('Warning: Could not delete from collections for source_id', sourceId, ':', collectionsError);
+      } else {
+        console.log('✅ Deleted from collections for source_id', sourceId);
+      }
+
+      // Delete related collection_photos
+      const { error: photosError } = await supabase
+        .from('collection_photos')
+        .delete()
+        .eq('collection_id', sourceId);
+
+      if (photosError) {
+        console.warn('Warning: Could not delete collection_photos for source_id', sourceId, ':', photosError);
+      } else {
+        console.log('✅ Deleted collection_photos for source_id', sourceId);
+      }
+
+      // Delete related collection_materials
+      const { error: materialsError } = await supabase
+        .from('collection_materials')
+        .delete()
+        .eq('collection_id', sourceId);
+
+      if (materialsError) {
+        console.warn('Warning: Could not delete collection_materials for source_id', sourceId, ':', materialsError);
+      } else {
+        console.log('✅ Deleted collection_materials for source_id', sourceId);
+      }
+
+      // Delete related wallet_update_queue entries
+      const { error: queueError } = await supabase
+        .from('wallet_update_queue')
+        .delete()
+        .eq('collection_id', sourceId);
+
+      if (queueError) {
+        console.warn('Warning: Could not delete wallet_update_queue for source_id', sourceId, ':', queueError);
+      } else {
+        console.log('✅ Deleted wallet_update_queue entries for source_id', sourceId);
+      }
     }
 
     console.log('✅ Multiple monetary transactions deleted successfully');
@@ -250,31 +623,18 @@ export async function deleteAllTransactions(): Promise<DeleteTransactionResult> 
   try {
     console.log('🗑️ Deleting ALL transactions (use with caution!)');
 
-    // Delete points transactions
-    const { error: pointsError } = await supabase
-      .from('points_transactions')
+    // Delete all wallet transactions
+    const { error: transactionsError } = await supabase
+      .from('wallet_transactions')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
 
-    if (pointsError) {
-      console.error('Error deleting all points transactions:', pointsError);
-    }
-
-    // Delete monetary transactions
-    const { error: monetaryError } = await supabase
-      .from('transactions')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
-
-    if (monetaryError) {
-      console.error('Error deleting all monetary transactions:', monetaryError);
-    }
-
-    if (pointsError || monetaryError) {
+    if (transactionsError) {
+      console.error('Error deleting all transactions:', transactionsError);
       return {
         success: false,
         message: 'Some transactions could not be deleted',
-        error: { pointsError, monetaryError }
+        error: transactionsError
       };
     }
 
@@ -302,31 +662,18 @@ export async function deleteTransactionsBySource(sourceId: string): Promise<Dele
   try {
     console.log('🗑️ Deleting transactions by source:', sourceId);
 
-    // Delete points transactions
-    const { error: pointsError } = await supabase
-      .from('points_transactions')
+    // Delete transactions by source_id
+    const { error: transactionsError } = await supabase
+      .from('wallet_transactions')
       .delete()
-      .eq('reference_id', sourceId);
+      .eq('source_id', sourceId);
 
-    if (pointsError) {
-      console.error('Error deleting points transactions by source:', pointsError);
-    }
-
-    // Delete monetary transactions
-    const { error: monetaryError } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('reference', sourceId);
-
-    if (monetaryError) {
-      console.error('Error deleting monetary transactions by source:', monetaryError);
-    }
-
-    if (pointsError || monetaryError) {
+    if (transactionsError) {
+      console.error('Error deleting transactions by source:', transactionsError);
       return {
         success: false,
         message: 'Some transactions could not be deleted',
-        error: { pointsError, monetaryError }
+        error: transactionsError
       };
     }
 

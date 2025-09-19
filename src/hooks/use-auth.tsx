@@ -22,6 +22,7 @@ export interface AuthContextType {
   error: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, profileData: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
+  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
   refreshProfile: () => Promise<void>;
@@ -40,10 +41,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Fetch user profile from unified schema first, fallback to legacy profiles table
   const fetchProfile = async (userId: string) => {
     try {
-      console.log('🔍 Fetching profile for user (unified users/roles):', userId);
+      console.log('🔍 Fetching profile for user (unified users):', userId);
       const { data: unifiedUser, error: unifiedError } = await supabase
         .from('users')
-        .select('id, email, full_name, phone, status, role_id')
+        .select(`
+          id, 
+          email, 
+          full_name, 
+          phone, 
+          status, 
+          role_id,
+          role
+        `)
         .eq('id', userId)
         .maybeSingle();
 
@@ -54,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: unifiedUser.email,
           full_name: unifiedUser.full_name || '',
           phone: unifiedUser.phone || undefined,
-          role: (typeof unifiedUser.role_id === 'string' && unifiedUser.role_id) || 'resident',
+          role: unifiedUser.role || unifiedUser.role_id || 'resident',
           is_active: (unifiedUser.status || 'active') === 'active',
           created_at: new Date().toISOString(),
         };
@@ -189,6 +198,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Password reset function with explicit redirect
+  const resetPassword = async (email: string) => {
+    try {
+      console.log('🔐 Sending password reset for:', email);
+      console.log('🔐 Redirect URL will be: http://localhost:8081/admin-login');
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'http://localhost:8081/admin-login'
+      });
+      
+      if (error) {
+        console.error('Password reset error:', error);
+        return { success: false, error: error.message };
+      }
+      
+      console.log('✅ Password reset email sent successfully');
+      console.log('✅ Check email for magic link that should redirect to localhost:8081');
+      return { success: true };
+    } catch (err) {
+      console.error('Password reset error:', err);
+      return { success: false, error: 'An unexpected error occurred' };
+    }
+  };
+
   // Logout function
   const logout = async () => {
     try {
@@ -302,6 +335,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error,
     login,
     signUp,
+    resetPassword,
     logout,
     updateProfile,
     refreshProfile,

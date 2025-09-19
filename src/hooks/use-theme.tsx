@@ -28,17 +28,15 @@ export function ThemeProvider({
   storageKey = "woza-mali-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
+  const [theme, setTheme] = useState<Theme>("system");
   const [mounted, setMounted] = useState(false);
 
   // Only access localStorage after component mounts (client-side)
   useEffect(() => {
     setMounted(true);
-    const storedTheme = localStorage?.getItem(storageKey) as Theme;
-    if (storedTheme) {
-      setTheme(storedTheme);
-    }
-  }, [storageKey]);
+    // Always use system theme to follow browser preference
+    setTheme("system");
+  }, []);
 
   useEffect(() => {
     if (!mounted) return;
@@ -47,26 +45,19 @@ export function ThemeProvider({
 
     root.classList.remove("light", "dark");
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
+    // Always follow system preference
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
+      .matches
+      ? "dark"
+      : "light";
 
-      root.classList.add(systemTheme);
-      return;
-    }
-
-    root.classList.add(theme);
-  }, [theme, mounted]);
+    root.classList.add(systemTheme);
+  }, [mounted]);
 
   const value = {
-    theme,
-    setTheme: (theme: Theme) => {
-      if (mounted) {
-        localStorage?.setItem(storageKey, theme);
-      }
-      setTheme(theme);
+    theme: "system",
+    setTheme: () => {
+      // No-op - theme follows system preference
     },
   };
 

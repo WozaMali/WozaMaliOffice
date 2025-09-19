@@ -1,6 +1,7 @@
 /**
- * Rewards Service
+ * Rewards Service (Office App)
  * Handles CRUD operations for rewards system
+ * Uses the unified rewards service from Main App
  */
 
 import { supabase } from './supabase';
