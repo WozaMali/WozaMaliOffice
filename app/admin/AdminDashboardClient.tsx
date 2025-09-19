@@ -2458,7 +2458,7 @@ export default function AdminDashboardClient() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Welcome back, {profile?.full_name || user?.email?.split('@')[0] || 'Admin'}!
+                  Welcome, {profile?.full_name || user?.email?.split('@')[0] || 'Admin'}!
                 </h3>
                 <p className="text-sm text-gray-600">Manage your system efficiently</p>
               </div>

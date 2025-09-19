@@ -297,210 +297,245 @@ export default function TeamMembersPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Team Members</h1>
-          <p className="text-gray-600 mt-2">Manage admin profiles and approve collector requests</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+      <div className="max-w-7xl mx-auto space-y-8">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+              Team Members
+            </h1>
+            <p className="text-gray-600 mt-2 text-lg">
+              Manage admin profiles and approve collector requests
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <Button 
+              onClick={() => setShowCreateAdmin(true)}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Create Admin Profile
+            </Button>
+            <Badge className="text-sm bg-gradient-to-r from-green-600 to-green-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              <Users className="w-4 h-4 mr-2" />
+              {teamMembers.length} Members
+            </Badge>
+          </div>
         </div>
-        <Button 
-          onClick={() => setShowCreateAdmin(true)}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <UserPlus className="w-4 h-4 mr-2" />
-          Create Admin Profile
-        </Button>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Members</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Total Members</CardTitle>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-gray-900">{teamMembers.length}</div>
+              <p className="text-sm text-gray-600 mt-1">
+                Active: {teamMembers.filter(m => m.status === 'active').length}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Pending Approval</CardTitle>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-600 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-yellow-600">
+                {teamMembers.filter(m => m.status === 'pending_approval' || m.status === 'pending').length}
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Awaiting review
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Admins</CardTitle>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-purple-600 flex items-center justify-center">
+                <Shield className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-gray-900">
+                {teamMembers.filter(m => m.role === 'admin' || m.role === 'super_admin').length}
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Administrative staff
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-gray-600">Collectors</CardTitle>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-green-500 to-green-600 flex items-center justify-center">
+                <Users className="h-5 w-5 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-gray-900">
+                {teamMembers.filter(m => m.role === 'collector').length}
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                Field collectors
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Filters */}
+        <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+          <CardHeader className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-t-lg">
+            <CardTitle className="text-xl font-semibold text-white flex items-center gap-2">
+              <Filter className="w-5 h-5" />
+              Filters & Search
+            </CardTitle>
+            <p className="text-gray-300">Filter and search through team members</p>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{teamMembers.length}</div>
-            <p className="text-xs text-muted-foreground">
-              Active: {teamMembers.filter(m => m.status === 'active').length}
-            </p>
-          </CardContent>
-        </Card>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by name, email, employee number..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Approval</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {teamMembers.filter(m => m.status === 'pending_approval' || m.status === 'pending').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Awaiting review
-            </p>
-          </CardContent>
-        </Card>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Role</label>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                    <SelectValue placeholder="All roles" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="collector">Collector</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Admins</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {teamMembers.filter(m => m.role === 'admin' || m.role === 'super_admin').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Administrative staff
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Collectors</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {teamMembers.filter(m => m.role === 'collector').length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Field collectors
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Search</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search by name, email, employee number..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Status</label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                    <SelectValue placeholder="All statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="suspended">Suspended</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Role</label>
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All roles" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="super_admin">Super Admin</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="collector">Collector</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        {/* Pending Collectors Section */}
+        {pendingCollectors.length > 0 && (
+          <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+            <CardHeader className="bg-gradient-to-r from-yellow-600 to-yellow-700 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-white">
+                <Clock className="w-5 h-5" />
+                Pending Collector Approvals
+                <Badge className="bg-white text-yellow-600 border-0 px-3 py-1 rounded-full">
+                  {pendingCollectors.length}
+                </Badge>
+              </CardTitle>
+              <p className="text-yellow-100">
+                Review and approve collector signup requests
+              </p>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {pendingCollectors.map((collector) => (
+                  <TeamMemberCard
+                    key={collector.id}
+                    member={collector}
+                    onApprove={() => handleApproveMember(collector.id)}
+                    onReject={() => handleRejectMember(collector.id)}
+                    getStatusBadge={getStatusBadge}
+                    getRoleBadge={getRoleBadge}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Status</label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="All statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="pending_approval">Pending Approval</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="suspended">Suspended</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        {/* Team Members Grid */}
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-gray-900">Team Members</h2>
+            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
+              {filteredMembers.length} Members
+            </Badge>
           </div>
-        </CardContent>
-      </Card>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredMembers.map((member) => (
+              <TeamMemberCard
+                key={member.id}
+                member={member}
+                onApprove={() => handleApproveMember(member.id)}
+                onReject={() => handleRejectMember(member.id)}
+                getStatusBadge={getStatusBadge}
+                getRoleBadge={getRoleBadge}
+              />
+            ))}
+          </div>
 
-      {/* Pending Collectors Section */}
-      {pendingCollectors.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-yellow-600" />
-              Pending Collector Approvals
-              <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                {pendingCollectors.length}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Review and approve collector signup requests
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pendingCollectors.map((collector) => (
-                <TeamMemberCard
-                  key={collector.id}
-                  member={collector}
-                  onApprove={() => handleApproveMember(collector.id)}
-                  onReject={() => handleRejectMember(collector.id)}
-                  getStatusBadge={getStatusBadge}
-                  getRoleBadge={getRoleBadge}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          {filteredMembers.length === 0 && (
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center mb-6">
+                  <Users className="w-10 h-10 text-gray-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-3">No team members found</h3>
+                <p className="text-gray-600 text-center max-w-md">
+                  {searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
+                    ? 'Try adjusting your filters to see more results.'
+                    : 'Get started by creating an admin profile or wait for collector signups.'}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
-      {/* Team Members Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredMembers.map((member) => (
-          <TeamMemberCard
-            key={member.id}
-            member={member}
-            onApprove={() => handleApproveMember(member.id)}
-            onReject={() => handleRejectMember(member.id)}
-            getStatusBadge={getStatusBadge}
-            getRoleBadge={getRoleBadge}
+        {/* Create Admin Modal */}
+        {showCreateAdmin && (
+          <CreateAdminModal
+            isOpen={showCreateAdmin}
+            onClose={() => setShowCreateAdmin(false)}
+            onSuccess={() => {
+              setShowCreateAdmin(false);
+              loadTeamMembers();
+            }}
           />
-        ))}
+        )}
       </div>
-
-      {filteredMembers.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Users className="w-12 h-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No team members found</h3>
-            <p className="text-gray-600 text-center">
-              {searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
-                ? 'Try adjusting your filters to see more results.'
-                : 'Get started by creating an admin profile or wait for collector signups.'}
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Create Admin Modal */}
-      {showCreateAdmin && (
-        <CreateAdminModal
-          isOpen={showCreateAdmin}
-          onClose={() => setShowCreateAdmin(false)}
-          onSuccess={() => {
-            setShowCreateAdmin(false);
-            loadTeamMembers();
-          }}
-        />
-      )}
     </div>
   );
 }
