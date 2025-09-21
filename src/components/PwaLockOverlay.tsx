@@ -5,13 +5,19 @@ import { usePwaLock } from "@/hooks/use-pwa-lock";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/hooks/use-auth";
+
 
 export default function PwaLockOverlay() {
+	const { user } = useAuth();
 	const { needsSetup, isLocked, setup, unlock } = usePwaLock();
 	const [username, setUsername] = useState("");
 	const [pin, setPin] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+
+	// Only show overlay after authentication
+	if (!user) return null;
 
 	if (!needsSetup && !isLocked) return null;
 
