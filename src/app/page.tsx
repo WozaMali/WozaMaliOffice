@@ -30,7 +30,8 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) {
       // Redirect to main app for login
-      window.location.href = 'http://localhost:8080/admin-login';
+      const mainUrl = process.env.NEXT_PUBLIC_MAIN_URL || 'http://localhost:8080';
+      window.location.href = `${mainUrl}/admin-login`;
     } else if (isAdminUser(user, profile)) {
       // Redirect to admin dashboard
       window.location.href = '/admin';

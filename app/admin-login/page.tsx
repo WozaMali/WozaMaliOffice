@@ -74,7 +74,8 @@ export default function AdminLoginPage() {
       
       if (isAdminUserResult) {
         console.log('AdminLogin: Admin user already logged in, redirecting to Office App admin dashboard');
-        window.location.href = 'http://localhost:8081/admin';
+        const officeUrl = process.env.NEXT_PUBLIC_OFFICE_URL || 'http://localhost:8081';
+        window.location.href = `${officeUrl}/admin`;
       }
     }
   }, [user, router]);
@@ -105,7 +106,8 @@ export default function AdminLoginPage() {
           // Redirect after a short delay
           setTimeout(() => {
             console.log('AdminLogin: Redirecting to Office App admin dashboard...');
-            window.location.href = 'http://localhost:8081/admin';
+            const officeUrl = process.env.NEXT_PUBLIC_OFFICE_URL || 'http://localhost:8081';
+            window.location.href = `${officeUrl}/admin`;
           }, 1500);
         } else {
           setError('Access denied. This account does not have administrator privileges.');
@@ -142,7 +144,8 @@ export default function AdminLoginPage() {
         // Redirect after a short delay
         setTimeout(() => {
           console.log('AdminLogin: Redirecting to Office App admin dashboard...');
-          window.location.href = 'http://localhost:8081/admin';
+          const officeUrl = process.env.NEXT_PUBLIC_OFFICE_URL || 'http://localhost:8081';
+          window.location.href = `${officeUrl}/admin`;
         }, 1500);
       } else {
         console.error('AdminLogin: Super admin login failed:', result.error);
@@ -179,7 +182,8 @@ export default function AdminLoginPage() {
           // Redirect after a short delay
           setTimeout(() => {
             console.log('AdminLogin: Redirecting to Office App admin dashboard...');
-            window.location.href = 'http://localhost:8081/admin';
+            const officeUrl = process.env.NEXT_PUBLIC_OFFICE_URL || 'http://localhost:8081';
+            window.location.href = `${officeUrl}/admin`;
           }, 1500);
         } else {
           setError('Access denied. Demo account does not have administrator privileges.');
