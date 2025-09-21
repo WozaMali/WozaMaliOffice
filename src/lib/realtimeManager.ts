@@ -63,7 +63,7 @@ class RealtimeManager {
         // re-attach all channels
         const specs = Array.from(this.channels.values()).map(e => e.spec)
         // clean up old instances
-        for (const entry of this.channels.values()) {
+        for (const entry of Array.from(this.channels.values())) {
           try { entry.instance?.unsubscribe() } catch {}
           entry.instance = null
         }
