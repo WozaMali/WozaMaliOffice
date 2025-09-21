@@ -235,18 +235,18 @@ export default function AdminLoginPage() {
   // Show loading only briefly while auth initializes
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black flex items-center justify-center p-4">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Initializing...</h2>
-          <p className="text-gray-600">Setting up authentication system</p>
+          <h2 className="text-xl font-semibold text-gray-100 mb-2">Initializing...</h2>
+          <p className="text-gray-300">Setting up authentication system</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-black flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Back Button removed */}
 
