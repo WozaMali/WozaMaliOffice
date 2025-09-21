@@ -47,7 +47,7 @@ interface TeamMember {
 }
 
 export default function TeamMembersPage() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<TeamMember[]>([]);
   const [pendingCollectors, setPendingCollectors] = useState<TeamMember[]>([]);
@@ -202,13 +202,14 @@ export default function TeamMembersPage() {
 
   const handleApproveMember = async (memberId: string) => {
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          status: 'active',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', memberId);
+      const approverId = user?.id;
+      if (!approverId) throw new Error('Not authenticated');
+
+      // Prefer database RPC to ensure all side-effects/logging are applied
+      const { error } = await supabase.rpc('approve_collector', {
+        p_user_id: memberId,
+        p_approver_id: approverId
+      });
 
       if (error) throw error;
 
@@ -222,13 +223,14 @@ export default function TeamMembersPage() {
 
   const handleRejectMember = async (memberId: string) => {
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          status: 'suspended',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', memberId);
+      const approverId = user?.id;
+      if (!approverId) throw new Error('Not authenticated');
+
+      const { error } = await supabase.rpc('reject_collector', {
+        p_user_id: memberId,
+        p_approver_id: approverId,
+        p_reason: 'Rejected from Team Members page'
+      });
 
       if (error) throw error;
 

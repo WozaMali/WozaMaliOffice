@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { realtimeManager } from './realtimeManager';
 
 // Unified interfaces for shared data
 export interface UnifiedPickup {
@@ -619,63 +620,53 @@ export class UnifiedDataService {
 
     // Collections channel
     if (callbacks.onPickupChange) {
-      const collectionsChannel = supabase
-        .channel('unified_collections_changes')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'unified_collections' }, 
-          callbacks.onPickupChange
-        )
-        .subscribe();
-      channels.push(collectionsChannel);
+      realtimeManager.subscribe('unified_collections_changes', (channel) => {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'unified_collections' }, callbacks.onPickupChange!)
+      })
+      channels.push('unified_collections_changes' as any)
     }
 
     // Customers channel
     if (callbacks.onCustomerChange) {
-      const customersChannel = supabase
-        .channel('unified_customers_changes')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'user_profiles' }, 
-          (payload: any) => {
-            if (payload.new?.role === 'member' || payload.old?.role === 'member') {
-              callbacks.onCustomerChange!(payload);
-            }
+      realtimeManager.subscribe('unified_customers_changes', (channel) => {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, (payload: any) => {
+          if (payload.new?.role === 'member' || payload.old?.role === 'member') {
+            callbacks.onCustomerChange!(payload)
           }
-        )
-        .subscribe();
-      channels.push(customersChannel);
+        })
+      })
+      channels.push('unified_customers_changes' as any)
     }
 
     // Collectors channel
     if (callbacks.onCollectorChange) {
-      const collectorsChannel = supabase
-        .channel('unified_collectors_changes')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'user_profiles' }, 
-          (payload: any) => {
-            if (payload.new?.role === 'collector' || payload.old?.role === 'collector') {
-              callbacks.onCollectorChange!(payload);
-            }
+      realtimeManager.subscribe('unified_collectors_changes', (channel) => {
+        channel.on('postgres_changes', { event: '*', schema: 'public', table: 'user_profiles' }, (payload: any) => {
+          if (payload.new?.role === 'collector' || payload.old?.role === 'collector') {
+            callbacks.onCollectorChange!(payload)
           }
-        )
-        .subscribe();
-      channels.push(collectorsChannel);
+        })
+      })
+      channels.push('unified_collectors_changes' as any)
     }
 
     // System-wide changes
     if (callbacks.onSystemChange) {
-      const systemChannel = supabase
-        .channel('unified_system_changes')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public' }, 
-          callbacks.onSystemChange
-        )
-        .subscribe();
-      channels.push(systemChannel);
+      realtimeManager.subscribe('unified_system_changes', (channel) => {
+        channel.on('postgres_changes', { event: '*', schema: 'public' }, callbacks.onSystemChange!)
+      })
+      channels.push('unified_system_changes' as any)
     }
 
     // Return cleanup function
     return () => {
-      channels.forEach(channel => channel.unsubscribe());
+      channels.forEach((name: any) => {
+        if (typeof name === 'string') {
+          realtimeManager.unsubscribe(name)
+        } else {
+          try { name?.unsubscribe?.() } catch {}
+        }
+      })
     };
   }
 }

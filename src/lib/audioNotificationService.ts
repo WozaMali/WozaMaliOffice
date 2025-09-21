@@ -44,7 +44,7 @@ class AudioNotificationService {
     return this.audioContext;
   }
 
-  private createPingSound(frequency: number, duration: number = 0.2): void {
+  private createPingSound(frequency: number, duration: number = 0.35): void {
     if (!this.isEnabled) return;
 
     this.getAudioContext().then(audioContext => {
@@ -58,7 +58,7 @@ class AudioNotificationService {
       oscillator.type = 'sine';
 
       gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-      gainNode.gain.linearRampToValueAtTime(this.volume * 0.3, audioContext.currentTime + 0.01);
+      gainNode.gain.linearRampToValueAtTime(Math.max(0.05, this.volume * 0.6), audioContext.currentTime + 0.02);
       gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
 
       oscillator.start(audioContext.currentTime);
@@ -66,6 +66,14 @@ class AudioNotificationService {
     }).catch(error => {
       console.warn('Failed to play audio notification:', error);
     });
+  }
+
+  // Ensure audio context is unlocked by a user gesture
+  ensureUnlocked(): void {
+    this.getAudioContext().then(ctx => {
+      if (ctx.state === 'running') return;
+      ctx.resume().catch(() => {});
+    }).catch(() => {});
   }
 
   playCollectionSound(): void {

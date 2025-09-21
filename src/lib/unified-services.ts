@@ -5,6 +5,7 @@
 // Provides administrative control over user wallets, metrics, and points
 
 import { supabase } from './supabase'
+import { realtimeManager } from './realtimeManager'
 import {
   UserProfile,
   CollectionPickup,
@@ -537,62 +538,62 @@ export const analyticsServices = {
 export const realtimeServices = {
   // Subscribe to user profile changes
   subscribeToUserProfiles(callback: (payload: any) => void) {
-    return supabase
-      .channel('user_profiles_changes')
-      .on('postgres_changes', {
+    realtimeManager.subscribe('user_profiles_changes', (channel) => {
+      channel.on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'user_profiles'
       }, callback)
-      .subscribe()
+    })
+    return () => { realtimeManager.unsubscribe('user_profiles_changes') }
   },
 
   // Subscribe to collection pickup changes
   subscribeToCollectionPickups(callback: (payload: any) => void) {
-    return supabase
-      .channel('collection_pickups_changes')
-      .on('postgres_changes', {
+    realtimeManager.subscribe('collection_pickups_changes', (channel) => {
+      channel.on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'collection_pickups'
       }, callback)
-      .subscribe()
+    })
+    return () => { realtimeManager.unsubscribe('collection_pickups_changes') }
   },
 
   // Subscribe to pickup items changes
   subscribeToPickupItems(callback: (payload: any) => void) {
-    return supabase
-      .channel('pickup_items_changes')
-      .on('postgres_changes', {
+    realtimeManager.subscribe('pickup_items_changes', (channel) => {
+      channel.on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'pickup_items'
       }, callback)
-      .subscribe()
+    })
+    return () => { realtimeManager.unsubscribe('pickup_items_changes') }
   },
 
   // Subscribe to user wallet changes
   subscribeToUserWallets(callback: (payload: any) => void) {
-    return supabase
-      .channel('user_wallets_changes')
-      .on('postgres_changes', {
+    realtimeManager.subscribe('user_wallets_changes', (channel) => {
+      channel.on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'user_wallets'
       }, callback)
-      .subscribe()
+    })
+    return () => { realtimeManager.unsubscribe('user_wallets_changes') }
   },
 
   // Subscribe to admin actions log
   subscribeToAdminActions(callback: (payload: any) => void) {
-    return supabase
-      .channel('admin_actions_changes')
-      .on('postgres_changes', {
+    realtimeManager.subscribe('admin_actions_changes', (channel) => {
+      channel.on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'admin_actions_log'
       }, callback)
-      .subscribe()
+    })
+    return () => { realtimeManager.unsubscribe('admin_actions_changes') }
   }
 }
 

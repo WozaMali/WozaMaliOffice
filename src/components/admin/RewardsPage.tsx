@@ -26,27 +26,61 @@ import {
   deleteReward, 
   toggleRewardStatus,
   Reward,
-  CreateRewardData 
+  CreateRewardData,
+  uploadRewardLogo 
 } from '@/lib/rewardsService';
 
-interface Reward {
+interface RewardItem {
   id: string;
   name: string;
   description: string;
   points_required: number;
   category: string;
   is_active: boolean;
+  logo_url?: string;
+  redeem_url?: string;
+  order_url?: string;
   created_at: string;
   updated_at: string;
 }
 
 export default function RewardsPage() {
-  const [rewards, setRewards] = useState<Reward[]>([]);
-  const [filteredRewards, setFilteredRewards] = useState<Reward[]>([]);
+  const [rewards, setRewards] = useState<RewardItem[]>([]);
+  const [filteredRewards, setFilteredRewards] = useState<RewardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Create modal state
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState<{
+    name: string;
+    description: string;
+    points_required: string;
+    category: 'cash' | 'service' | 'product' | 'voucher';
+    is_active: boolean;
+    redeem_url?: string;
+    order_url?: string;
+  }>({ name: '', description: '', points_required: '', category: 'cash', is_active: true });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Edit modal state
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    description: string;
+    points_required: string;
+    category: 'cash' | 'service' | 'product' | 'voucher';
+    is_active: boolean;
+    redeem_url?: string;
+    order_url?: string;
+  }>({ name: '', description: '', points_required: '', category: 'cash', is_active: true });
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Load rewards from database
   useEffect(() => {
@@ -128,6 +162,69 @@ export default function RewardsPage() {
     }
   };
 
+  const openEditModal = (reward: RewardItem) => {
+    setEditingId(reward.id);
+    setEditForm({
+      name: reward.name,
+      description: reward.description || '',
+      points_required: String(reward.points_required ?? ''),
+      category: (reward.category as any) || 'cash',
+      is_active: !!reward.is_active,
+      redeem_url: reward.redeem_url || '',
+      order_url: reward.order_url || ''
+    });
+    setEditError(null);
+    setIsEditOpen(true);
+  };
+
+  const handleDelete = async (reward: RewardItem) => {
+    const ok = typeof window !== 'undefined' ? window.confirm(`Delete reward "${reward.name}"?`) : true;
+    if (!ok) return;
+    const res = await deleteReward(reward.id);
+    if (!res.success) {
+      // eslint-disable-next-line no-console
+      console.error('Delete reward failed:', res.error);
+      return;
+    }
+    await loadRewards();
+  };
+
+  const submitEdit = async () => {
+    if (!editingId) return;
+    if (!editForm.name || !editForm.points_required) {
+      setEditError('Name and points are required.');
+      return;
+    }
+    try {
+      setEditSubmitting(true);
+      setEditError(null);
+      const resp = await fetch(`/api/admin/rewards/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name,
+          description: editForm.description,
+          points_required: Number(editForm.points_required || 0),
+          category: editForm.category,
+          is_active: !!editForm.is_active,
+          redeem_url: editForm.redeem_url || null,
+          order_url: editForm.order_url || null,
+        }),
+      });
+      if (!resp.ok) {
+        const msg = await resp.json().catch(() => ({} as any));
+        throw new Error((msg as any)?.error || `HTTP ${resp.status}`);
+      }
+      setIsEditOpen(false);
+      setEditingId(null);
+      await loadRewards();
+    } catch (e: any) {
+      setEditError(e?.message || 'Failed to update reward.');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -137,12 +234,12 @@ export default function RewardsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+      <div className="w-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Rewards Management</h1>
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Rewards Management</h1>
             <p className="text-gray-600">Configure and manage reward options for users</p>
           </div>
           <div className="flex items-center gap-3">
@@ -154,7 +251,7 @@ export default function RewardsPage() {
               <Target className="w-4 h-4 mr-2" />
               {rewards.filter(r => r.is_active).length} Active
             </Badge>
-            <Button className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0 shadow-lg">
+            <Button className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border-0 shadow-lg" onClick={() => setIsCreateOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Add New Reward
             </Button>
@@ -162,7 +259,7 @@ export default function RewardsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-semibold text-blue-900">Total Rewards</CardTitle>
@@ -301,6 +398,7 @@ export default function RewardsPage() {
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Points Required</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Links</th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -352,10 +450,83 @@ export default function RewardsPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" className="border-gray-300 hover:bg-gray-50">
+                          {reward.redeem_url ? (
+                            <a
+                              href={reward.redeem_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-emerald-700 hover:text-emerald-900 underline"
+                            >
+                              Redeem Link
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                          {reward.order_url ? (
+                            <a
+                              href={reward.order_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-700 hover:text-blue-900 underline"
+                            >
+                              Order Link
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          {reward.redeem_url && (
+                            <a
+                              href={reward.redeem_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-1 rounded border border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                            >
+                              Open Redeem
+                            </a>
+                          )}
+                          {reward.order_url && (
+                            <a
+                              href={reward.order_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                            >
+                              Open Order
+                            </a>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="border-gray-300 hover:bg-gray-50"
+                            onClick={() => openEditModal(reward)}
+                          >
                             <Edit className="w-4 h-4" />
                           </Button>
-                          <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 border-red-300 hover:bg-red-50"
+                            onClick={async () => {
+                              const ok = typeof window !== 'undefined' ? window.confirm(`Delete reward \"${reward.name}\"?`) : true;
+                              if (!ok) return;
+                              try {
+                                const resp = await fetch(`/api/admin/rewards/${reward.id}`, { method: 'DELETE' });
+                                if (!resp.ok) {
+                                  const msg = await resp.json().catch(() => ({} as any));
+                                  throw new Error((msg as any)?.error || `HTTP ${resp.status}`);
+                                }
+                                await loadRewards();
+                              } catch (e: any) {
+                                // eslint-disable-next-line no-console
+                                console.error('Delete failed:', e?.message || e);
+                                alert(`Failed to delete: ${e?.message || 'Unknown error'}`);
+                              }
+                            }}
+                          >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -378,6 +549,170 @@ export default function RewardsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Create Reward Modal */}
+        {isCreateOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setIsCreateOpen(false)} />
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 text-gray-900">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Create New Reward</h3>
+                <button onClick={() => setIsCreateOpen(false)} className="text-gray-500 hover:text-gray-700" aria-label="Close">x</button>
+              </div>
+              <div className="p-6 space-y-4">
+                {createError && (
+                  <div className="bg-red-50 text-red-700 border border-red-200 rounded px-3 py-2 text-sm">{createError}</div>
+                )}
+                <div>
+                  <Label className="text-sm text-gray-700">Name</Label>
+                  <Input value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} placeholder="Reward name" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                </div>
+                <div>
+                  <Label className="text-sm text-gray-700">Description</Label>
+                  <Input value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} placeholder="Reward description" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-700">Points Required</Label>
+                    <Input type="number" min={0} value={createForm.points_required} onChange={(e) => setCreateForm({ ...createForm, points_required: e.target.value })} placeholder="e.g. 500" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-700">Category</Label>
+                    <select value={createForm.category} onChange={(e) => setCreateForm({ ...createForm, category: e.target.value as any })} className="mt-1 w-full rounded-md px-3 py-2 text-sm bg-gray-800 border border-gray-600 text-white focus:border-blue-500 focus:ring-blue-500">
+                      <option value="cash">Cash</option>
+                      <option value="service">Service</option>
+                      <option value="product">Product</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-700">Redeem URL (Main App button)</Label>
+                    <Input value={createForm.redeem_url || ''} onChange={(e) => setCreateForm({ ...createForm, redeem_url: e.target.value })} placeholder="https://... (optional)" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-700">Order URL (Main App button)</Label>
+                    <Input value={createForm.order_url || ''} onChange={(e) => setCreateForm({ ...createForm, order_url: e.target.value })} placeholder="https://... (optional)" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm text-gray-700">Company Logo (optional)</Label>
+                  <input type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] || null)} className="mt-1 w-full text-sm" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input id="is_active" type="checkbox" checked={createForm.is_active} onChange={(e) => setCreateForm({ ...createForm, is_active: e.target.checked })} className="h-4 w-4" />
+                  <Label htmlFor="is_active" className="text-sm text-gray-700">Active</Label>
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                <Button variant="outline" className="border-gray-300" onClick={() => setIsCreateOpen(false)} disabled={submitting}>Cancel</Button>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={submitting} onClick={async () => {
+                  try {
+                    setSubmitting(true);
+                    setCreateError(null);
+                    if (!createForm.name || !createForm.points_required) {
+                      setCreateError('Name and points are required.');
+                      setSubmitting(false);
+                      return;
+                    }
+
+                    // Build multipart payload to let the API handle file upload + insert
+                    const form = new FormData();
+                    form.append('name', createForm.name);
+                    form.append('description', createForm.description || '');
+                    form.append('points_required', String(Number(createForm.points_required || 0)));
+                    form.append('category', createForm.category);
+                    form.append('is_active', String(!!createForm.is_active));
+                    if (createForm.redeem_url) form.append('redeem_url', createForm.redeem_url);
+                    if (createForm.order_url) form.append('order_url', createForm.order_url);
+                    if (logoFile) form.append('logo', logoFile, logoFile.name);
+
+                    const resp = await fetch('/api/admin/rewards', {
+                      method: 'POST',
+                      body: form
+                    });
+                    if (!resp.ok) {
+                      const msg = await resp.json().catch(() => ({}));
+                      throw new Error(msg?.error || `HTTP ${resp.status}`);
+                    }
+
+                    setIsCreateOpen(false);
+                    setCreateForm({ name: '', description: '', points_required: '', category: 'cash', is_active: true, redeem_url: '', order_url: '' });
+                    setLogoFile(null);
+                    await loadRewards();
+                  } catch (e: any) {
+                    setCreateError(e?.message || 'Failed to create reward.');
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}>
+                  {submitting ? 'Creating...' : 'Create Reward'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Reward Modal */}
+        {isEditOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setIsEditOpen(false)} />
+            <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 text-gray-900">
+              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Edit Reward</h3>
+                <button onClick={() => setIsEditOpen(false)} className="text-gray-500 hover:text-gray-700" aria-label="Close">x</button>
+              </div>
+              <div className="p-6 space-y-4">
+                {editError && (
+                  <div className="bg-red-50 text-red-700 border border-red-200 rounded px-3 py-2 text-sm">{editError}</div>
+                )}
+                <div>
+                  <Label className="text-sm text-gray-700">Name</Label>
+                  <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Reward name" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                </div>
+                <div>
+                  <Label className="text-sm text-gray-700">Description</Label>
+                  <Input value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Reward description" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-700">Points Required</Label>
+                    <Input type="number" min={0} value={editForm.points_required} onChange={(e) => setEditForm({ ...editForm, points_required: e.target.value })} placeholder="e.g. 500" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-700">Category</Label>
+                    <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value as any })} className="mt-1 w-full rounded-md px-3 py-2 text-sm bg-gray-800 border border-gray-600 text-white focus:border-blue-500 focus:ring-blue-500">
+                      <option value="cash">Cash</option>
+                      <option value="service">Service</option>
+                      <option value="product">Product</option>
+                      <option value="voucher">Voucher</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm text-gray-700">Redeem URL (Main App button)</Label>
+                    <Input value={editForm.redeem_url || ''} onChange={(e) => setEditForm({ ...editForm, redeem_url: e.target.value })} placeholder="https://... (optional)" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                  </div>
+                  <div>
+                    <Label className="text-sm text-gray-700">Order URL (Main App button)</Label>
+                    <Input value={editForm.order_url || ''} onChange={(e) => setEditForm({ ...editForm, order_url: e.target.value })} placeholder="https://... (optional)" className="mt-1 bg-gray-800 border-gray-600 text-white placeholder-gray-400" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input id="edit_is_active" type="checkbox" checked={editForm.is_active} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })} className="h-4 w-4" />
+                  <Label htmlFor="edit_is_active" className="text-sm text-gray-700">Active</Label>
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+                <Button variant="outline" className="border-gray-300" onClick={() => setIsEditOpen(false)} disabled={editSubmitting}>Cancel</Button>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={editSubmitting} onClick={submitEdit}>
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

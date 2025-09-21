@@ -63,7 +63,7 @@ export default function TeamMemberCard({
   const canApprove = isPending && (member.role === 'collector' || member.role === 'staff' || member.role === 'COLLECTOR' || member.role === 'STAFF');
 
   return (
-    <Card className="hover:shadow-lg transition-shadow duration-200">
+    <Card className="hover:shadow-xl transition-all duration-200 border-0 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex-1">
@@ -71,8 +71,11 @@ export default function TeamMemberCard({
               {member.full_name}
             </CardTitle>
             <div className="flex items-center gap-2 mb-2">
-              {getRoleBadge(member.role)}
-              {getStatusBadge(member.status, member.is_approved)}
+              {/* 3D status badge */}
+              <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gradient-to-b from-gray-100 to-gray-300 text-gray-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_4px_10px_rgba(0,0,0,0.12)]">
+                <span className={`w-2 h-2 rounded-full ${member.status==='active'?'bg-green-500':'bg-yellow-500'} shadow`} />
+                <span className="text-xs font-semibold capitalize">{(member.status||'').replace('_',' ')}</span>
+              </div>
             </div>
           </div>
           
@@ -159,27 +162,22 @@ export default function TeamMemberCard({
           )}
         </div>
 
-        {/* Action Buttons for Pending Members */}
+        {/* Actions */}
         {canApprove && (
           <div className="pt-3 border-t border-gray-100">
-            <div className="flex gap-2">
-              <Button
-                onClick={onApprove}
-                size="sm"
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-              >
-                <UserCheck className="w-4 h-4 mr-1" />
-                Approve
-              </Button>
-              <Button
-                onClick={onReject}
-                size="sm"
-                variant="outline"
-                className="flex-1 text-red-600 border-red-600 hover:bg-red-50"
-              >
-                <UserX className="w-4 h-4 mr-1" />
-                Reject
-              </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg p-1 bg-gradient-to-b from-green-400 to-green-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_6px_16px_rgba(0,128,0,0.35)]">
+                <Button onClick={onApprove} size="sm" className="w-full bg-transparent hover:bg-white/10 text-white">
+                  <UserCheck className="w-4 h-4 mr-1" />
+                  Approve
+                </Button>
+              </div>
+              <div className="rounded-lg p-1 bg-gradient-to-b from-red-400 to-red-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),0_6px_16px_rgba(128,0,0,0.35)]">
+                <Button onClick={onReject} size="sm" className="w-full bg-transparent hover:bg-white/10 text-white">
+                  <UserX className="w-4 h-4 mr-1" />
+                  Reject
+                </Button>
+              </div>
             </div>
           </div>
         )}

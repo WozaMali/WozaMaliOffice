@@ -1,10 +1,8 @@
 {
-  "name": "woza-mali-office",
-  "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "npm ci",
+  "buildCommand": "next build",
+  "devCommand": "npm run dev",
+  "regions": ["iad1"]
 }

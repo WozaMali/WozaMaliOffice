@@ -23,6 +23,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     phone: '',
     role: 'admin',
     township: '',
+    employeeNumber: '',
     password: '',
     confirmPassword: ''
   });
@@ -69,6 +70,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
           phone: formData.phone,
           role: formData.role,
           township: formData.township || null,
+          employeeNumber: formData.employeeNumber || null,
           password: formData.password
         }),
       });
@@ -113,6 +115,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
       phone: '',
       role: 'admin',
       township: '',
+      employeeNumber: '',
       password: '',
       confirmPassword: ''
     });
@@ -278,6 +281,22 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
                         className="border-gray-300 focus:border-green-500 focus:ring-green-500"
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="employeeNumber" className="text-sm font-medium text-gray-700">
+                      Employee Number (optional)
+                    </Label>
+                    <Input
+                      id="employeeNumber"
+                      value={formData.employeeNumber}
+                      onChange={(e) => handleInputChange('employeeNumber', e.target.value)}
+                      placeholder={formData.role === 'collector' ? 'SNW-C0001 (auto if blank)' : 'SNW0001 (auto if blank)'}
+                      className="border-gray-300 focus:border-green-500 focus:ring-green-500"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Admins default to SNW0001; Collectors to SNW-C0001. Leave blank to auto-generate next.
+                    </p>
                   </div>
                 </div>
 

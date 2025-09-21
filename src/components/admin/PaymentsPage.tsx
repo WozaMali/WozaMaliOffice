@@ -180,12 +180,12 @@ export default function PaymentsPage() {
   const pendingAmount = withdrawals.filter(p => p.status === 'pending').reduce((sum, p) => sum + (p.amount || 0), 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+      <div className="w-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Payment Management</h1>
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Payment Management</h1>
             <p className="text-gray-600">Manage withdrawals and payment processing</p>
           </div>
           <div className="flex items-center gap-3">
@@ -201,7 +201,7 @@ export default function PaymentsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-semibold text-blue-900">Total Payments</CardTitle>

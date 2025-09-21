@@ -24,7 +24,8 @@ export async function POST(request: NextRequest) {
       role, 
       department, 
       township, 
-      password 
+      password,
+      employeeNumber
     } = body;
 
     // Validate required fields
@@ -35,19 +36,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate employee number
-    const { data: latestUser } = await supabaseAdmin
-      .from('users')
-      .select('employee_number')
-      .not('employee_number', 'is', null)
-      .order('employee_number', { ascending: false })
-      .limit(1)
-      .single();
+    // Generate employee number by role if not provided
+    let empNumber = (employeeNumber && String(employeeNumber).trim()) || '';
+    if (!empNumber) {
+      const isCollector = String(role).toLowerCase() === 'collector';
+      const prefix = isCollector ? 'SNW-C' : 'SNW';
 
-    let empNumber = 'EMP0001';
-    if (latestUser?.employee_number) {
-      const lastNumber = parseInt(latestUser.employee_number.replace('EMP', ''));
-      empNumber = `EMP${String(lastNumber + 1).padStart(4, '0')}`;
+      // Find latest matching pattern for this role
+      const { data: latest } = await supabaseAdmin
+        .from('users')
+        .select('employee_number')
+        .not('employee_number', 'is', null)
+        .ilike('employee_number', `${prefix}%`)
+        .order('employee_number', { ascending: false })
+        .limit(1)
+        .single();
+
+      const fallback = isCollector ? 'SNW-C0001' : 'SNW0001';
+      if (!latest?.employee_number) {
+        empNumber = fallback;
+      } else {
+        const current = String(latest.employee_number);
+        const base = isCollector ? current.replace(/^SNW-C/, '') : current.replace(/^SNW/, '');
+        const n = parseInt(base, 10);
+        const next = isNaN(n) ? 1 : n + 1;
+        empNumber = `${prefix}${String(next).padStart(4, '0')}`;
+      }
     }
 
     // Step 1: Create user in auth.users using admin client

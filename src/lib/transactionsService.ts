@@ -206,6 +206,26 @@ export async function deletePointsTransaction(transactionId: string): Promise<De
       } else {
         console.log('✅ Deleted wallet_update_queue entries');
       }
+
+      // Delete related Green Scholar PET contribution transactions
+      const { error: gsError } = await supabase
+        .from('green_scholar_transactions')
+        .delete()
+        .eq('source_type', 'collection')
+        .eq('source_id', transaction.source_id);
+
+      if (gsError) {
+        console.warn('Warning: Could not delete green_scholar_transactions:', gsError);
+      } else {
+        console.log('✅ Deleted related green_scholar_transactions');
+      }
+
+      // Best-effort refresh of Green Scholar balance snapshot (ignore if RPC not present)
+      try {
+        await supabase.rpc('refresh_green_scholar_fund_balance');
+      } catch (refreshError: any) {
+        console.warn('Green Scholar balance refresh skipped:', refreshError?.message || refreshError);
+      }
     }
 
     console.log('✅ Points transaction deleted successfully');
@@ -337,6 +357,26 @@ export async function deleteMonetaryTransaction(transactionId: string): Promise<
       } else {
         console.log('✅ Deleted wallet_update_queue entries');
       }
+
+      // Delete related Green Scholar PET contribution transactions
+      const { error: gsError } = await supabase
+        .from('green_scholar_transactions')
+        .delete()
+        .eq('source_type', 'collection')
+        .eq('source_id', transaction.source_id);
+
+      if (gsError) {
+        console.warn('Warning: Could not delete green_scholar_transactions:', gsError);
+      } else {
+        console.log('✅ Deleted related green_scholar_transactions');
+      }
+
+      // Best-effort refresh of Green Scholar balance snapshot (ignore if RPC not present)
+      try {
+        await supabase.rpc('refresh_green_scholar_fund_balance');
+      } catch (refreshError: any) {
+        console.warn('Green Scholar balance refresh skipped:', refreshError?.message || refreshError);
+      }
     }
 
     console.log('✅ Monetary transaction deleted successfully');
@@ -405,7 +445,7 @@ export async function deleteMultiplePointsTransactions(transactionIds: string[])
     }
 
     // Delete collection records for each affected source_id
-    for (const [sourceId, totalAmountToSubtract] of sourceUpdates) {
+    for (const [sourceId, totalAmountToSubtract] of Array.from(sourceUpdates)) {
       console.log('🔄 Deleting collection records for source_id:', sourceId);
       
       // Delete from unified_collections table
@@ -467,6 +507,26 @@ export async function deleteMultiplePointsTransactions(transactionIds: string[])
       } else {
         console.log('✅ Deleted wallet_update_queue entries for source_id', sourceId);
       }
+
+      // Delete related Green Scholar PET contribution transactions for this collection
+      const { error: gsError } = await supabase
+        .from('green_scholar_transactions')
+        .delete()
+        .eq('source_type', 'collection')
+        .eq('source_id', sourceId);
+
+      if (gsError) {
+        console.warn('Warning: Could not delete green_scholar_transactions for source_id', sourceId, ':', gsError);
+      } else {
+        console.log('✅ Deleted related green_scholar_transactions for source_id', sourceId);
+      }
+    }
+
+    // Best-effort refresh of Green Scholar balance snapshot (ignore if RPC not present)
+    try {
+      await supabase.rpc('refresh_green_scholar_fund_balance');
+    } catch (refreshError: any) {
+      console.warn('Green Scholar balance refresh skipped:', refreshError?.message || refreshError);
     }
 
     console.log('✅ Multiple points transactions deleted successfully');
@@ -535,7 +595,7 @@ export async function deleteMultipleMonetaryTransactions(transactionIds: string[
     }
 
     // Delete collection records for each affected source_id
-    for (const [sourceId, totalAmountToSubtract] of sourceUpdates) {
+    for (const [sourceId, totalAmountToSubtract] of Array.from(sourceUpdates)) {
       console.log('🔄 Deleting collection records for source_id:', sourceId);
       
       // Delete from unified_collections table
@@ -597,6 +657,26 @@ export async function deleteMultipleMonetaryTransactions(transactionIds: string[
       } else {
         console.log('✅ Deleted wallet_update_queue entries for source_id', sourceId);
       }
+
+      // Delete related Green Scholar PET contribution transactions for this collection
+      const { error: gsError } = await supabase
+        .from('green_scholar_transactions')
+        .delete()
+        .eq('source_type', 'collection')
+        .eq('source_id', sourceId);
+
+      if (gsError) {
+        console.warn('Warning: Could not delete green_scholar_transactions for source_id', sourceId, ':', gsError);
+      } else {
+        console.log('✅ Deleted related green_scholar_transactions for source_id', sourceId);
+      }
+    }
+
+    // Best-effort refresh of Green Scholar balance snapshot (ignore if RPC not present)
+    try {
+      await supabase.rpc('refresh_green_scholar_fund_balance');
+    } catch (refreshError: any) {
+      console.warn('Green Scholar balance refresh skipped:', refreshError?.message || refreshError);
     }
 
     console.log('✅ Multiple monetary transactions deleted successfully');
@@ -678,6 +758,26 @@ export async function deleteTransactionsBySource(sourceId: string): Promise<Dele
     }
 
     console.log('✅ Transactions deleted by source successfully');
+
+    // Also delete related Green Scholar PET contribution transactions for this source collection
+    const { error: gsError } = await supabase
+      .from('green_scholar_transactions')
+      .delete()
+      .eq('source_type', 'collection')
+      .eq('source_id', sourceId);
+
+    if (gsError) {
+      console.warn('Warning: Could not delete green_scholar_transactions for source_id', sourceId, ':', gsError);
+    } else {
+      console.log('✅ Deleted related green_scholar_transactions for source_id', sourceId);
+    }
+
+    // Best-effort refresh of Green Scholar balance snapshot (ignore if RPC not present)
+    try {
+      await supabase.rpc('refresh_green_scholar_fund_balance');
+    } catch (refreshError: any) {
+      console.warn('Green Scholar balance refresh skipped:', refreshError?.message || refreshError);
+    }
     return {
       success: true,
       message: 'Transactions deleted by source successfully',

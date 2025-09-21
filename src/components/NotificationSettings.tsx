@@ -7,6 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Bell, Volume2, VolumeX, TestTube } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
+import { audioNotificationService } from '@/lib/audioNotificationService';
 
 export function NotificationSettings() {
   const { 
@@ -21,10 +22,14 @@ export function NotificationSettings() {
 
   const handleVolumeChange = (value: number[]) => {
     setAudioVolume(value[0]);
+    // play a short click to confirm volume level (user gesture path)
+    audioNotificationService.ensureUnlocked();
+    audioNotificationService.playCollectionSound();
   };
 
   const testCollectionSound = async () => {
     setIsTesting(true);
+    audioNotificationService.ensureUnlocked();
     addNotification({
       type: 'collection',
       title: 'Test Collection Notification',
@@ -35,6 +40,7 @@ export function NotificationSettings() {
 
   const testWithdrawalSound = async () => {
     setIsTesting(true);
+    audioNotificationService.ensureUnlocked();
     addNotification({
       type: 'withdrawal',
       title: 'Test Withdrawal Notification',

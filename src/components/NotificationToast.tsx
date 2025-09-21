@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { X, Bell, DollarSign, Package } from 'lucide-react';
 
 interface NotificationToastProps {
-  type: 'collection' | 'withdrawal';
+  type: 'collection' | 'withdrawal' | 'system' | 'error';
   title: string;
   message: string;
   onClose: () => void;
@@ -46,6 +46,10 @@ export function NotificationToast({
         return <Package className="h-5 w-5 text-green-600" />;
       case 'withdrawal':
         return <DollarSign className="h-5 w-5 text-blue-600" />;
+      case 'system':
+        return <Bell className="h-5 w-5 text-yellow-600" />;
+      case 'error':
+        return <Bell className="h-5 w-5 text-red-600" />;
       default:
         return <Bell className="h-5 w-5 text-gray-600" />;
     }
@@ -57,6 +61,10 @@ export function NotificationToast({
         return 'bg-green-50 border-green-200';
       case 'withdrawal':
         return 'bg-blue-50 border-blue-200';
+      case 'system':
+        return 'bg-yellow-50 border-yellow-200';
+      case 'error':
+        return 'bg-red-50 border-red-200';
       default:
         return 'bg-gray-50 border-gray-200';
     }

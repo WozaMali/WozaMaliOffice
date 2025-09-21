@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 
 // Helper function to check if user has admin privileges
-const isAdminUser = (user, profile) => {
+const isAdminUser = (user: any, profile: any) => {
   if (!user) return false;
   
   // Check profile role first (from database)
@@ -73,6 +73,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { notificationManager } from '@/lib/notificationManager';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { ResetTransactionsDialog } from '@/components/ResetTransactionsDialog';
+import RealtimeStatusDot from '@/components/RealtimeStatusDot';
 import TransactionsPage from '@/components/TransactionsPage';
 import {
   getPickups, 
@@ -86,6 +87,7 @@ import {
 } from '../../src/lib/admin-services';
 import { softDeleteCollection } from '../../src/lib/soft-delete-service';
 import { supabase } from '../../src/lib/supabase';
+import { realtimeManager } from '../../src/lib/realtimeManager';
 import { UnifiedAdminService, useDashboardData, useAllUsers, useCollections, useTownships, useSubdivisions } from '../../src/lib/unified-admin-service';
 import { clearPickupsCache } from '../../src/lib/admin-services';
 import type { User, TownshipDropdown, SubdivisionDropdown } from '../../src/lib/supabase';
@@ -115,19 +117,22 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
 
   return (
     <div className="w-64 bg-gradient-to-b from-gray-900 to-gray-800 border-r border-gray-700 min-h-screen p-4 shadow-2xl">
-      {/* Logo */}
-      <div className="flex items-center gap-3 mb-8 px-2">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-orange-500 to-yellow-500 flex items-center justify-center shadow-lg">
-          <img 
-            src="/w yellow.png" 
-            alt="Woza Mali Logo" 
-            className="w-8 h-8"
-          />
+      {/* Logo + Realtime status */}
+      <div className="flex items-center justify-between mb-8 px-2">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-orange-500 to-yellow-500 flex items-center justify-center shadow-lg">
+            <img 
+              src="/w yellow.png" 
+              alt="Woza Mali Logo" 
+              className="w-8 h-8"
+            />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-white">Woza Mali</h2>
+            <p className="text-xs text-gray-300">Admin Portal</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-xl font-bold text-white">Woza Mali</h2>
-          <p className="text-xs text-gray-300">Admin Portal</p>
-        </div>
+        <RealtimeStatusDot />
       </div>
 
       {/* Navigation */}
@@ -324,6 +329,20 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
 
   // 2) Set up realtime subscriptions once on mount
   useEffect(() => {
+    // Auto-resume: when tab becomes visible or network is back, force reconnect and refresh data
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        realtimeManager.reconnectNow()
+        loadDashboardData()
+      }
+    }
+    const onOnline = () => {
+      realtimeManager.reconnectNow()
+      loadDashboardData()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('online', onOnline)
+
     const subscriptions = subscribeToAllChanges({
       pickups: () => {
         console.log('📡 Pickup change detected, reloading dashboard data...');
@@ -339,58 +358,65 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
       }
     });
 
-    const collectionsChannel = supabase
-      .channel('unified_collections_changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'unified_collections' }, (payload) => {
-        console.log('📡 New collection detected:', payload.new);
-        loadDashboardData();
-        
-        // Trigger notification for new collection
-        notificationManager.addNotification({
-          type: 'collection',
-          title: 'New Collection Submitted',
-          message: `Collection from ${payload.new?.customer_name || 'Unknown'} - ${payload.new?.total_weight_kg || 0}kg`
-        });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'unified_collections' }, () => {
-        console.log('📡 Unified collections change, refreshing dashboard...');
-        loadDashboardData();
-      })
-      .subscribe();
+    realtimeManager.subscribe('unified_collections_changes', (channel) => {
+      channel
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'unified_collections' }, (payload: any) => {
+          console.log('📡 New collection detected:', payload.new);
+          loadDashboardData();
+          
+          // Trigger notification for new collection
+          notificationManager.addNotification({
+            type: 'collection',
+            title: 'New Collection Submitted',
+            message: `Collection from ${payload.new?.customer_name || 'Unknown'} - ${payload.new?.total_weight_kg || 0}kg`
+          });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'unified_collections' }, () => {
+          console.log('📡 Unified collections change, refreshing dashboard...');
+          loadDashboardData();
+        })
+    })
 
-    const walletsChannel = supabase
-      .channel('wallets_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => {
+    realtimeManager.subscribe('wallets_changes', (channel) => {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => {
         console.log('📡 Wallets change, refreshing dashboard...');
         loadDashboardData();
       })
-      .subscribe();
+    })
 
     // Subscribe to withdrawal requests
-    const withdrawalRequestsChannel = supabase
-      .channel('withdrawal_requests_changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'withdrawal_requests' }, (payload) => {
-        console.log('📡 New withdrawal request detected:', payload.new);
-        loadDashboardData();
-        
-        // Trigger notification for new withdrawal request
-        notificationManager.addNotification({
-          type: 'withdrawal',
-          title: 'New Withdrawal Request',
-          message: `Withdrawal request for R${payload.new?.amount || 0} from user ${payload.new?.user_id || 'Unknown'}`
-        });
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawal_requests' }, () => {
-        console.log('📡 Withdrawal requests change, refreshing dashboard...');
-        loadDashboardData();
-      })
-      .subscribe();
+    realtimeManager.subscribe('withdrawal_requests_changes', (channel) => {
+      channel
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'withdrawal_requests' }, (payload: any) => {
+          console.log('📡 New withdrawal request detected:', payload.new);
+          loadDashboardData();
+          
+          // Trigger notification for new withdrawal request
+          notificationManager.addNotification({
+            type: 'withdrawal',
+            title: 'New Withdrawal Request',
+            message: `Withdrawal request for R${payload.new?.amount || 0} from user ${payload.new?.user_id || 'Unknown'}`
+          });
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawal_requests' }, () => {
+          console.log('📡 Withdrawal requests change, refreshing dashboard...');
+          loadDashboardData();
+        })
+    })
 
     return () => {
-      subscriptions.forEach(sub => sub.unsubscribe());
-      collectionsChannel.unsubscribe();
-      walletsChannel.unsubscribe();
-      withdrawalRequestsChannel.unsubscribe();
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('online', onOnline)
+      subscriptions.forEach((sub: any) => {
+        if (typeof sub === 'function') {
+          try { sub() } catch {}
+        } else if (sub?.unsubscribe) {
+          try { sub.unsubscribe() } catch {}
+        }
+      });
+      realtimeManager.unsubscribe('unified_collections_changes');
+      realtimeManager.unsubscribe('wallets_changes');
+      realtimeManager.unsubscribe('withdrawal_requests_changes');
     };
   }, []);
 
@@ -575,22 +601,22 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+      <div className="w-full space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
               {isSuperAdmin ? 'Super Admin Dashboard' : 'Admin Dashboard'}
             </h1>
-            <p className="text-gray-600 mt-2 text-lg">
+            <p className="text-gray-600 mt-2 text-base sm:text-lg">
               {isSuperAdmin 
                 ? 'Full system access with advanced administrative privileges' 
                 : 'Real-time system overview and management'
               }
             </p>
         </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
             {isSuperAdmin && (
               <Badge className="text-sm bg-gradient-to-r from-green-600 to-green-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
                 <Crown className="w-4 h-4 mr-2" />
@@ -605,7 +631,7 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-semibold text-blue-900">Total Pickups</CardTitle>
@@ -679,7 +705,7 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
       </div>
 
       {/* Additional Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-semibold text-yellow-900">Pending Pickups</CardTitle>
@@ -769,7 +795,7 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
           <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50 hover:shadow-2xl transition-all duration-300">
             <CardHeader className="bg-gradient-to-r from-gray-800 to-gray-900 text-white rounded-t-lg">
               <CardTitle className="text-xl font-semibold">Quick Actions</CardTitle>
@@ -915,7 +941,7 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
 function TeamMembersContent() {
   const { users, loading, error } = useAllUsers();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [pendingCollectors, setPendingCollectors] = useState([]);
+  const [pendingCollectors, setPendingCollectors] = useState<any[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -1033,12 +1059,12 @@ function TeamMembersContent() {
   };
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+      <div className="w-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Team Members</h1>
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Team Members</h1>
             <p className="text-gray-600">Manage your team and approve new collectors</p>
           </div>
           <Button 
@@ -1200,19 +1226,20 @@ function TeamMembersContent() {
                       <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="flex-shrink-0 h-12 w-12">
-                              <div className="h-12 w-12 rounded-full bg-gradient-to-r from-blue-400 to-yellow-500 flex items-center justify-center shadow-sm">
-                                <span className="text-sm font-bold text-white">
+                            <div className="flex-shrink-0 h-10 w-10 mr-3">
+                              {/* 3D green avatar badge */}
+                              <div className="h-10 w-10 rounded-full bg-gradient-to-b from-green-400 to-green-600 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_16px_rgba(0,128,0,0.35)]">
+                                <span className="text-sm font-bold text-white drop-shadow">
                                   {user.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
                                 </span>
                               </div>
                             </div>
-                            <div className="ml-4">
+                            <div className="ml-0">
                               <div className="text-sm font-semibold text-gray-900">
                                 {user.full_name || 'No name'}
                               </div>
                               <div className="text-xs text-gray-500">
-                                Employee #{user.employee_number || 'N/A'}
+                                Employee #{(user as any).employee_number || 'N/A'}
                               </div>
                             </div>
                           </div>
@@ -1222,60 +1249,86 @@ function TeamMembersContent() {
                           <div className="text-sm text-gray-500">{user.phone || 'No phone'}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                            user.role?.name === 'admin' 
-                              ? 'bg-gradient-to-r from-blue-100 to-blue-200 text-blue-800'
-                              : 'bg-gradient-to-r from-orange-100 to-orange-200 text-orange-800'
+                          {/* 3D role badge */}
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_16px_rgba(0,0,0,0.12)] ${
+                            user.role?.name === 'admin'
+                              ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
+                              : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white'
                           }`}>
                             {user.role?.name || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                            user.status === 'active' 
-                              ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800'
+                          {/* 3D status badge */}
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full border-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_16px_rgba(0,0,0,0.12)] ${
+                            user.status === 'active'
+                              ? 'bg-gradient-to-r from-green-500 to-green-600 text-white'
                               : user.status === 'suspended'
-                              ? 'bg-gradient-to-r from-red-100 to-red-200 text-red-800'
-                              : user.status === 'pending_approval'
-                              ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800'
-                              : 'bg-gradient-to-r from-gray-100 to-gray-200 text-gray-800'
+                              ? 'bg-gradient-to-r from-red-500 to-red-600 text-white'
+                              : (user as any).status === 'pending_approval'
+                              ? 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-gray-900'
+                              : 'bg-gradient-to-r from-gray-300 to-gray-400 text-gray-900'
                           }`}>
                             {user.status || 'Unknown'}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex space-x-2">
-                            <button 
-                              onClick={() => editUser(user)}
-                              className="text-blue-600 hover:text-blue-900 px-3 py-1 rounded-md hover:bg-blue-50 transition-colors"
-                            >
-                              Edit
-                            </button>
+                            <div className="rounded-lg p-[2px] bg-gradient-to-b from-blue-500 to-blue-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_16px_rgba(0,0,128,0.25)]">
+                              <button 
+                                onClick={() => editUser(user)}
+                                className="px-3 py-1 rounded-md bg-transparent text-white hover:bg-white/10 transition-colors"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                            {(user as any).status === 'pending_approval' && ((user as any).role?.name === 'collector' || (user as any).role === 'collector') && (
+                              <>
+                                <button
+                                  onClick={() => approveCollector(user.id)}
+                                  className="text-green-600 hover:text-green-900 px-3 py-1 rounded-md hover:bg-green-50 transition-colors"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => rejectCollector(user.id)}
+                                  className="text-red-600 hover:text-red-900 px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
                             {user.status === 'active' ? (
-                              <button 
-                                onClick={() => suspendUser(user.id)}
-                                className="text-yellow-600 hover:text-yellow-900 px-3 py-1 rounded-md hover:bg-yellow-50 transition-colors"
-                              >
-                                Suspend
-                              </button>
+                              <div className="rounded-lg p-[2px] bg-gradient-to-b from-yellow-400 to-yellow-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_16px_rgba(128,96,0,0.25)]">
+                                <button 
+                                  onClick={() => suspendUser(user.id)}
+                                  className="px-3 py-1 rounded-md bg-transparent text-gray-900 hover:bg-white/10 transition-colors"
+                                >
+                                  Suspend
+                                </button>
+                              </div>
                             ) : user.status === 'suspended' ? (
-                              <button 
-                                onClick={() => activateUser(user.id)}
-                                className="text-green-600 hover:text-green-900 px-3 py-1 rounded-md hover:bg-green-50 transition-colors"
-                              >
-                                Activate
-                              </button>
+                              <div className="rounded-lg p-[2px] bg-gradient-to-b from-green-500 to-green-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_16px_rgba(0,128,0,0.25)]">
+                                <button 
+                                  onClick={() => activateUser(user.id)}
+                                  className="px-3 py-1 rounded-md bg-transparent text-white hover:bg-white/10 transition-colors"
+                                >
+                                  Activate
+                                </button>
+                              </div>
                             ) : null}
-                            <button 
-                              onClick={() => {
-                                if (confirm('Are you sure you want to remove this user?')) {
-                                  // Add remove functionality here
-                                }
-                              }}
-                              className="text-red-600 hover:text-red-900 px-3 py-1 rounded-md hover:bg-red-50 transition-colors"
-                            >
-                              Remove
-                            </button>
+                            <div className="rounded-lg p-[2px] bg-gradient-to-b from-red-500 to-red-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_6px_16px_rgba(128,0,0,0.25)]">
+                              <button 
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to remove this user?')) {
+                                    // Add remove functionality here
+                                  }
+                                }}
+                                className="px-3 py-1 rounded-md bg-transparent text-white hover:bg-white/10 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1345,12 +1398,12 @@ function UsersContent() {
   const activeUsers = users.filter(u => u.status === 'active').length;
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+      <div className="w-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Users Management</h1>
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Users Management</h1>
             <p className="text-gray-600">Manage system users and their locations</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1492,7 +1545,7 @@ function UsersContent() {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {users.map((user) => {
-                        const township = extractTownshipFromAddress((user as any).address || user.township_name);
+                        const township = extractTownshipFromAddress((user as any).address || (user as any).township_name);
                         return (
                           <tr key={user.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 transition-all duration-200">
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -1712,7 +1765,46 @@ function CollectionsContent() {
         .eq('collection_id', collectionId)
         .order('uploaded_at', { ascending: false });
 
-      setDetails({ base: base.data, items: items || [], photos: photos || [] });
+      // Normalize photo URLs and provide storage fallback if table has no entries
+      const resolvedPhotos: any[] = [];
+      const photoRows = Array.isArray(photos) ? photos : [];
+
+      // 1) Normalize any stored paths to public URLs
+      for (const ph of photoRows) {
+        const raw = String(ph?.photo_url || '');
+        if (raw.startsWith('http')) {
+          resolvedPhotos.push(ph);
+        } else if (raw) {
+          try {
+            const { data: pub } = supabase.storage
+              .from('collection-photos')
+              .getPublicUrl(raw);
+            resolvedPhotos.push({ ...ph, photo_url: pub.publicUrl });
+          } catch {
+            resolvedPhotos.push(ph);
+          }
+        }
+      }
+
+      // 2) Fallback: if nothing in table, try listing storage by prefix `${collectionId}/`
+      if (resolvedPhotos.length === 0) {
+        try {
+          const { data: files, error: listErr } = await supabase.storage
+            .from('collection-photos')
+            .list(`${collectionId}`, { limit: 100 });
+          if (!listErr && Array.isArray(files)) {
+            for (const f of files) {
+              const path = `${collectionId}/${f.name}`;
+              const { data: pub } = supabase.storage
+                .from('collection-photos')
+                .getPublicUrl(path);
+              resolvedPhotos.push({ id: path, collection_id: collectionId, photo_url: pub.publicUrl, photo_type: 'general' });
+            }
+          }
+        } catch {}
+      }
+
+      setDetails({ base: base.data, items: items || [], photos: resolvedPhotos });
     } catch (e) {
       setNotice({ type: 'error', message: 'Failed to load collection details.' });
     } finally {
@@ -1755,8 +1847,6 @@ function CollectionsContent() {
       }
     } catch (e) {
       console.error('❌ Exception in handleDelete:', e);
-      // Restore on exception
-      setRows(prevRows);
       setNotice({ type: 'error', message: `Failed to delete collection: ${e instanceof Error ? e.message : 'Unknown error'}` });
     }
   };
@@ -1782,12 +1872,12 @@ function CollectionsContent() {
   };
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+      <div className="w-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Collections Management</h1>
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Collections Management</h1>
             <p className="text-gray-600">Manage and track material collections from residents</p>
           </div>
           <div className="flex items-center gap-3">
@@ -1821,7 +1911,7 @@ function CollectionsContent() {
             )}
             
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-semibold text-blue-900">Total Collections</CardTitle>
@@ -2231,12 +2321,12 @@ function AnalyticsContent() {
 
 function ConfigContent() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+      <div className="w-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">System Configuration</h1>
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">System Configuration</h1>
             <p className="text-gray-600">Manage system settings and configurations</p>
           </div>
           <div className="flex items-center gap-3">
@@ -2247,7 +2337,7 @@ function ConfigContent() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl border-0 hover:shadow-2xl transition-all duration-300">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -2451,11 +2541,6 @@ export default function AdminDashboardClient() {
         <div className="bg-gradient-to-r from-white to-gray-50 border-b border-gray-200 px-6 py-4 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-yellow-500 flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg">
-                  {(profile?.full_name || user?.email || 'A').charAt(0).toUpperCase()}
-                </span>
-              </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
                   Welcome, {profile?.full_name || user?.email?.split('@')[0] || 'Admin'}!
@@ -2512,7 +2597,7 @@ export default function AdminDashboardClient() {
       {notifications.map((notification) => (
         <NotificationToast
           key={notification.id}
-          type={notification.type}
+          type={(notification.type === 'system' || notification.type === 'error') ? 'collection' : notification.type}
           title={notification.title}
           message={notification.message}
           onClose={() => removeNotification(notification.id)}

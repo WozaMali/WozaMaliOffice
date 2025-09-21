@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { realtimeManager } from './realtimeManager'
 import type { 
   Profile, 
   Address, 
@@ -1043,18 +1044,18 @@ export const adminServices = {
 export const realtimeServices = {
   // Subscribe to pickup updates
   subscribeToPickups(callback: (payload: any) => void) {
-    return supabase
-      .channel('pickup_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pickups' }, callback)
-      .subscribe()
+    realtimeManager.subscribe('pickup_updates', (channel) => {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'pickups' }, callback)
+    })
+    return () => realtimeManager.unsubscribe('pickup_updates')
   },
 
   // Subscribe to payment updates
   subscribeToPayments(callback: (payload: any) => void) {
-    return supabase
-      .channel('payment_updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, callback)
-      .subscribe()
+    realtimeManager.subscribe('payment_updates', (channel) => {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, callback)
+    })
+    return () => realtimeManager.unsubscribe('payment_updates')
   }
 }
 

@@ -119,14 +119,14 @@ export function DashboardMetrics() {
       const [
         pickupsResult,
         profilesResult,
-        pickupItemsResult
+        collectionMaterialsResult
       ] = await Promise.all([
         supabase.from('pickups').select('*'),
         supabase.from('users').select('id, role_id'),
-        supabase.from('pickup_items').select('kilograms, material:materials(rate_per_kg)')
+        supabase.from('collection_materials').select('quantity, unit_price')
       ]);
 
-      setDebugInfo(`Pickups: ${pickupsResult.data?.length || 0}, Profiles: ${profilesResult.data?.length || 0}, Items: ${pickupItemsResult.data?.length || 0}`);
+      setDebugInfo(`Pickups: ${pickupsResult.data?.length || 0}, Profiles: ${profilesResult.data?.length || 0}, Materials: ${collectionMaterialsResult.data?.length || 0}`);
 
       // Handle errors gracefully
       if (pickupsResult.error) {
@@ -137,23 +137,23 @@ export function DashboardMetrics() {
         setDebugInfo(`Profiles error: ${profilesResult.error.message}`);
         console.warn("Profiles error:", profilesResult.error);
       }
-      if (pickupItemsResult.error) {
-        setDebugInfo(`Items error: ${pickupItemsResult.error.message}`);
-        console.warn("Items error:", pickupItemsResult.error);
+      if (collectionMaterialsResult.error) {
+        setDebugInfo(`Materials error: ${collectionMaterialsResult.error.message}`);
+        console.warn("Materials error:", collectionMaterialsResult.error);
       }
 
       const pickups = pickupsResult.data || [];
       const profiles = profilesResult.data || [];
-      const pickupItems = pickupItemsResult.data || [];
+      const materials = collectionMaterialsResult.data || [];
 
       // Log the raw data for debugging
       console.log("Raw data fetched:", {
         pickups: pickups.length,
         profiles: profiles.length,
-        pickupItems: pickupItems.length,
+        materials: materials.length,
         samplePickup: pickups[0],
         sampleProfile: profiles[0],
-        sampleItem: pickupItems[0]
+        sampleItem: materials[0]
       });
 
       // Calculate dashboard data
@@ -161,12 +161,8 @@ export function DashboardMetrics() {
         total_pickups: pickups.length,
         unique_customers: profiles.filter(p => p.role === 'CUSTOMER').length,
         unique_collectors: profiles.filter(p => p.role === 'COLLECTOR').length,
-        total_kg_collected: pickupItems.reduce((sum, item) => sum + (item.kilograms || 0), 0),
-        total_value_generated: pickupItems.reduce((sum, item) => {
-          const material = Array.isArray(item.material) ? item.material[0] : item.material;
-          const rate = material?.rate_per_kg || 0;
-          return sum + ((item.kilograms || 0) * rate);
-        }, 0),
+        total_kg_collected: materials.reduce((sum, m) => sum + (m.quantity || 0), 0),
+        total_value_generated: materials.reduce((sum, m) => sum + ((m.quantity || 0) * (m.unit_price || 0)), 0),
         pending_pickups: pickups.filter(p => p.status === 'submitted').length,
         approved_pickups: pickups.filter(p => p.status === 'approved').length,
         rejected_pickups: pickups.filter(p => p.status === 'rejected').length

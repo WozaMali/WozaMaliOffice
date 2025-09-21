@@ -54,8 +54,8 @@ export function ThemeProvider({
     root.classList.add(systemTheme);
   }, [mounted]);
 
-  const value = {
-    theme: "system",
+  const value: ThemeProviderState = {
+    theme: "system" as Theme,
     setTheme: () => {
       // No-op - theme follows system preference
     },

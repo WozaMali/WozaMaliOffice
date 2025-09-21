@@ -33,7 +33,7 @@ interface Pickup {
   customerName: string;
   customerPhone: string;
   address: string;
-  status: 'pending' | 'approved' | 'rejected' | 'completed';
+  status: 'pending' | 'approved' | 'cancelled' | 'completed';
   totalKg: number;
   totalValue: number;
   materials: Array<{
@@ -45,7 +45,7 @@ interface Pickup {
   notes?: string;
 }
 
-import { getCollectorPickups, getAllPickups, updatePickupStatus, Pickup } from '@/lib/pickupService';
+import { getCollectorPickups, getAllPickups, updatePickupStatus, Pickup as PickupType } from '@/lib/pickupService';
 
 export default function PickupManagement() {
   const [activeTab, setActiveTab] = useState('list');

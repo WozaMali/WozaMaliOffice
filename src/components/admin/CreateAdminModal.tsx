@@ -100,57 +100,27 @@ export default function CreateAdminModal({ isOpen, onClose, onSuccess }: CreateA
     setError(null);
     
     try {
-      // Step 1: Create user in auth.users
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: formData.email,
-        password: formData.password,
-        email_confirm: true,
-        user_metadata: {
-          first_name: formData.firstName,
-          last_name: formData.lastName,
-          phone: formData.phone,
-          employee_number: formData.employeeNumber,
-          township: formData.township,
-          department: formData.department
-        }
-      });
-      
-      if (authError) throw authError;
-      
-      if (!authData.user) {
-        throw new Error('Failed to create user');
-      }
-      
-      // Step 2: Get role ID
-      const { data: roleData, error: roleError } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', formData.role)
-        .single();
-      
-      if (roleError) throw roleError;
-      
-      // Step 3: Create user profile in users table
-      const { error: userError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
+      // Use secure server API to create admin with proper role settings
+      const res = await fetch('/api/admin/create-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           email: formData.email,
-          first_name: formData.firstName,
-          last_name: formData.lastName,
           phone: formData.phone,
-          role_id: roleData.id,
-          status: 'active',
-          employee_number: formData.employeeNumber,
-          township: formData.township,
+          role: formData.role.toLowerCase(),
           department: formData.department,
-          is_approved: true,
-          approval_date: new Date().toISOString(),
-          notes: formData.notes
-        });
-      
-      if (userError) throw userError;
-      
+          township: formData.township,
+          password: formData.password
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as any));
+        throw new Error(err?.error || `Failed to create admin (HTTP ${res.status})`);
+      }
+
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
@@ -168,7 +138,7 @@ export default function CreateAdminModal({ isOpen, onClose, onSuccess }: CreateA
           notes: ''
         });
         setSuccess(false);
-      }, 2000);
+      }, 1500);
       
     } catch (error: any) {
       console.error('Error creating admin:', error);

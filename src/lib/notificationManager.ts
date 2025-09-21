@@ -7,7 +7,7 @@ import { audioNotificationService } from './audioNotificationService';
 
 export interface Notification {
   id: string;
-  type: 'collection' | 'withdrawal';
+  type: 'collection' | 'withdrawal' | 'system' | 'error';
   title: string;
   message: string;
   timestamp: Date;
@@ -36,6 +36,10 @@ class NotificationManager {
       audioNotificationService.playCollectionSound();
     } else if (newNotification.type === 'withdrawal') {
       audioNotificationService.playWithdrawalSound();
+    } else if (newNotification.type === 'system') {
+      // softer beep or no sound for system by default
+    } else if (newNotification.type === 'error') {
+      // could add an error tone
     }
 
     // Notify listeners

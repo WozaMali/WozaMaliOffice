@@ -1,4 +1,5 @@
 import { supabase, supabaseAdmin } from './supabase';
+import { realtimeManager } from './realtimeManager';
 import { 
   Profile, 
   Pickup, 
@@ -106,16 +107,23 @@ export async function getUsers(): Promise<Profile[]> {
     }
     
     // Transform unified users data to Profile format for compatibility
-    const profiles = data?.map(user => ({
-      id: user.id,
-      email: user.email,
-      full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
-      phone: user.phone,
-      role: (user.roles as any)?.name || user.role_id || 'member',
-      is_active: user.status === 'active',
-      created_at: user.created_at,
-      updated_at: user.updated_at
-    })) || [];
+    const profiles = data?.map(user => {
+      let resolvedRole = (user as any).role || (user.roles as any)?.name || user.role_id || 'member'
+      const emailLower = String(user.email || '').toLowerCase()
+      if (emailLower === 'superadmin@wozamali.co.za') {
+        resolvedRole = 'super_admin'
+      }
+      return {
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'No Name',
+        phone: user.phone,
+        role: resolvedRole,
+        is_active: user.status === 'active',
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      }
+    }) || [];
     
     return profiles;
   } catch (error) {
@@ -125,12 +133,12 @@ export async function getUsers(): Promise<Profile[]> {
 }
 
 export function subscribeToUsers(callback: RealtimeCallback<Profile>) {
-  return supabase
-    .channel('users_changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+  realtimeManager.subscribe('users_changes', (channel) => {
+    channel.on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload: any) => {
       callback({ new: payload.new as Profile, old: payload.old as Profile, eventType: payload.eventType });
     })
-    .subscribe();
+  })
+  return () => realtimeManager.unsubscribe('users_changes')
 }
 
 export async function updateUserRole(userId: string, role: string, isActive: boolean) {
@@ -632,7 +640,7 @@ export async function getPayments(): Promise<Payment[]> {
     if (pickupIds.length > 0) {
       const pickupsResp = await supabase
       .from('pickups')
-      .select('id, user_id')
+      .select('id, customer_id')
         .in('id', pickupIds);
       if (pickupsResp.error) {
         const pErr = pickupsResp.error as any;
@@ -648,8 +656,8 @@ export async function getPayments(): Promise<Payment[]> {
       }
     }
 
-    // Fetch customer profiles for the pickups (using user_id instead of customer_id)
-    const customerIds = Array.from(new Set(pickups?.map(p => p.user_id).filter(Boolean) || []));
+    // Fetch customer profiles for the pickups (using customer_id)
+    const customerIds = Array.from(new Set(pickups?.map(p => p.customer_id).filter(Boolean) || []));
     const { data: customerProfiles } = customerIds.length > 0 ? await supabase
       .from('profiles')
       .select('id, full_name, email, phone')
@@ -658,7 +666,7 @@ export async function getPayments(): Promise<Payment[]> {
     // Transform the data
     const transformedPayments = (paymentsData || []).map(payment => {
       const pickup = pickups?.find(p => p.id === payment.pickup_id);
-      const customer = customerProfiles?.find(p => p.id === pickup?.user_id);
+      const customer = customerProfiles?.find(p => p.id === pickup?.customer_id);
 
       return {
         ...payment,
@@ -1053,22 +1061,26 @@ export function subscribeToAllChanges(callbacks: {
   payments?: RealtimeCallback<Payment>;
   materials?: RealtimeCallback<Material>;
 }) {
-  const channels = [];
+  const cleanups: Array<() => void> = [];
 
   if (callbacks.users) {
-    channels.push(subscribeToUsers(callbacks.users));
+    const sub: any = subscribeToUsers(callbacks.users);
+    cleanups.push(typeof sub === 'function' ? sub : () => sub?.unsubscribe?.());
   }
   if (callbacks.pickups) {
-    channels.push(subscribeToPickups(callbacks.pickups));
+    const sub: any = subscribeToPickups(callbacks.pickups);
+    cleanups.push(typeof sub === 'function' ? sub : () => sub?.unsubscribe?.());
   }
   if (callbacks.payments) {
-    channels.push(subscribeToPayments(callbacks.payments));
+    const sub: any = subscribeToPayments(callbacks.payments);
+    cleanups.push(typeof sub === 'function' ? sub : () => sub?.unsubscribe?.());
   }
   if (callbacks.materials) {
-    channels.push(subscribeToMaterials(callbacks.materials));
+    const sub: any = subscribeToMaterials(callbacks.materials);
+    cleanups.push(typeof sub === 'function' ? sub : () => sub?.unsubscribe?.());
   }
 
-  return channels;
+  return cleanups;
 }
 
 // ============================================================================
@@ -1226,40 +1238,28 @@ export async function getSystemImpact() {
     // Prefer unified_collections → fallback to collections → legacy pickups
     const revenueStatuses = new Set(['approved', 'completed']);
 
-    // Try unified_collections
+    // Try unified_collections (minimal, safe columns)
     let collectionsResp = await supabase
       .from('unified_collections')
-      .select('id, status, customer_id, collector_id, weight_kg, total_weight_kg, computed_value, total_value, created_at, updated_at');
+      .select('id, status, customer_id, collector_id, total_weight_kg, total_value, created_at, updated_at');
 
-    let source: 'unified_collections' | 'collections' | 'pickups' = 'unified_collections';
-
-    if (collectionsResp.error) {
-      console.debug('unified_collections not available, trying collections');
-      source = 'collections';
-      collectionsResp = await supabase
-        .from('collections')
-        .select('id, status, user_id, collector_id, weight_kg, total_weight_kg, total_value, created_at, updated_at');
-    }
+    let source: 'unified_collections' | 'pickups' = 'unified_collections';
 
     if (collectionsResp.error) {
-      console.debug('collections not available, falling back to legacy pickups');
+      console.debug('unified_collections not available, falling back to legacy pickups');
       source = 'pickups';
       const { data: pickups, error: pickupsError } = await supabase
         .from('pickups')
-        .select('id, user_id, status, created_at');
+        .select('id, customer_id, status, created_at');
       if (pickupsError) throw pickupsError;
 
       const totalPickups = pickups?.length || 0;
       const pendingPickups = pickups?.filter(p => (p as any).status === 'pending' || (p as any).status === 'submitted').length || 0;
 
-      // Need items to compute totals for legacy
-      const { data: pickupItems } = await supabase
-        .from('pickup_items')
-        .select('pickup_id, kilograms, rate_per_kg');
-
-      const totalKg = (pickupItems || []).reduce((s, it: any) => s + (Number(it.kilograms) || 0), 0);
-      const totalValue = (pickupItems || []).reduce((s, it: any) => s + (Number(it.kilograms) || 0) * (Number(it.rate_per_kg) || 0), 0);
-      const uniqueCustomers = new Set((pickups || []).map(p => (p as any).user_id).filter(Boolean)).size;
+      // Skip item/value computation in legacy fallback to avoid 400s on missing tables
+      const totalKg = 0;
+      const totalValue = 0;
+      const uniqueCustomers = new Set((pickups || []).map(p => (p as any).customer_id).filter(Boolean)).size;
 
       const totalCO2Saved = totalKg * 2.5;
       const totalWaterSaved = totalKg * 100;
@@ -1283,9 +1283,9 @@ export async function getSystemImpact() {
     const rows = (collectionsResp.data as any[]) || [];
     const totalPickups = rows.length;
     const pendingPickups = rows.filter(r => r.status === 'pending' || r.status === 'submitted').length;
-    const totalKg = rows.reduce((s, r) => s + (Number(r.weight_kg ?? r.total_weight_kg) || 0), 0);
-    // Prefer computed_value → total_value → derive from items
-    let totalValue = rows.reduce((s, r) => s + (Number(r.computed_value ?? r.total_value) || 0), 0);
+    const totalKg = rows.reduce((s, r) => s + (Number(r.total_weight_kg) || 0), 0);
+    // Prefer total_value; derive from items if absent
+    let totalValue = rows.reduce((s, r) => s + (Number(r.total_value) || 0), 0);
     if (!totalValue) {
       const ids = rows.map(r => r.id);
       const { data: items } = await supabase
@@ -1294,7 +1294,7 @@ export async function getSystemImpact() {
         .in('collection_id', ids);
       totalValue = (items || []).reduce((s, it: any) => s + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
     }
-    const uniqueCustomers = new Set(rows.map(r => (source === 'collections' ? r.user_id : r.customer_id)).filter(Boolean)).size;
+    const uniqueCustomers = new Set(rows.map(r => r.customer_id).filter(Boolean)).size;
     const uniqueCollectors = new Set(rows.map(r => r.collector_id).filter(Boolean)).size;
 
     const totalCO2Saved = totalKg * 2.5;
@@ -1334,7 +1334,7 @@ export async function getMaterialPerformance() {
       console.debug('collection_materials not available, falling back to pickup_items');
       const { data: legacyItems, error: legacyErr } = await supabase
         .from('pickup_items')
-        .select('pickup_id, material_id, kilograms, rate_per_kg');
+        .select('pickup_id, material_id, kilograms');
       if (legacyErr) throw legacyErr;
       const { data: pickups, error: pErr } = await supabase
         .from('pickups')
@@ -1361,7 +1361,7 @@ export async function getMaterialPerformance() {
         }
         stats[key].pickup_count += 1;
         stats[key].total_kg_collected += Number(it.kilograms) || 0;
-        const rate = Number(it.rate_per_kg ?? stats[key].rate_per_kg) || 0;
+        const rate = Number(stats[key].rate_per_kg) || 0;
         stats[key].total_value_generated += (Number(it.kilograms) || 0) * rate;
         stats[key].avg_kg_per_pickup = stats[key].total_kg_collected / stats[key].pickup_count;
       });
@@ -1468,7 +1468,7 @@ export async function deleteCollectionDeep(collectionId: string): Promise<boolea
     return true;
     
   } catch (error) {
-    if (error.name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       console.error('❌ Delete request was aborted (timeout)');
     } else {
       console.error('❌ Exception in deleteCollectionDeep:', error);
@@ -1484,7 +1484,7 @@ export async function getCollectorPerformance() {
     // Prefer unified_collections; fallback to collections; legacy has no collectors
     let { data: rows, error } = await supabase
       .from('unified_collections')
-      .select('id, collector_id, status, weight_kg, total_weight_kg, computed_value, total_value, created_at, updated_at');
+      .select('id, collector_id, status, total_weight_kg, total_value, created_at, updated_at');
     if (error) {
       console.debug('unified_collections not available, trying collections');
       const resp = await supabase
@@ -1539,11 +1539,11 @@ export async function getCollectorPerformance() {
       }
       const s = stats.get(cid)!;
       s.total_pickups += 1;
-      const kg = Number(r.weight_kg ?? r.total_weight_kg) || 0;
+      const kg = Number(r.total_weight_kg) || 0;
       s.total_kg_collected += kg;
       const itemsFor = itemsByCollection.get(r.id) || [];
       const computedFromItems = itemsFor.reduce((sum, it: any) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
-      const value = Number(r.computed_value ?? r.total_value) || computedFromItems;
+      const value = Number(r.total_value) || computedFromItems;
       s.total_value_generated += value;
       s.total_co2_saved += kg * 2.5;
       const last = new Date(s.last_activity).getTime();
@@ -1566,12 +1566,12 @@ export async function getCustomerPerformance() {
     const revenueStatuses = new Set(['approved', 'completed']);
     let { data: rows, error } = await supabase
       .from('unified_collections')
-      .select('id, customer_id, status, weight_kg, total_weight_kg, computed_value, total_value, created_at');
+      .select('id, customer_id, status, total_weight_kg, total_value, created_at');
     if (error) {
       console.debug('unified_collections not available, trying collections');
       const resp = await supabase
         .from('collections')
-        .select('id, user_id, status, weight_kg, total_weight_kg, total_value, created_at');
+        .select('id, user_id, status, total_weight_kg, total_value, created_at');
       error = resp.error as any;
       rows = resp.data as any[];
     }
@@ -1635,11 +1635,11 @@ export async function getCustomerPerformance() {
         }
         const s = stats[customerId];
         s.total_pickups += 1;
-        const kg = Number(r.weight_kg ?? r.total_weight_kg) || 0;
+        const kg = Number(r.total_weight_kg ?? r.total_weight_kg) || 0;
         s.total_kg_recycled += kg;
         const itemsFor = itemsByCollection.get(r.id) || [];
         const computedFromItems = itemsFor.reduce((sum, it: any) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
-        const value = Number(r.computed_value ?? r.total_value) || computedFromItems;
+        const value = Number(r.total_value) || computedFromItems;
         s.total_value_earned += value;
         s.last_activity = r.created_at;
       });
@@ -1651,17 +1651,17 @@ export async function getCustomerPerformance() {
     console.debug('Falling back to legacy pickups for customer performance');
     const { data: pickups, error: pErr } = await supabase
       .from('pickups')
-      .select('id, user_id, status, created_at')
+      .select('id, customer_id, status, created_at')
       .eq('status', 'approved');
     if (pErr) throw pErr;
-    const { data: pickupItems } = await supabase.from('pickup_items').select('pickup_id, kilograms, rate_per_kg');
-    const ids = Array.from(new Set((pickups || []).map((p: any) => p.user_id).filter(Boolean)));
+    const { data: pickupItems } = await supabase.from('pickup_items').select('pickup_id, kilograms, material_id');
+    const ids = Array.from(new Set((pickups || []).map((p: any) => p.customer_id).filter(Boolean)));
     const { data: profiles } = ids.length > 0 ? await supabase.from('profiles').select('id, full_name, email').in('id', ids) : { data: [] as any[] } as any;
     const idToProfile = new Map((profiles || []).map((p: any) => [String(p.id), p]));
 
     const stats: any = {};
     (pickups || []).forEach((p: any) => {
-      const customerId = String(p.user_id || '');
+      const customerId = String(p.customer_id || '');
       if (!customerId) return;
       if (!stats[customerId]) {
         const prof = idToProfile.get(customerId) || {};

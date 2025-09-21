@@ -13,6 +13,9 @@ export interface Reward {
   points_required: number;
   category: 'cash' | 'service' | 'product' | 'voucher';
   is_active: boolean;
+  logo_url?: string;
+  redeem_url?: string;
+  order_url?: string;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +26,9 @@ export interface CreateRewardData {
   points_required: number;
   category: 'cash' | 'service' | 'product' | 'voucher';
   is_active?: boolean;
+  logo_url?: string;
+  redeem_url?: string;
+  order_url?: string;
 }
 
 export interface UpdateRewardData {
@@ -31,6 +37,34 @@ export interface UpdateRewardData {
   points_required?: number;
   category?: 'cash' | 'service' | 'product' | 'voucher';
   is_active?: boolean;
+  logo_url?: string;
+  redeem_url?: string;
+  order_url?: string;
+}
+
+/**
+ * Upload a reward logo to Supabase Storage (bucket: reward-logos)
+ * Returns a public URL string on success
+ */
+export async function uploadRewardLogo(file: File, rewardName: string): Promise<{ url?: string; error?: any }> {
+  try {
+    const bucket = 'reward-logos';
+    const timestamp = Date.now();
+    const safeName = rewardName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const ext = file.name.split('.').pop() || 'png';
+    const path = `${safeName}/${safeName}-${timestamp}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+    if (uploadError) return { error: uploadError };
+
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+    return { url: data.publicUrl };
+  } catch (error) {
+    return { error };
+  }
 }
 
 /**

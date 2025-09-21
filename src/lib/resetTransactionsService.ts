@@ -77,7 +77,7 @@ export async function resetCollectionTransactions(collectionId: string): Promise
       .from('unified_collections')
       .update({ 
         status: 'pending',
-        admin_notes: `Transactions reset on ${new Date().toISOString()}. Previous admin notes: ${collection.admin_notes || 'None'}`
+        admin_notes: `Transactions reset on ${new Date().toISOString()}. Previous admin notes: ${(collection as any).admin_notes || 'None'}`
       })
       .eq('id', collectionId);
 

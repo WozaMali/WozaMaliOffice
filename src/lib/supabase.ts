@@ -15,8 +15,16 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true,
-    redirectTo: 'http://localhost:8081'
+    detectSessionInUrl: true
+  },
+  realtime: {
+    timeout: 30000,
+    heartbeatIntervalMs: 25000
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'office-app'
+    }
   }
 });
 
