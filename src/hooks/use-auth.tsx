@@ -59,12 +59,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!unifiedError && unifiedUser) {
         console.log('✅ Unified user profile fetched:', unifiedUser.id);
+        // Roles can come back as an array or object depending on join shape
+        const rolesValue: any = (unifiedUser as any).roles;
+        const roleName = Array.isArray(rolesValue) ? rolesValue[0]?.name : rolesValue?.name;
         const mapped: Profile = {
           id: unifiedUser.id,
           email: unifiedUser.email,
           full_name: unifiedUser.full_name || '',
           phone: unifiedUser.phone || undefined,
-          role: unifiedUser.roles?.name || 'resident',
+          role: roleName || 'resident',
           is_active: (unifiedUser.status || 'active') === 'active',
           created_at: new Date().toISOString(),
         };

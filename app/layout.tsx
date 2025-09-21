@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import "./globals.css";
-import dynamic from "next/dynamic";
+import NextDynamic from "next/dynamic";
 
 // Force dynamic rendering to prevent SSR issues
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const PwaLockOverlay = dynamic(() => import("@/components/PwaLockOverlay"), { ssr: false });
+  const PwaLockOverlay = NextDynamic(() => import("@/components/PwaLockOverlay"), { ssr: false });
   return (
     <html lang="en" suppressHydrationWarning>
       <head>

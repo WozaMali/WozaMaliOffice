@@ -4,7 +4,8 @@ export interface UserProfile {
   id: string;
   email: string;
   role: string;
-  status: string;
+  // Status may not be present on older Profile shape
+  status?: string;
 }
 
 export class RoleBasedAccess {
