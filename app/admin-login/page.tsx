@@ -20,6 +20,7 @@ import {
   Crown
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { config } from "@/lib/config";
 
 // Helper function to check if user has admin privileges
 const isAdminUser = (user: any, profile: any) => {
@@ -74,7 +75,8 @@ export default function AdminLoginPage() {
       
       if (isAdminUserResult) {
         console.log('AdminLogin: Admin user already logged in, redirecting to Office App admin dashboard');
-        const officeUrl = process.env.NEXT_PUBLIC_OFFICE_URL || 'http://localhost:8081';
+        const officeUrl = config.getOfficeUrl();
+        console.log('AdminLogin: Using office URL:', officeUrl);
         window.location.href = `${officeUrl}/admin`;
       }
     }
@@ -106,7 +108,8 @@ export default function AdminLoginPage() {
           // Redirect after a short delay
           setTimeout(() => {
             console.log('AdminLogin: Redirecting to Office App admin dashboard...');
-            const officeUrl = process.env.NEXT_PUBLIC_OFFICE_URL || 'http://localhost:8081';
+            const officeUrl = config.getOfficeUrl();
+            console.log('AdminLogin: Using office URL:', officeUrl);
             window.location.href = `${officeUrl}/admin`;
           }, 1500);
         } else {
@@ -182,7 +185,8 @@ export default function AdminLoginPage() {
           // Redirect after a short delay
           setTimeout(() => {
             console.log('AdminLogin: Redirecting to Office App admin dashboard...');
-            const officeUrl = process.env.NEXT_PUBLIC_OFFICE_URL || 'http://localhost:8081';
+            const officeUrl = config.getOfficeUrl();
+            console.log('AdminLogin: Using office URL:', officeUrl);
             window.location.href = `${officeUrl}/admin`;
           }, 1500);
         } else {

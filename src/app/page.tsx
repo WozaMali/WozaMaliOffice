@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
+import { config } from '@/lib/config';
 
 // Helper function to check if user has admin privileges
 const isAdminUser = (user, profile) => {
@@ -30,7 +31,8 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) {
       // Redirect to main app for login
-      const mainUrl = process.env.NEXT_PUBLIC_MAIN_URL || 'http://localhost:8080';
+      const mainUrl = config.getMainUrl();
+      console.log('HomePage: Using main URL:', mainUrl);
       window.location.href = `${mainUrl}/admin-login`;
     } else if (isAdminUser(user, profile)) {
       // Redirect to admin dashboard
