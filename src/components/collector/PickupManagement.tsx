@@ -120,7 +120,7 @@ export default function PickupManagement() {
         return `${baseClasses} bg-blue-100 text-blue-800`;
       case 'pending':
         return `${baseClasses} bg-yellow-100 text-yellow-800`;
-      case 'rejected':
+      case 'cancelled':
         return `${baseClasses} bg-red-100 text-red-800`;
       default:
         return `${baseClasses} bg-gray-100 text-gray-800`;
@@ -135,7 +135,7 @@ export default function PickupManagement() {
         return <CheckCircle className="w-4 h-4 text-blue-600" />;
       case 'pending':
         return <Clock className="w-4 h-4 text-yellow-600" />;
-      case 'rejected':
+      case 'cancelled':
         return <XCircle className="w-4 h-4 text-red-600" />;
       default:
         return <AlertCircle className="w-4 h-4 text-gray-600" />;
@@ -273,7 +273,7 @@ export default function PickupManagement() {
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -403,7 +403,7 @@ export default function PickupManagement() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => updatePickupStatus(pickup.id, 'rejected')}
+                              onClick={() => updatePickupStatus(pickup.id, 'cancelled')}
                               className="text-red-600 hover:text-red-700"
                             >
                               <XCircle className="w-4 h-4" />
