@@ -60,7 +60,7 @@ export default function UsersPage() {
     });
 
     return () => {
-      subscription.unsubscribe();
+      subscription();
     };
   }, []);
 
