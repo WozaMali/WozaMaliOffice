@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { LogoutUtils } from '@/lib/logout-utils';
 
 // Types
 export interface Profile {
@@ -51,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           phone, 
           status, 
           role_id,
-          role
+          roles!role_id(name)
         `)
         .eq('id', userId)
         .maybeSingle();
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: unifiedUser.email,
           full_name: unifiedUser.full_name || '',
           phone: unifiedUser.phone || undefined,
-          role: unifiedUser.role || unifiedUser.role_id || 'resident',
+          role: unifiedUser.roles?.name || 'resident',
           is_active: (unifiedUser.status || 'active') === 'active',
           created_at: new Date().toISOString(),
         };
@@ -222,19 +223,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Logout function
+  // Enhanced logout function with comprehensive session clearing
   const logout = async () => {
     try {
       console.log('🚪 Logging out user...');
-      const { error } = await supabase.auth.signOut();
-      if (error) {
-        console.error('Logout error:', error);
-      }
+      
+      // Clear local state first
       setUser(null);
       setProfile(null);
-      console.log('✅ User logged out successfully');
+      
+      // Use comprehensive logout utility
+      await LogoutUtils.performCompleteLogout(supabase);
+      
+      console.log('✅ User logged out successfully and all session data cleared');
     } catch (err) {
       console.error('Logout error:', err);
+      // Even if logout fails, clear local state
+      setUser(null);
+      setProfile(null);
     }
   };
 

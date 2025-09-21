@@ -75,6 +75,8 @@ import { NotificationSettings } from '@/components/NotificationSettings';
 import { ResetTransactionsDialog } from '@/components/ResetTransactionsDialog';
 import RealtimeStatusDot from '@/components/RealtimeStatusDot';
 import TransactionsPage from '@/components/TransactionsPage';
+import AdminSettingsPage from '../../src/app/admin/settings/page';
+import { RoleBasedAccess } from '../../src/lib/role-based-access';
 import {
   getPickups, 
   getPayments, 
@@ -99,21 +101,36 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
   onPageChange: (page: string) => void;
   onLogout: () => void;
 }) {
-  const navigation = [
+  const { user, profile } = useAuth();
+  const emailLower = user?.email?.toLowerCase?.() || '';
+  const isSuperAdmin = RoleBasedAccess.isSuperAdmin(profile as any) || emailLower === 'superadmin@wozamali.co.za';
+
+  // Build navigation in requested order (Team Members appears after Users for superadmin only)
+  const baseNavigation = [
     { name: 'Dashboard', page: 'dashboard', icon: BarChart3 },
-    { name: 'Users', page: 'users', icon: Users },
-    { name: 'Team Members', page: 'team-members', icon: UserPlus },
-    { name: 'Resident Summary', page: 'tiers', icon: Crown },
-    { name: 'Withdrawals', page: 'withdrawals', icon: CreditCard },
-    { name: 'Rewards', page: 'rewards', icon: Gift },
-    { name: 'Beneficiaries', page: 'beneficiaries', icon: School },
-    { name: 'Green Scholar Fund', page: 'green-scholar', icon: TreePine },
     { name: 'Collections', page: 'collections', icon: Calendar },
     { name: 'Pickups', page: 'pickups', icon: Package },
+    { name: 'Withdrawals', page: 'withdrawals', icon: CreditCard },
+    { name: 'Rewards', page: 'rewards', icon: Gift },
+    { name: 'Green Scholar Fund', page: 'green-scholar', icon: TreePine },
+    { name: 'Beneficiaries', page: 'beneficiaries', icon: School },
     { name: 'Transactions', page: 'transactions', icon: Wallet },
+    { name: 'Resident Summary', page: 'tiers', icon: Crown },
+    { name: 'Users', page: 'users', icon: Users },
     { name: 'Analytics', page: 'analytics', icon: TrendingUp },
+    { name: 'Settings', page: 'settings', icon: Settings },
     { name: 'Config', page: 'config', icon: Settings },
   ];
+
+  const navigation = (() => {
+    const items = [...baseNavigation];
+    if (isSuperAdmin) {
+      const usersIndex = items.findIndex(i => i.page === 'users');
+      const insertIndex = usersIndex >= 0 ? usersIndex + 1 : items.length;
+      items.splice(insertIndex, 0, { name: 'Team Members', page: 'team-members', icon: UserPlus });
+    }
+    return items;
+  })();
 
   return (
     <div className="w-64 bg-gradient-to-b from-gray-900 to-gray-800 border-r border-gray-700 min-h-screen p-4 shadow-2xl">
@@ -231,17 +248,32 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
       }
 
       console.log('📊 Loading collections...');
-      let collections: any[] = [];
+      let collections: { status: any; total_weight_kg: any; computed_value: any }[] = [];
       try {
-        const { data: colData, error: colErr } = await supabase
-          .from('collections')
-          .select('status, total_kg, weight_kg');
-        if (colErr) {
-          console.error('❌ Error loading collections:', colErr);
+        // Try unified_collections first, then fallback to collections
+        const unifiedResult = await supabase
+          .from('unified_collections')
+          .select('status, total_weight_kg, computed_value');
+
+        if (!unifiedResult.error && Array.isArray(unifiedResult.data)) {
+          collections = unifiedResult.data as any;
         } else {
-          collections = colData || [];
-          console.log('✅ Collections loaded:', collections.length);
+          const fallbackResult = await supabase
+            .from('collections')
+            .select('status, total_weight_kg, total_value');
+
+          if (!fallbackResult.error && Array.isArray(fallbackResult.data)) {
+            collections = fallbackResult.data.map((row: any) => ({
+              status: row.status,
+              total_weight_kg: row.total_weight_kg,
+              computed_value: row.total_value ?? 0,
+            }));
+          } else if (fallbackResult.error) {
+            console.error('❌ Error loading collections:', fallbackResult.error);
+          }
         }
+
+        console.log('✅ Collections loaded:', collections.length);
       } catch (collectionsError) {
         console.error('❌ Error loading collections:', collectionsError);
         collections = [];
@@ -250,9 +282,20 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
       console.log('📊 Loading payments...');
       let payments: any[] = [];
       try {
-        const { data: payData, error: payErr } = await supabase
+        // Try payments table first, then fallback to cash_payments
+        let { data: payData, error: payErr } = await supabase
           .from('payments')
           .select('amount, status');
+        
+        if (payErr && payErr.code === 'PGRST205') {
+          // Fallback to cash_payments table
+          const fallbackResult = await supabase
+            .from('cash_payments')
+            .select('amount, status');
+          payData = fallbackResult.data;
+          payErr = fallbackResult.error;
+        }
+        
         if (payErr) {
           console.error('❌ Error loading payments:', payErr);
         } else {
@@ -1640,6 +1683,8 @@ function CollectionsContent() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [selectedCollectionForReset, setSelectedCollectionForReset] = useState<{ id: string; name: string } | null>(null);
+  const { profile } = useAuth();
+  const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
 
   const getDisplayName = (fullName?: string, email?: string) => {
     const cleaned = (fullName || '').trim();
@@ -2168,15 +2213,17 @@ function CollectionsContent() {
                                   Reset
                                 </Button>
                               )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-red-600 border-red-600 hover:bg-red-50"
-                                onClick={() => handleDelete(collection.id)}
-                              >
-                                <X className="w-4 h-4 mr-1" />
-                                Delete
-                              </Button>
+                              {isSuperAdmin && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-red-600 border-red-600 hover:bg-red-50"
+                                  onClick={() => handleDelete(collection.id)}
+                                >
+                                  <X className="w-4 h-4 mr-1" />
+                                  Delete
+                                </Button>
+                              )}
                             </div>
                           </td>
                     </tr>
@@ -2499,6 +2546,8 @@ export default function AdminDashboardClient() {
         return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} />;
       case 'users':
         return <UsersContent />;
+      case 'settings':
+        return <AdminSettingsPage />;
       case 'team-members':
         return <TeamMembersContent />;
       case 'withdrawals':

@@ -29,8 +29,11 @@ import {
   MonetaryTransaction
 } from '@/lib/transactionsService';
 import { DeleteTransactionsDialog } from './DeleteTransactionsDialog';
+import { RoleBasedAccess } from '@/lib/role-based-access';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function TransactionsPage() {
+  const { profile } = useAuth();
   const [pointsTransactions, setPointsTransactions] = useState<PointsTransaction[]>([]);
   const [monetaryTransactions, setMonetaryTransactions] = useState<MonetaryTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +47,9 @@ export default function TransactionsPage() {
     type: 'single-points' | 'single-monetary' | 'bulk-points' | 'bulk-monetary' | 'all';
     transactionId?: string;
   }>({ isOpen: false, type: 'single-points' });
+
+  // Check if user can delete transactions
+  const canDeleteTransactions = RoleBasedAccess.canDeleteTransactions(profile);
 
   // Load transactions
   useEffect(() => {
@@ -378,20 +384,22 @@ export default function TransactionsPage() {
                   <Loader2 className="h-4 w-4 mr-1" />
                   Refresh
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDeleteAllTransactions}
-                  disabled={deleting === 'all'}
-                  className="text-red-600 border-red-600 hover:bg-red-50"
-                >
-                  {deleting === 'all' ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-4 w-4 mr-1" />
-                  )}
-                  Delete All
-                </Button>
+                {canDeleteTransactions && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDeleteAllTransactions}
+                    disabled={deleting === 'all'}
+                    className="text-red-600 border-red-600 hover:bg-red-50"
+                  >
+                    {deleting === 'all' ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-1" />
+                    )}
+                    Delete All
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -427,7 +435,7 @@ export default function TransactionsPage() {
                   <CreditCard className="w-4 h-4 mr-2" />
                   {monetaryTransactions.length} Transactions
                 </Badge>
-                {selectedMonetaryTransactions.length > 0 && (
+                {canDeleteTransactions && selectedMonetaryTransactions.length > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -537,20 +545,22 @@ export default function TransactionsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteMonetaryTransaction(transaction.id)}
-                            disabled={deleting === transaction.id}
-                            className="text-red-600 border-red-600 hover:bg-red-50"
-                          >
-                            {deleting === transaction.id ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4 mr-1" />
-                            )}
-                            Delete
-                          </Button>
+                          {canDeleteTransactions && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteMonetaryTransaction(transaction.id)}
+                              disabled={deleting === transaction.id}
+                              className="text-red-600 border-red-600 hover:bg-red-50"
+                            >
+                              {deleting === transaction.id ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 mr-1" />
+                              )}
+                              Delete
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -577,7 +587,7 @@ export default function TransactionsPage() {
                   <Wallet className="w-4 h-4 mr-2" />
                   {pointsTransactions.length} Transactions
                 </Badge>
-                {selectedPointsTransactions.length > 0 && (
+                {canDeleteTransactions && selectedPointsTransactions.length > 0 && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -687,20 +697,22 @@ export default function TransactionsPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeletePointsTransaction(transaction.id)}
-                            disabled={deleting === transaction.id}
-                            className="text-red-600 border-red-600 hover:bg-red-50"
-                          >
-                            {deleting === transaction.id ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4 mr-1" />
-                            )}
-                            Delete
-                          </Button>
+                          {canDeleteTransactions && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeletePointsTransaction(transaction.id)}
+                              disabled={deleting === transaction.id}
+                              className="text-red-600 border-red-600 hover:bg-red-50"
+                            >
+                              {deleting === transaction.id ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 mr-1" />
+                              )}
+                              Delete
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}

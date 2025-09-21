@@ -87,7 +87,16 @@ export class UnifiedAdminService {
   // ============================================================================
   static async getDashboardData(): Promise<{ data: AdminDashboardData | null; error: any }> {
     try {
-      // Get user counts by role with fallback to profiles
+      // Preferred: count registered users (auth) via view with roles
+      let totalUsers = 0;
+      try {
+        const { count: regCount, error: regErr } = await supabase
+          .from('registered_users_with_roles')
+          .select('*', { count: 'exact', head: true });
+        if (!regErr) totalUsers = regCount || 0;
+      } catch (_e) {}
+
+      // Get user counts by role with fallback to profiles for role breakdowns
       let { data: userCounts, error: userError } = await supabase
         .from('users')
         .select('role_id, status')
@@ -150,7 +159,7 @@ export class UnifiedAdminService {
       if (collectionsError) {
         console.debug('collections not available; defaulting to zero collections');
         return { data: {
-          totalUsers: userCounts?.length || 0,
+          totalUsers: totalUsers || userCounts?.length || 0,
           totalResidents: 0,
           totalCollectors: 0,
           totalAdmins: 0,
@@ -254,7 +263,7 @@ export class UnifiedAdminService {
       const totalPointsSpent = 0;
 
       const dashboardData: AdminDashboardData = {
-        totalUsers: userCounts?.length || 0,
+        totalUsers: totalUsers || (userCounts?.length || 0),
         totalResidents,
         totalCollectors,
         totalAdmins,
@@ -286,8 +295,7 @@ export class UnifiedAdminService {
         .from('users')
         .select(`
           *,
-          role:roles(*),
-          township:areas(*)
+          role:roles(*)
         `)
         .order('created_at', { ascending: false });
 

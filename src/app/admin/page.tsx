@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,12 +20,20 @@ import { useAuth } from '@/hooks/use-auth';
 
 export default function AdminDashboard() {
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState('team-members');
+  const [activeTab, setActiveTab] = useState('users');
 
-  const isSuperAdmin = profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
+  // Redirect admin users away from team-members tab
+  useEffect(() => {
+    if (activeTab === 'team-members' && !isSuperAdmin) {
+      console.log('🚫 Dashboard: Redirecting admin user away from team-members tab');
+      setActiveTab('users');
+    }
+  }, [activeTab, isSuperAdmin]);
 
-  const navigationItems = [
-    { id: 'team-members', name: 'Team Members', icon: Users, description: 'Manage admin profiles and approve collectors' },
+  const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
+
+  // Base navigation items
+  const baseNavigationItems = [
     { id: 'users', name: 'Users', icon: Users, description: 'Manage system users' },
     { id: 'collections', name: 'Collections', icon: Recycle, description: 'View collection data' },
     { id: 'analytics', name: 'Analytics', icon: BarChart3, description: 'View system analytics' },
@@ -34,6 +42,24 @@ export default function AdminDashboard() {
     { id: 'fund', name: 'Fund Management', icon: TreePine, description: 'Manage green scholar fund' },
     { id: 'config', name: 'Configuration', icon: Cog, description: 'System configuration' },
   ];
+
+  // Team Members item - only for superadmin
+  const teamMembersItem = { id: 'team-members', name: 'Team Members', icon: Users, description: 'Manage admin profiles and approve collectors' };
+
+  // Build navigation items dynamically
+  const navigationItems = React.useMemo(() => {
+    let items = [...baseNavigationItems];
+    
+    // Only add Team Members for superadmin users
+    if (isSuperAdmin) {
+      console.log('✅ Dashboard: Adding Team Members - user is superadmin');
+      items.unshift(teamMembersItem); // Add at the beginning
+    } else {
+      console.log('🚫 Dashboard: NOT adding Team Members - user is not superadmin:', profile?.role);
+    }
+    
+    return items;
+  }, [isSuperAdmin, profile?.role]);
 
   return (
     <div className="space-y-6">
@@ -119,10 +145,12 @@ export default function AdminDashboard() {
           ))}
         </TabsList>
 
-        {/* Team Members Tab */}
-        <TabsContent value="team-members" className="space-y-4">
-          <AdminTeamMember />
-        </TabsContent>
+        {/* Team Members Tab - Only for superadmin */}
+        {isSuperAdmin && (
+          <TabsContent value="team-members" className="space-y-4">
+            <AdminTeamMember />
+          </TabsContent>
+        )}
 
         {/* Other Tabs - Placeholder Content */}
         {navigationItems.filter(item => item.id !== 'team-members').map((item) => (

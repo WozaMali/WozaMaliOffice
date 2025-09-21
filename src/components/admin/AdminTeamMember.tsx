@@ -56,8 +56,66 @@ export default function AdminTeamMember() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
 
-  // Check if user is admin or superadmin
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'ADMIN' || profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
+  // Check if user is superadmin only
+  const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
+  const isAdmin = profile?.role === 'admin' || profile?.role === 'ADMIN';
+
+  // Show restricted access message for admin users
+  if (profile && isAdmin && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-lg shadow-lg border-2 border-red-200 p-8 text-center">
+            <div className="text-red-500 text-8xl mb-6">🔒</div>
+            <h1 className="text-4xl font-bold text-red-900 mb-4">Access Restricted</h1>
+            <p className="text-red-700 text-xl mb-6">
+              Team Members management is restricted to superadmin users only.
+            </p>
+            <p className="text-red-600 mb-8">
+              Your current role: <span className="font-bold text-red-800">{profile.role}</span>
+            </p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+              <p className="text-red-800 font-medium">
+                ⚠️ This section contains sensitive administrative functions that require superadmin privileges.
+              </p>
+            </div>
+            <button
+              onClick={() => window.location.href = '/admin'}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-lg"
+            >
+              Return to Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show access denied for any other non-superadmin users
+  if (profile && !isSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <div className="text-red-500 text-6xl mb-4">🚫</div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">Access Denied</h1>
+            <p className="text-gray-600 text-lg mb-6">
+              The Team Members section is only accessible to superadmin users.
+            </p>
+            <p className="text-gray-500 mb-8">
+              Your current role: <span className="font-semibold">{profile.role}</span>
+            </p>
+            <button
+              onClick={() => window.history.back()}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Load team members
   useEffect(() => {

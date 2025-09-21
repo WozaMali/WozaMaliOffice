@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { 
@@ -21,15 +21,17 @@ import {
   Cog
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { LogoutUtils } from '@/lib/logout-utils';
+import { supabase } from '@/lib/supabase';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
   currentPage?: string;
 }
 
-const navigationItems = [
+// Base navigation items - Team Members will be conditionally added
+const baseNavigationItems = [
   { name: 'Dashboard', href: '/admin', icon: Home, current: true },
-  { name: 'Team Members', href: '/admin/team-members', icon: Users, current: false },
   { name: 'Users', href: '/admin/users', icon: Users, current: false },
   { name: 'Collections', href: '/admin/collections', icon: Recycle, current: false },
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, current: false },
@@ -37,13 +39,43 @@ const navigationItems = [
   { name: 'Fund Management', href: '/admin/fund', icon: TreePine, current: false },
   { name: 'Rewards', href: '/admin/rewards', icon: Award, current: false },
   { name: 'Withdrawals', href: '/admin/withdrawals', icon: CreditCard, current: false },
+  { name: 'Settings', href: '/admin/settings', icon: Settings, current: false },
   { name: 'Configuration', href: '/admin/config', icon: Cog, current: false },
 ];
+
+// Team Members item - only for superadmin
+const teamMembersItem = { name: 'Team Members', href: '/admin/team-members', icon: Users, current: false, superadminOnly: true };
 
 export default function AdminLayout({ children, currentPage }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { user, profile, logout } = useAuth();
+
+  // Filter navigation items based on user role
+  const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin';
+  
+  // Debug logging for role checking
+  console.log('🔍 AdminLayout Role Check:', {
+    userEmail: user?.email,
+    userRole: profile?.role,
+    isSuperAdmin: isSuperAdmin,
+    profile: profile
+  });
+  
+  // Build navigation items dynamically based on user role
+  const filteredNavigationItems = React.useMemo(() => {
+    let items = [...baseNavigationItems];
+    
+    // Only add Team Members for superadmin users
+    if (isSuperAdmin) {
+      console.log('✅ Adding Team Members - user is superadmin');
+      items.splice(1, 0, teamMembersItem); // Insert after Dashboard
+    } else {
+      console.log('🚫 NOT adding Team Members - user is not superadmin:', profile?.role);
+    }
+    
+    return items;
+  }, [isSuperAdmin, profile?.role]);
   const router = useRouter();
 
   useEffect(() => {
@@ -56,14 +88,19 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
   const handleLogout = async () => {
     setIsLoading(true);
     try {
-      console.log('🚪 AdminLayout: Starting logout process...');
+      console.log('🚪 AdminLayout: Starting comprehensive logout process...');
       await logout();
-      console.log('✅ AdminLayout: Logout successful, redirecting to home');
-      router.push('/');
+      console.log('✅ AdminLayout: Logout successful, performing final cleanup');
+      
+      // Perform additional cleanup using logout utils
+      await LogoutUtils.performCompleteLogout(supabase);
+      
+      // Force redirect to home page with cache busting
+      LogoutUtils.forceRedirectToHome();
     } catch (error) {
       console.error('❌ AdminLayout: Logout error:', error);
-      // Still redirect even if logout fails
-      router.push('/');
+      // Force redirect even if logout fails
+      LogoutUtils.forceRedirectToHome();
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +157,7 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
             </Button>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigationItems.map((item) => (
+            {filteredNavigationItems.map((item) => (
               <Button
                 key={item.name}
                 variant="ghost"
@@ -147,7 +184,7 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
             </div>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
-            {navigationItems.map((item) => (
+            {filteredNavigationItems.map((item) => (
               <Button
                 key={item.name}
                 variant="ghost"

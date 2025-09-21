@@ -27,6 +27,7 @@ import {
 import { getPickups, subscribeToPickups, updatePickupStatus, assignCollectorToCollection, deleteCollectionDeep, clearPickupsCache, formatDate, formatCurrency, formatWeight, TransformedPickup } from '@/lib/admin-services';
 import { softDeleteCollection } from '@/lib/soft-delete-service';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/use-auth';
 
 function getDisplayName(fullName?: string, email?: string): string {
   const cleaned = (fullName || '').trim();
@@ -41,6 +42,8 @@ function getDisplayName(fullName?: string, email?: string): string {
 }
 
 export default function PickupsPage() {
+  const { profile } = useAuth();
+  const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
   const [pickups, setPickups] = useState<TransformedPickup[]>([]);
   const [filteredPickups, setFilteredPickups] = useState<TransformedPickup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -562,29 +565,31 @@ export default function PickupsPage() {
                             <Eye className="w-4 h-4 mr-1" />
                             View
                         </Button>
-                        <Button
-                            variant="outline"
-                          size="sm"
-                          onClick={async () => {
-                            const confirmed = typeof window !== 'undefined' ? window.confirm('Move this collection to deleted transactions? This will hide it from Main App and Office views, but it can be restored later.') : true;
-                            if (!confirmed) return;
-                            // Optimistic remove
-                            const prev = pickups;
-                            setPickups(p => p.filter(x => x.id !== pickup.id));
-                            const result = await softDeleteCollection(pickup.id, 'Deleted by super admin from Pickups page');
-                            if (!result.success) {
-                              setPickups(prev);
-                              alert(`Failed to delete collection: ${result.message}`);
-                            } else {
-                              try { clearPickupsCache(); } catch {}
-                              try { await loadPickups(); } catch {}
-                            }
-                          }}
-                            className="text-red-600 border-red-600 hover:bg-red-50"
-                        >
-                            <X className="w-4 h-4 mr-1" />
-                          Delete
-                        </Button>
+                        {isSuperAdmin && (
+                          <Button
+                              variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              const confirmed = typeof window !== 'undefined' ? window.confirm('Move this collection to deleted transactions? This will hide it from Main App and Office views, but it can be restored later.') : true;
+                              if (!confirmed) return;
+                              // Optimistic remove
+                              const prev = pickups;
+                              setPickups(p => p.filter(x => x.id !== pickup.id));
+                              const result = await softDeleteCollection(pickup.id, 'Deleted by super admin from Pickups page');
+                              if (!result.success) {
+                                setPickups(prev);
+                                alert(`Failed to delete collection: ${result.message}`);
+                              } else {
+                                try { clearPickupsCache(); } catch {}
+                                try { await loadPickups(); } catch {}
+                              }
+                            }}
+                              className="text-red-600 border-red-600 hover:bg-red-50"
+                          >
+                              <X className="w-4 h-4 mr-1" />
+                            Delete
+                          </Button>
+                        )}
                         {((pickup.status as string) === 'pending' || pickup.status === 'submitted') && (
                           <>
                             <Button
