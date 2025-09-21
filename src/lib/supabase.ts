@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const rawAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+const supabaseUrl = rawUrl?.trim()
+const supabaseAnonKey = rawAnonKey?.trim()
 
 console.log('🔌 Creating Supabase client with:');
 console.log('🔌 URL:', supabaseUrl);
@@ -328,7 +331,7 @@ export interface MaterialPerformanceView {
 export interface CollectorPerformanceView {
   collector_id: string
   collector_name: string
-  collector_email: string // This will contain phone number from collector_phone
+  collector_email: string
   total_pickups: number
   total_kg_collected: number
   total_value_generated: number

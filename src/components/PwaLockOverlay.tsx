@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 
 export default function PwaLockOverlay() {
-	const { user } = useAuth();
+	const { user, profile } = useAuth();
 	const { needsSetup, isLocked, setup, unlock } = usePwaLock();
 	const [username, setUsername] = useState("");
 	const [pin, setPin] = useState("");
@@ -41,6 +41,29 @@ export default function PwaLockOverlay() {
 					<CardTitle>{needsSetup ? "Set up Quick PIN" : "Unlock"}</CardTitle>
 				</CardHeader>
 				<CardContent>
+					{needsSetup && (
+						<div className="mb-3 rounded-md bg-gray-50 p-3 text-sm text-gray-700">
+							<div className="font-medium mb-1">Your account</div>
+							<div className="space-y-1">
+								<div>
+									<span className="text-gray-500">User ID:</span>{' '}
+									<span className="font-mono break-all">{user.id}</span>
+								</div>
+								<div>
+									<span className="text-gray-500">Name:</span>{' '}
+									{profile?.full_name || '—'}
+								</div>
+								<div>
+									<span className="text-gray-500">Email:</span>{' '}
+									{profile?.email || user.email || '—'}
+								</div>
+								<div>
+									<span className="text-gray-500">Role:</span>{' '}
+									{profile?.role || '—'}
+								</div>
+							</div>
+						</div>
+					)}
 					<form onSubmit={onSubmit} className="space-y-3">
 						<div>
 							<label className="text-sm">Username</label>
