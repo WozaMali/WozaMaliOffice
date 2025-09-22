@@ -166,6 +166,7 @@ export interface MemberWithUserAddresses extends Profile {
   tier?: string
   total_pickups?: number
   last_pickup_date?: string
+  customer_status?: string
 }
 
 // NEW: Dashboard View Types

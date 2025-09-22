@@ -21,6 +21,8 @@ import { useAuth } from '@/hooks/use-auth';
 export default function AdminDashboard() {
   const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState('users');
+  
+  const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
 
   // Redirect admin users away from team-members tab
   useEffect(() => {
@@ -29,8 +31,6 @@ export default function AdminDashboard() {
       setActiveTab('users');
     }
   }, [activeTab, isSuperAdmin]);
-
-  const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin' || profile?.role === 'SUPER_ADMIN';
 
   // Base navigation items
   const baseNavigationItems = [

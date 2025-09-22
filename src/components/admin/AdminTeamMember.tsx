@@ -35,7 +35,7 @@ interface TeamMember {
   full_name: string;
   phone?: string;
   role: string;
-  status: 'active' | 'inactive' | 'pending' | 'suspended';
+  status: 'active' | 'inactive' | 'pending' | 'pending_approval' | 'suspended';
   employee_number?: string;
   township?: string;
   created_at: string;
@@ -179,12 +179,17 @@ export default function AdminTeamMember() {
 
       if (error) throw error;
 
-      const members: TeamMember[] = data?.map(user => ({
+      const members: TeamMember[] = data?.map((user: any) => {
+        const rolesJoin = user?.roles;
+        const roleName = Array.isArray(rolesJoin)
+          ? rolesJoin[0]?.name
+          : rolesJoin?.name;
+        return {
         id: user.id,
         email: user.email,
         full_name: `${user.first_name} ${user.last_name}`.trim(),
         phone: user.phone,
-        role: user.roles.name,
+        role: roleName || String(user.role || user.role_id || ''),
         status: user.status,
         employee_number: user.employee_number,
         township: user.township,
@@ -194,7 +199,8 @@ export default function AdminTeamMember() {
         is_approved: user.is_approved,
         approval_date: user.approval_date,
         approved_by: user.approved_by,
-      })) || [];
+        } as TeamMember;
+      }) || [];
 
       setTeamMembers(members);
     } catch (error) {

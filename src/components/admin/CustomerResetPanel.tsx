@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   adminResetServices,
-  type CustomerForReset,
-  type AdminResetStatistics 
 } from '../../lib/admin-reset-services';
+import type {
+  CustomerForReset,
+  AdminResetStatistics
+} from '../../types/admin-reset';
 import { 
   Trash2, 
   RefreshCw, 

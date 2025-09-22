@@ -35,7 +35,7 @@ interface TeamMember {
   full_name: string;
   phone?: string;
   role: string;
-  status: 'active' | 'inactive' | 'pending' | 'suspended';
+  status: 'active' | 'inactive' | 'pending' | 'pending_approval' | 'suspended';
   employee_number?: string;
   township?: string;
   created_at: string;

@@ -157,10 +157,16 @@ export function DashboardMetrics() {
       });
 
       // Calculate dashboard data
+      const countByRole = (roleName: string) =>
+        profiles.filter((p: any) =>
+          (p.role && String(p.role).toUpperCase() === roleName) ||
+          (p.role_id && String(p.role_id).toUpperCase() === roleName)
+        ).length;
+
       const dashboardData: DashboardData = {
         total_pickups: pickups.length,
-        unique_customers: profiles.filter(p => p.role === 'CUSTOMER').length,
-        unique_collectors: profiles.filter(p => p.role === 'COLLECTOR').length,
+        unique_customers: countByRole('CUSTOMER'),
+        unique_collectors: countByRole('COLLECTOR'),
         total_kg_collected: materials.reduce((sum, m) => sum + (m.quantity || 0), 0),
         total_value_generated: materials.reduce((sum, m) => sum + ((m.quantity || 0) * (m.unit_price || 0)), 0),
         pending_pickups: pickups.filter(p => p.status === 'submitted').length,

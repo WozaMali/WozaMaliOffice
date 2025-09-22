@@ -35,7 +35,8 @@ export default function PWAInstallPrompt() {
     setIsStandalone(standalone)
 
     // Check if already installed by checking if the app is in standalone mode
-    if (standalone || window.navigator.standalone) {
+    const iosStandalone = (window.navigator as any).standalone as boolean | undefined;
+    if (standalone || iosStandalone) {
       setIsInstalled(true)
       return
     }

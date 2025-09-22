@@ -5,7 +5,10 @@ import { useAuth } from '@/hooks/use-auth';
 import { config } from '@/lib/config';
 
 // Helper function to check if user has admin privileges
-const isAdminUser = (user, profile) => {
+type BasicUser = { email?: string | null } | null | undefined;
+type BasicProfile = { role?: string | null } | null | undefined;
+
+const isAdminUser = (user: BasicUser, profile: BasicProfile): boolean => {
   if (!user) return false;
   
   // Check profile role first (from database)
