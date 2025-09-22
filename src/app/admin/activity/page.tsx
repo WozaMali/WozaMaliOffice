@@ -23,24 +23,20 @@ export default function AdminActivityPage() {
 	const load = async () => {
 		setLoading(true);
 		setError(null);
-		try {
-			// Attempt joining with profiles/users for email
-			const { data, error } = await supabase
-				.from('admin_session_events')
-				.select('id, user_id, event_type, reason, created_at')
-				.order('created_at', { ascending: false })
-				.limit(200);
-			if (error) throw error;
-			const withEmails = await Promise.all((data || []).map(async (e: any) => {
-				try {
-					const { data: u } = await supabase.from('users').select('email').eq('id', e.user_id).maybeSingle();
-					return { ...e, user_email: u?.email || null } as EventRow;
-				} catch {
-					return { ...e, user_email: null } as EventRow;
-				}
-			}))
-			setEvents(withEmails);
-		} catch (e: any) {
+    try {
+        // Use secure RPC that bypasses RLS for superadmins
+        const { data, error } = await supabase.rpc('get_admin_session_events', { p_limit: 200 });
+        if (error) throw error;
+        const withEmails = await Promise.all((data || []).map(async (e: any) => {
+            try {
+                const { data: u } = await supabase.from('users').select('email').eq('id', e.user_id).maybeSingle();
+                return { ...e, user_email: u?.email || null } as EventRow;
+            } catch {
+                return { ...e, user_email: null } as EventRow;
+            }
+        }))
+        setEvents(withEmails);
+    } catch (e: any) {
 			setError(e?.message || 'Failed to load activity');
 		} finally {
 			setLoading(false);
