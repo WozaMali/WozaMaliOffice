@@ -94,6 +94,8 @@ import { UnifiedAdminService, useDashboardData, useAllUsers, useCollections, use
 import { clearPickupsCache } from '../../src/lib/admin-services';
 import type { User, TownshipDropdown, SubdivisionDropdown } from '../../src/lib/supabase';
 import type { CollectionData } from '../../src/lib/unified-admin-service';
+import { logAdminSessionEvent } from '../../src/lib/admin-session-logging';
+import { usePwaLock } from '@/hooks/use-pwa-lock';
 
 // Sidebar Navigation Component
 function AdminSidebar({ currentPage, onPageChange, onLogout }: { 
@@ -128,6 +130,8 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
       const usersIndex = items.findIndex(i => i.page === 'users');
       const insertIndex = usersIndex >= 0 ? usersIndex + 1 : items.length;
       items.splice(insertIndex, 0, { name: 'Team Members', page: 'team-members', icon: UserPlus });
+      // Add Admin Activity page for superadmins
+      items.splice(insertIndex + 1, 0, { name: 'Admin Activity', page: 'admin-activity', icon: Activity });
     }
     return items;
   })();
@@ -194,6 +198,10 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
   isSuperAdmin?: boolean;
 }) {
   const router = useRouter();
+  const { user, logout } = useAuth();
+  const [softOpen, setSoftOpen] = useState(false);
+  const [softReason, setSoftReason] = useState('Tea Break');
+  const { lock } = usePwaLock();
   const [dashboardData, setDashboardData] = useState({
     totalUsers: 0,
     totalPickups: 0,
@@ -670,6 +678,27 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
               <Activity className="w-4 h-4 mr-2" />
           Live Data
         </Badge>
+            {/* Soft Sign Out and Sign out controls */}
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setSoftOpen(true)}
+                className="relative overflow-hidden bg-gradient-to-b from-yellow-400 to-yellow-500 text-yellow-950 border-0 shadow-[0_6px_0_#b45309] hover:shadow-[0_4px_0_#b45309] active:shadow-[0_0_0_#b45309] active:translate-y-1 transition-all duration-150 px-4 py-2 rounded-md"
+              >
+                <span className="relative z-10 font-semibold">Soft Sign Out</span>
+                <span className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_30%_30%,white,transparent_40%)]" />
+              </Button>
+              <Button variant="ghost" onClick={async () => {
+                try {
+                  await logout();
+                  router.push('/admin-login');
+                } catch {
+                  router.push('/admin-login');
+                }
+              }}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign out
+              </Button>
+            </div>
         </div>
       </div>
 
@@ -746,6 +775,58 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
           </CardContent>
         </Card>
       </div>
+
+      {/* Soft Sign Out Dialog */}
+      <Dialog open={softOpen} onOpenChange={setSoftOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-0 shadow-2xl bg-white/90 backdrop-blur-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold tracking-tight text-gray-900">Soft Sign Out</DialogTitle>
+            <DialogDescription className="text-gray-600">Select a reason and confirm soft sign out.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-800">Select Reason</label>
+              <select
+                value={softReason}
+                onChange={(e) => setSoftReason(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 bg-white text-gray-800 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-colors"
+              >
+                <option>Tea Break</option>
+                <option>Lunch</option>
+                <option>Bathroom</option>
+                <option>Meeting</option>
+                <option>Site Visit</option>
+                <option>Network Issue</option>
+                <option>End of Shift</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                className="rounded-lg border-gray-200 text-gray-700 hover:bg-gray-50"
+                onClick={() => setSoftOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="relative overflow-hidden bg-gradient-to-b from-yellow-400 to-yellow-500 text-yellow-950 border-0 shadow-[0_6px_0_#b45309] hover:shadow-[0_4px_0_#b45309] active:shadow-[0_0_0_#b45309] active:translate-y-1 transition-all duration-150 px-4 py-2 rounded-md"
+                onClick={async () => {
+                  try {
+                    await logAdminSessionEvent(user?.id, 'soft_logout', softReason);
+                    try { lock(); } catch {}
+                    setSoftOpen(false);
+                    try { router.push('/admin'); } catch {}
+                  } catch {}
+                }}
+              >
+                <span className="relative z-10 font-semibold">Submit</span>
+                <span className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_30%_30%,white,transparent_40%)]" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Additional Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -981,6 +1062,113 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
 }
 
 // Other Page Content Components
+function AdminActivityContent() {
+  type AdminEvent = {
+    id: string;
+    user_id: string;
+    event_type: 'login' | 'logout' | 'soft_logout' | 'unlock';
+    reason: string | null;
+    created_at: string;
+    user_email?: string | null;
+  };
+
+  const [events, setEvents] = useState<AdminEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'login' | 'logout' | 'soft_logout' | 'unlock'>('all');
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase.rpc('get_admin_session_events', { p_limit: 200 });
+      if (error) throw error;
+      const list = Array.isArray(data) ? data : [];
+      const ids = Array.from(new Set(list.map((e: any) => e.user_id).filter(Boolean)));
+      const emailMap = new Map<string, string>();
+      if (ids.length) {
+        const { data: usersData } = await supabase.from('users').select('id,email').in('id', ids);
+        (usersData || []).forEach((u: any) => emailMap.set(u.id, u.email || ''));
+      }
+      const mapped: AdminEvent[] = list.map((e: any) => ({
+        id: e.id,
+        user_id: e.user_id,
+        event_type: e.event_type,
+        reason: e.reason ?? null,
+        created_at: e.created_at,
+        user_email: emailMap.get(e.user_id) || null,
+      }));
+      setEvents(mapped);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load activity');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const visibleEvents = events.filter(ev => (filter === 'all' ? true : ev.event_type === filter));
+
+  const badgeClass = (t: AdminEvent['event_type']) =>
+    t === 'login'
+      ? 'bg-green-100 text-green-800 border-green-200'
+      : t === 'logout'
+      ? 'bg-red-100 text-red-800 border-red-200'
+      : t === 'soft_logout'
+      ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+      : 'bg-blue-100 text-blue-800 border-blue-200';
+
+  return (
+    <div className="p-6">
+      <Card className="border-0 shadow-xl">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-xl font-semibold">Admin Activity</CardTitle>
+          <div className="flex items-center gap-2">
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as any)}
+              className="rounded-lg border border-gray-200 bg-white text-gray-800 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+            >
+              <option value="all">All events</option>
+              <option value="login">Login</option>
+              <option value="soft_logout">Soft logout</option>
+              <option value="logout">Logout</option>
+              <option value="unlock">Unlock</option>
+            </select>
+            <Button size="sm" onClick={load} disabled={loading} className="bg-gray-900 text-white hover:bg-gray-800">
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {error && <div className="text-sm text-red-600 mb-3">{error}</div>}
+          {loading ? (
+            <div className="text-sm text-gray-600">Loading activity...</div>
+          ) : visibleEvents.length === 0 ? (
+            <div className="text-sm text-gray-600">No activity yet.</div>
+          ) : (
+            <div className="space-y-3">
+              {visibleEvents.map((ev) => (
+                <div key={ev.id} className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-xs px-2 py-1 rounded-md border ${badgeClass(ev.event_type)}`}>{ev.event_type.replace('_', ' ')}</span>
+                    <div className="">
+                      {ev.reason && <div className="text-sm text-gray-900">{ev.reason}</div>}
+                      <div className="text-xs text-gray-600">{ev.user_email || ev.user_id}</div>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500">{new Date(ev.created_at).toLocaleString()}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function TeamMembersContent() {
   const { users, loading, error } = useAllUsers();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -2546,6 +2734,8 @@ export default function AdminDashboardClient() {
         return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} />;
       case 'users':
         return <UsersContent />;
+      case 'admin-activity':
+        return <AdminActivityContent />;
       case 'settings':
         return <AdminSettingsPage />;
       case 'team-members':
@@ -2621,6 +2811,15 @@ export default function AdminDashboardClient() {
                 <Activity className="w-4 h-4 mr-2" />
                 Live Data
               </Badge>
+              {isSuperAdmin && (
+                <Button
+                  onClick={() => setCurrentPage('admin-activity')}
+                  className="bg-gradient-to-r from-gray-800 to-gray-700 text-white hover:from-gray-700 hover:to-gray-600 border-0 shadow-md"
+                >
+                  <Activity className="w-4 h-4 mr-2" />
+                  Admin Activity
+                </Button>
+              )}
             </div>
           </div>
         </div>

@@ -248,11 +248,11 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
               </div>
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
                   onClick={() => setSoftSignOutOpen(true)}
-                  className="text-gray-700 hover:text-gray-900"
+                  className="relative overflow-hidden bg-gradient-to-b from-yellow-400 to-yellow-500 text-yellow-950 border-0 shadow-[0_6px_0_#b45309] hover:shadow-[0_4px_0_#b45309] active:shadow-[0_0_0_#b45309] active:translate-y-1 transition-all duration-150 px-4 py-2 rounded-md"
                 >
-                  Soft Sign Out
+                  <span className="relative z-10 font-semibold">Soft Sign Out</span>
+                  <span className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_30%_30%,white,transparent_40%)]" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -275,17 +275,17 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
           </div>
         </main>
         <Dialog open={softSignOutOpen} onOpenChange={setSoftSignOutOpen}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-md rounded-2xl border-0 shadow-2xl bg-white/90 backdrop-blur-md">
             <DialogHeader>
-              <DialogTitle>Sign Out</DialogTitle>
-              <DialogDescription>Select a reason and confirm soft sign out.</DialogDescription>
+              <DialogTitle className="text-xl font-semibold tracking-tight text-gray-900">Soft Sign Out</DialogTitle>
+              <DialogDescription className="text-gray-600">Select a reason and confirm soft sign out.</DialogDescription>
             </DialogHeader>
-            <div className="space-y-3">
-              <label className="text-sm">Select Reason</label>
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-gray-800">Select Reason</label>
               <select
                 value={softReason}
                 onChange={(e) => setSoftReason(e.target.value)}
-                className="w-full border rounded-md px-3 py-2"
+                className="w-full rounded-lg border border-gray-200 bg-white text-gray-800 px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition-colors"
               >
                 <option>Tea Break</option>
                 <option>Lunch</option>
@@ -297,8 +297,11 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
                 <option>Other</option>
               </select>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setSoftSignOutOpen(false)}>Cancel</Button>
-                <Button onClick={handleSoftSignOut}>Submit</Button>
+                <Button variant="outline" className="rounded-lg border-gray-200 text-gray-700 hover:bg-gray-50" onClick={() => setSoftSignOutOpen(false)}>Cancel</Button>
+                <Button className="relative overflow-hidden bg-gradient-to-b from-yellow-400 to-yellow-500 text-yellow-950 border-0 shadow-[0_6px_0_#b45309] hover:shadow-[0_4px_0_#b45309] active:shadow-[0_0_0_#b45309] active:translate-y-1 transition-all duration-150 px-4 py-2 rounded-md" onClick={handleSoftSignOut}>
+                  <span className="relative z-10 font-semibold">Submit</span>
+                  <span className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_30%_30%,white,transparent_40%)]" />
+                </Button>
               </div>
             </div>
           </DialogContent>

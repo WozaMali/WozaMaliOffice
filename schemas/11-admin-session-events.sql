@@ -7,6 +7,10 @@ create table if not exists public.admin_session_events (
 	created_at timestamptz not null default now()
 );
 
+-- Default user_id from current auth context so clients can omit it
+alter table public.admin_session_events
+	alter column user_id set default auth.uid();
+
 alter table public.admin_session_events enable row level security;
 
 -- Admins can insert their own events
@@ -48,3 +52,62 @@ as $$
 $$;
 
 grant execute on function public.get_admin_session_events(integer) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Helper RPCs to log session events (logout, soft_logout, etc.) using auth.uid()
+-- ---------------------------------------------------------------------------
+
+create or replace function public.log_admin_session_event(
+	p_event_type text,
+	p_reason text default null
+)
+returns public.admin_session_events
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+	v_row public.admin_session_events;
+begin
+	-- Ensure caller is authenticated
+	if auth.uid() is null then
+		raise exception 'Not authenticated';
+	end if;
+
+	-- Enforce allowed event types
+	if p_event_type not in ('login','logout','soft_logout','unlock') then
+		raise exception 'Invalid event_type: %', p_event_type;
+	end if;
+
+	insert into public.admin_session_events(user_id, event_type, reason)
+	values (auth.uid(), p_event_type, p_reason)
+	returning * into v_row;
+
+	return v_row;
+end;
+$$;
+
+grant execute on function public.log_admin_session_event(text, text) to authenticated;
+
+-- Convenience wrappers
+create or replace function public.log_signout(p_reason text default null)
+returns public.admin_session_events
+language sql
+security definer
+set search_path = public
+as $$
+  select * from public.log_admin_session_event('logout', p_reason);
+$$;
+
+grant execute on function public.log_signout(text) to authenticated;
+
+create or replace function public.log_soft_signout(p_reason text default null)
+returns public.admin_session_events
+language sql
+security definer
+set search_path = public
+as $$
+  select * from public.log_admin_session_event('soft_logout', p_reason);
+$$;
+
+grant execute on function public.log_soft_signout(text) to authenticated;
