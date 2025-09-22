@@ -23,6 +23,9 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { LogoutUtils } from '@/lib/logout-utils';
 import { supabase } from '@/lib/supabase';
+import { logAdminSessionEvent } from '@/lib/admin-session-logging';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Select } from '@/components/ui/select';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -39,6 +42,7 @@ const baseNavigationItems = [
   { name: 'Fund Management', href: '/admin/fund', icon: TreePine, current: false },
   { name: 'Rewards', href: '/admin/rewards', icon: Award, current: false },
   { name: 'Withdrawals', href: '/admin/withdrawals', icon: CreditCard, current: false },
+  { name: 'Activity', href: '/admin/activity', icon: BarChart3, current: false, superadminOnly: true },
   { name: 'Settings', href: '/admin/settings', icon: Settings, current: false },
   { name: 'Configuration', href: '/admin/config', icon: Cog, current: false },
 ];
@@ -49,6 +53,8 @@ const teamMembersItem = { name: 'Team Members', href: '/admin/team-members', ico
 export default function AdminLayout({ children, currentPage }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [softSignOutOpen, setSoftSignOutOpen] = useState(false);
+  const [softReason, setSoftReason] = useState<string>('Tea Break');
   const { user, profile, logout } = useAuth();
 
   // Filter navigation items based on user role
@@ -103,6 +109,21 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
       LogoutUtils.forceRedirectToHome();
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSoftSignOut = async () => {
+    try {
+      setSoftSignOutOpen(false);
+      await logAdminSessionEvent(user?.id, 'soft_logout', softReason);
+      // Blur screen and show lock overlay by forcing lock state via storage
+      try {
+        sessionStorage.removeItem('pwaLock.unlockedSession');
+      } catch {}
+      // Navigate to admin root; the lock overlay will prompt for PIN
+      router.push('/admin');
+    } catch (e) {
+      console.error('Soft sign-out failed', e);
     }
   };
 
@@ -222,15 +243,24 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
                   <span className="text-gray-500 ml-2">({profile.email})</span>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                onClick={handleLogout}
-                disabled={isLoading}
-                className="text-gray-700 hover:text-gray-900"
-              >
-                <LogOut className="h-5 w-5 mr-2" />
-                {isLoading ? 'Signing out...' : 'Sign out'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setSoftSignOutOpen(true)}
+                  className="text-gray-700 hover:text-gray-900"
+                >
+                  Soft Sign Out
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={handleLogout}
+                  disabled={isLoading}
+                  className="text-gray-700 hover:text-gray-900"
+                >
+                  <LogOut className="h-5 w-5 mr-2" />
+                  {isLoading ? 'Signing out...' : 'Sign out'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -241,6 +271,35 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
             {children}
           </div>
         </main>
+        <Dialog open={softSignOutOpen} onOpenChange={setSoftSignOutOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Sign Out</DialogTitle>
+              <DialogDescription>Select a reason and confirm soft sign out.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <label className="text-sm">Select Reason</label>
+              <select
+                value={softReason}
+                onChange={(e) => setSoftReason(e.target.value)}
+                className="w-full border rounded-md px-3 py-2"
+              >
+                <option>Tea Break</option>
+                <option>Lunch</option>
+                <option>Bathroom</option>
+                <option>Meeting</option>
+                <option>Site Visit</option>
+                <option>Network Issue</option>
+                <option>End of Shift</option>
+                <option>Other</option>
+              </select>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setSoftSignOutOpen(false)}>Cancel</Button>
+                <Button onClick={handleSoftSignOut}>Submit</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

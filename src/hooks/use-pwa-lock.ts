@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
+import { logAdminSessionEvent } from "@/lib/admin-session-logging";
 
 type PwaLockState = {
 	needsSetup: boolean;
@@ -115,6 +116,8 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 			localStorage.setItem(LS_LAST_ACTIVE, String(getNow()));
 			sessionStorage.setItem(SS_UNLOCKED, "true");
 			setState(s => ({ ...s, isLocked: false, needsSetup: false, username }));
+			// Log unlock as a session event for admin activity stats
+			try { await logAdminSessionEvent(user?.id, 'unlock'); } catch {}
 			return { success: true };
 		} catch (e: any) {
 			return { success: false, error: e?.message || "Unlock failed" };

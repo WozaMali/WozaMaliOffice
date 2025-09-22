@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { logAdminSessionEvent } from '@/lib/admin-session-logging';
 import { LogoutUtils } from '@/lib/logout-utils';
 
 // Types
@@ -149,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         const userProfile = await fetchProfile(data.user.id);
         setProfile(userProfile);
+        try { await logAdminSessionEvent(data.user.id, 'login'); } catch {}
         return { success: true };
       }
 
@@ -230,7 +232,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       console.log('🚪 Logging out user...');
-      
+      const currentUserId = user?.id;
+      try { await logAdminSessionEvent(currentUserId || null, 'logout'); } catch {}
       // Clear local state first
       setUser(null);
       setProfile(null);
