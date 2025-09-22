@@ -79,6 +79,9 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
     } else {
       console.log('🚫 NOT adding Team Members - user is not superadmin:', profile?.role);
     }
+
+    // Filter items that are superadmin-only
+    items = items.filter((it: any) => !it.superadminOnly || isSuperAdmin);
     
     return items;
   }, [isSuperAdmin, profile?.role]);
