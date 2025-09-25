@@ -33,8 +33,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true, via: 'rpc', result: rpcResult })
       }
       console.log('RPC failed or not available:', rpcErr?.message || 'No result')
-    } catch (e) {
-      console.log('RPC not available:', e.message)
+    } catch (e: any) {
+      console.log('RPC not available:', e?.message || String(e))
     }
 
     // Fallback: Manual deletion
@@ -48,8 +48,8 @@ export async function POST(req: Request) {
         .eq('id', withdrawalId)
       
       if (updateErr) console.log('Pre-update failed:', updateErr.message)
-    } catch (e) {
-      console.log('Pre-update error:', e.message)
+    } catch (e: any) {
+      console.log('Pre-update error:', e?.message || String(e))
     }
 
     // Child cleanup (best-effort)
