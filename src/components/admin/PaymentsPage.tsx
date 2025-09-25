@@ -19,7 +19,8 @@ import {
   User,
   Wallet,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Trash2
 } from 'lucide-react';
 import { 
   getWithdrawals, 
@@ -39,7 +40,7 @@ export default function PaymentsPage() {
   const [methodFilter, setMethodFilter] = useState('all');
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
-  const [payoutMethod, setPayoutMethod] = useState<'wallet' | 'cash' | 'bank_transfer' | 'mobile_money'>('wallet');
+  const [payoutMethod, setPayoutMethod] = useState<'wallet' | 'cash' | 'bank_transfer' | 'mobile_money'>('bank_transfer');
 
   // Load withdrawals and set up real-time subscription
   useEffect(() => {
@@ -85,24 +86,19 @@ export default function PaymentsPage() {
       filtered = filtered.filter(row => row.status === statusFilter);
     }
 
+    // Method filter
+    if (methodFilter !== 'all') {
+      filtered = filtered.filter(row => row.payout_method === methodFilter);
+    }
+
     setFilteredWithdrawals(filtered);
-  }, [withdrawals, searchTerm, statusFilter]);
+  }, [withdrawals, searchTerm, statusFilter, methodFilter]);
 
   const loadWithdrawals = async () => {
     try {
       setLoading(true);
       console.log('🔄 Loading withdrawals with status filter:', statusFilter);
       let data = await getWithdrawals(statusFilter);
-      if (!data || data.length === 0) {
-        console.log('⚠️ No withdrawals rows returned; falling back to unified_collections...');
-        let collectionId: string | undefined = undefined;
-        try {
-          const params = new URLSearchParams(window.location.search);
-          const cid = params.get('collection_id');
-          if (cid) collectionId = cid;
-        } catch {}
-        data = await getWithdrawalsFallbackFromCollections({ collectionId, limit: 200 });
-      }
       console.log('📊 Loaded withdrawals:', data);
       setWithdrawals(data);
     } catch (error) {
@@ -163,6 +159,43 @@ export default function PaymentsPage() {
         return `${baseClasses} bg-orange-100 text-orange-800`;
       default:
         return `${baseClasses} bg-gray-100 text-gray-800`;
+    }
+  };
+
+  const handleDeleteWithdrawal = async (withdrawalId: string) => {
+    const confirmed = typeof window !== 'undefined'
+      ? window.confirm('Delete this withdrawal? This removes it from Office and history views.')
+      : true;
+    if (!confirmed) return;
+
+    try {
+      console.log('🗑️ Attempting to delete withdrawal:', withdrawalId);
+      const resp = await fetch('/api/admin/delete-withdrawal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ withdrawalId })
+      });
+      
+      console.log('📡 Delete response status:', resp.status);
+      
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        console.error('❌ Delete API error:', j);
+        throw new Error(j?.error || `HTTP ${resp.status}`);
+      }
+      
+      const result = await resp.json().catch(() => ({}));
+      console.log('✅ Delete successful:', result);
+      
+      setWithdrawals(prev => prev.filter(w => w.id !== withdrawalId));
+      
+      // Refresh the page to ensure UI is updated
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
+    } catch (e: any) {
+      console.error('❌ Delete withdrawal failed:', e);
+      if (typeof window !== 'undefined') window.alert('Failed to delete: ' + (e?.message || 'Unknown error'));
     }
   };
 
@@ -380,9 +413,9 @@ export default function PaymentsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Methods</SelectItem>
-                  <SelectItem value="wallet">Wallet</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="wallet">Wallet</SelectItem>
                   <SelectItem value="mobile_money">Mobile Money</SelectItem>
                 </SelectContent>
               </Select>
@@ -506,6 +539,14 @@ export default function PaymentsPage() {
                               </Button>
                             </>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 border-red-600 hover:bg-red-50"
+                            onClick={() => handleDeleteWithdrawal(row.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </td>
                   </tr>
@@ -587,12 +628,20 @@ export default function PaymentsPage() {
                     <SelectValue placeholder="Select method" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="wallet">Wallet (deduct balance)</SelectItem>
-                    <SelectItem value="cash">Cash Payout</SelectItem>
                     <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    <SelectItem value="cash">Cash Payout</SelectItem>
+                    <SelectItem value="wallet">Wallet (deduct balance)</SelectItem>
                     <SelectItem value="mobile_money">Mobile Money</SelectItem>
                   </SelectContent>
                 </Select>
+                {payoutMethod === 'cash' && (
+                  <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Cash Payment:</strong> Prepare R{selectedPayment.amount} in cash for this withdrawal. 
+                      The user will need to collect it in person or arrange for pickup.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

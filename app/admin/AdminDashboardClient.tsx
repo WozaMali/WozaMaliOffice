@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
+import { usePwaLock } from '@/hooks/use-pwa-lock';
 
 // Helper function to check if user has admin privileges
 const isAdminUser = (user: any, profile: any) => {
@@ -76,6 +77,7 @@ import { ResetTransactionsDialog } from '@/components/ResetTransactionsDialog';
 import RealtimeStatusDot from '@/components/RealtimeStatusDot';
 import TransactionsPage from '@/components/TransactionsPage';
 import AdminSettingsPage from '../../src/app/admin/settings/page';
+import TeamMembersPage from '../../src/app/admin/team-members/page';
 import { RoleBasedAccess } from '../../src/lib/role-based-access';
 import {
   getPickups, 
@@ -95,15 +97,13 @@ import { clearPickupsCache } from '../../src/lib/admin-services';
 import type { User, TownshipDropdown, SubdivisionDropdown } from '../../src/lib/supabase';
 import type { CollectionData } from '../../src/lib/unified-admin-service';
 import { logAdminSessionEvent } from '../../src/lib/admin-session-logging';
-import { usePwaLock } from '@/hooks/use-pwa-lock';
 
 // Sidebar Navigation Component
-function AdminSidebar({ currentPage, onPageChange, onLogout }: { 
+function AdminSidebar({ currentPage, onPageChange }: { 
   currentPage: string; 
   onPageChange: (page: string) => void;
-  onLogout: () => void;
 }) {
-  const { user, profile } = useAuth();
+  const { user, profile, logout } = useAuth();
   const emailLower = user?.email?.toLowerCase?.() || '';
   const isSuperAdmin = RoleBasedAccess.isSuperAdmin(profile as any) || emailLower === 'superadmin@wozamali.co.za';
 
@@ -177,31 +177,37 @@ function AdminSidebar({ currentPage, onPageChange, onLogout }: {
         })}
       </nav>
 
-      {/* Logout Button */}
-      <div className="mt-8">
-        <Button
-          onClick={onLogout}
-          className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-200"
+      {/* Sign out */}
+      <div className="mt-8 pt-4 border-t border-gray-700">
+        <button
+          onClick={async () => {
+            try {
+              await logout();
+            } catch {}
+            try { window.location.href = '/admin-login'; } catch {}
+          }}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-red-200 hover:text-white hover:bg-gradient-to-r hover:from-red-700 hover:to-red-600 transition-all duration-300"
         >
-          <LogOut className="w-4 h-4 mr-2" />
-          Logout
-        </Button>
+          <LogOut className="h-5 w-5" />
+          <span>Sign out</span>
+        </button>
       </div>
     </div>
   );
 }
 
 // Main Dashboard Content
-function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: { 
+function DashboardContent({ onPageChange, onAddUser, isSuperAdmin, softOpen, setSoftOpen, softReason, setSoftReason }: { 
   onPageChange: (page: string) => void;
   onAddUser: () => void;
   isSuperAdmin?: boolean;
+  softOpen: boolean;
+  setSoftOpen: (open: boolean) => void;
+  softReason: string;
+  setSoftReason: (reason: string) => void;
 }) {
   const router = useRouter();
   const { user, logout } = useAuth();
-  const [softOpen, setSoftOpen] = useState(false);
-  const [softReason, setSoftReason] = useState('Tea Break');
-  const { lock } = usePwaLock();
   const [dashboardData, setDashboardData] = useState({
     totalUsers: 0,
     totalPickups: 0,
@@ -668,37 +674,6 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
             </p>
         </div>
           <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
-            {isSuperAdmin && (
-              <Badge className="text-sm bg-gradient-to-r from-green-600 to-green-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
-                <Crown className="w-4 h-4 mr-2" />
-                Super Admin
-              </Badge>
-            )}
-            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
-              <Activity className="w-4 h-4 mr-2" />
-          Live Data
-        </Badge>
-            {/* Soft Sign Out and Sign out controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => setSoftOpen(true)}
-                className="relative overflow-hidden bg-gradient-to-b from-yellow-400 to-yellow-500 text-yellow-950 border-0 shadow-[0_6px_0_#b45309] hover:shadow-[0_4px_0_#b45309] active:shadow-[0_0_0_#b45309] active:translate-y-1 transition-all duration-150 px-4 py-2 rounded-md"
-              >
-                <span className="relative z-10 font-semibold">Soft Sign Out</span>
-                <span className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_30%_30%,white,transparent_40%)]" />
-              </Button>
-              <Button variant="ghost" onClick={async () => {
-                try {
-                  await logout();
-                  router.push('/admin-login');
-                } catch {
-                  router.push('/admin-login');
-                }
-              }}>
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign out
-              </Button>
-            </div>
         </div>
       </div>
 
@@ -814,9 +789,13 @@ function DashboardContent({ onPageChange, onAddUser, isSuperAdmin }: {
                 onClick={async () => {
                   try {
                     await logAdminSessionEvent(user?.id, 'soft_logout', softReason);
-                    try { lock(); } catch {}
                     setSoftOpen(false);
-                    try { router.push('/admin'); } catch {}
+                    // Also clear session storage to ensure lock state
+                    try {
+                      sessionStorage.removeItem('pwaLock.unlockedSession');
+                    } catch {}
+                    // Force immediate refresh to trigger unlock card
+                    window.location.reload();
                   } catch {}
                 }}
               >
@@ -1295,8 +1274,8 @@ function TeamMembersContent() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Team Members</h1>
-            <p className="text-gray-600">Manage your team and approve new collectors</p>
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Team Members List</h1>
+            <p className="text-gray-600">Manage your team members and their status</p>
           </div>
           <Button 
             onClick={() => setShowAddUserModal(true)}
@@ -2105,21 +2084,21 @@ function CollectionsContent() {
   };
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-2 sm:p-4 w-full">
       <div className="w-full">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-4">
           <div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Collections Management</h1>
-            <p className="text-gray-600">Manage and track material collections from residents</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Collections Management</h1>
+            <p className="text-gray-600 text-sm">Manage and track material collections from residents</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
               <div className="text-sm text-gray-500">Total Collections</div>
-              <div className="text-2xl font-bold text-blue-600">{rows.length}</div>
+              <div className="text-xl font-bold text-blue-600">{rows.length}</div>
             </div>
-            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
-              <Package className="h-8 w-8 text-white" />
+            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <Package className="h-6 w-6 text-white" />
             </div>
           </div>
         </div>
@@ -2572,7 +2551,7 @@ function ConfigContent() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
           <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl border-0 hover:shadow-2xl transition-all duration-300">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -2664,12 +2643,27 @@ export default function AdminDashboardClient() {
   const [isClient, setIsClient] = useState(false);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [softOpen, setSoftOpen] = useState(false);
+  const [softReason, setSoftReason] = useState('Tea Break');
   const { notifications, removeNotification } = useNotifications();
+  const { lock, touch, setup, needsSetup, isLocked } = usePwaLock();
 
   useEffect(() => {
     setIsClient(true);
     console.log('AdminDashboardClient: isClient set to true');
   }, []);
+
+  // Check if user needs to set up session lock credentials
+  useEffect(() => {
+    if (!user || !isClient) return;
+    
+    // Check if user has session lock credentials set up
+    if (needsSetup) {
+      console.log('AdminDashboardClient: User needs session lock setup');
+      // Force the lock state to show the setup modal
+      lock();
+    }
+  }, [user, isClient, needsSetup, lock]);
 
 
 
@@ -2697,6 +2691,12 @@ export default function AdminDashboardClient() {
       router.push('/admin-login');
     }
   };
+
+  // Use the existing PWA lock system
+  const handleSessionLock = () => {
+    lock();
+  };
+
 
   // Show loading state during SSR or initial load.
   // If a user is already present, don't block on authLoading to avoid a stuck spinner.
@@ -2731,7 +2731,7 @@ export default function AdminDashboardClient() {
   const renderPageContent = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} />;
+        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} softOpen={softOpen} setSoftOpen={setSoftOpen} softReason={softReason} setSoftReason={setSoftReason} />;
       case 'users':
         return <UsersContent />;
       case 'admin-activity':
@@ -2739,7 +2739,7 @@ export default function AdminDashboardClient() {
       case 'settings':
         return <AdminSettingsPage />;
       case 'team-members':
-        return <TeamMembersContent />;
+        return <TeamMembersPage />;
       case 'withdrawals':
         return <WithdrawalsContent />;
       case 'rewards':
@@ -2761,7 +2761,7 @@ export default function AdminDashboardClient() {
       case 'config':
         return <ConfigContent />;
       default:
-        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} />;
+        return <DashboardContent onPageChange={setCurrentPage} onAddUser={() => setShowAddUserModal(true)} isSuperAdmin={isSuperAdmin} softOpen={softOpen} setSoftOpen={setSoftOpen} softReason={softReason} setSoftReason={setSoftReason} />;
     }
   };
 
@@ -2771,7 +2771,6 @@ export default function AdminDashboardClient() {
       <AdminSidebar 
         currentPage={currentPage} 
         onPageChange={setCurrentPage}
-        onLogout={handleLogout}
       />
       
       {/* Main Content */}
@@ -2788,29 +2787,6 @@ export default function AdminDashboardClient() {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Badge 
-                className={`text-sm border-0 px-4 py-2 rounded-full shadow-lg ${
-                  isSuperAdmin 
-                    ? 'bg-gradient-to-r from-green-600 to-green-700 text-white' 
-                    : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white'
-                }`}
-              >
-                {isSuperAdmin ? (
-                  <>
-                    <Crown className="w-4 h-4 mr-2" />
-                    Super Admin
-                  </>
-                ) : (
-                  <>
-                    <Building2 className="w-4 h-4 mr-2" />
-                    Admin
-                  </>
-                )}
-              </Badge>
-              <Badge className="text-sm bg-gradient-to-r from-emerald-600 to-emerald-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
-                <Activity className="w-4 h-4 mr-2" />
-                Live Data
-              </Badge>
               {isSuperAdmin && (
                 <Button
                   onClick={() => setCurrentPage('admin-activity')}
@@ -2820,14 +2796,25 @@ export default function AdminDashboardClient() {
                   Admin Activity
                 </Button>
               )}
+              {isPrivileged && (
+                <Button
+                  onClick={() => setSoftOpen(true)}
+                  className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white hover:from-yellow-700 hover:to-yellow-800 border-0 shadow-md"
+                >
+                  <Shield className="w-4 h-4 mr-2" />
+                  Lock Session
+                </Button>
+              )}
             </div>
           </div>
         </div>
         
-        {/* Page Content */}
-        <div className="bg-gray-50 min-h-screen">
-          {renderPageContent()}
-        </div>
+        {/* Page Content - Only show if session lock is set up */}
+        {!needsSetup && (
+          <div className="bg-gray-50 min-h-screen">
+            {renderPageContent()}
+          </div>
+        )}
       </div>
 
       {/* Add User Modal */}
@@ -2840,6 +2827,75 @@ export default function AdminDashboardClient() {
           // loadRecentActivity();
         }}
       />
+
+
+      {/* PWA Lock System - Setup or Unlock */}
+      {(isLocked || needsSetup) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="text-center mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">
+                {needsSetup ? 'Setup Session Lock' : 'Session Locked'}
+              </h2>
+              <p className="text-sm text-gray-600">
+                {needsSetup 
+                  ? 'Set up your username and PIN to secure your session' 
+                  : 'Enter your credentials to unlock'
+                }
+              </p>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const username = formData.get('username') as string;
+              const pin = formData.get('pin') as string;
+              const result = await setup(username, pin);
+              if (result.success) {
+                touch();
+              } else {
+                alert(result.error);
+              }
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                  <input
+                    name="username"
+                    type="text"
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter your username"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PIN (5 digits)</label>
+                  <input
+                    name="pin"
+                    type="password"
+                    required
+                    maxLength={5}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter 5-digit PIN"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md font-medium"
+                >
+                  {needsSetup ? 'Setup Session Lock' : 'Unlock Session'}
+                </button>
+              </div>
+            </form>
+            {needsSetup && (
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <p className="text-sm text-yellow-800">
+                  <strong>Required:</strong> You must set up session lock credentials before using the system.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Notification Toasts */}
       {notifications.map((notification) => (

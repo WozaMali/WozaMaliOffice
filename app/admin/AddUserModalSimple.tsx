@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { X, UserPlus, Mail, Phone, Shield, UserCheck, Users, User, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -25,12 +26,68 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     township: '',
     employeeNumber: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    sendInvite: true
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [createdUser, setCreatedUser] = useState<any>(null);
+
+  const generateEmployeeNumber = async (): Promise<string> => {
+    try {
+      const { data: latest } = await supabase
+        .from('users')
+        .select('employee_number')
+        .not('employee_number', 'is', null)
+        .order('employee_number', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!latest?.employee_number) {
+        return 'EMP0001';
+      }
+
+      const lastNumber = parseInt(latest.employee_number.replace('EMP', ''));
+      return `EMP${String(lastNumber + 1).padStart(4, '0')}`;
+    } catch (error) {
+      console.error('Error generating employee number:', error);
+      return 'EMP0001';
+    }
+  };
+
+  const resolveTownshipId = async (value: string): Promise<string | null> => {
+    const input = (value || '').trim();
+    if (!input) return null;
+    // If the input already looks like a UUID, accept it
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(input)) return input;
+
+    // Try find area by name (case-insensitive)
+    const { data: found, error: findError } = await supabase
+      .from('areas')
+      .select('id')
+      .ilike('name', input)
+      .limit(1)
+      .maybeSingle();
+
+    if (found?.id) return found.id as string;
+
+    // If not found, create it to avoid blocking user creation
+    if (findError && findError.code && findError.code !== 'PGRST116') {
+      // Non-not-found error, fallback to null rather than throwing
+      return null;
+    }
+
+    const { data: created, error: createError } = await supabase
+      .from('areas')
+      .insert({ name: input })
+      .select('id')
+      .single();
+
+    if (createError || !created?.id) return null;
+    return created.id as string;
+  };
 
   const validateForm = (): string | null => {
     if (!formData.firstName.trim()) return 'First name is required';
@@ -38,9 +95,11 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     if (!formData.email.trim()) return 'Email is required';
     if (!formData.email.includes('@')) return 'Please enter a valid email address';
     if (!formData.phone.trim()) return 'Phone number is required';
-    if (!formData.password) return 'Password is required';
-    if (formData.password.length < 8) return 'Password must be at least 8 characters';
-    if (formData.password !== formData.confirmPassword) return 'Passwords do not match';
+    if (!formData.sendInvite) {
+      if (!formData.password) return 'Password is required';
+      if (formData.password.length < 8) return 'Password must be at least 8 characters';
+      if (formData.password !== formData.confirmPassword) return 'Passwords do not match';
+    }
     if (!formData.role) return 'Please select a role';
     return null;
   };
@@ -58,34 +117,33 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     setError('');
     
     try {
-      const response = await fetch('/api/admin/create-user-simple', {
+      // Call server API to create both Auth user (email confirmed) and DB profile
+      const resp = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           firstName: formData.firstName,
           lastName: formData.lastName,
-          email: formData.email,
+          email: formData.email.trim().toLowerCase(),
           phone: formData.phone,
           role: formData.role,
-          township: formData.township || null,
-          employeeNumber: formData.employeeNumber || null,
-          password: formData.password
-        }),
+          department: null,
+          township: formData.township,
+          password: formData.sendInvite ? undefined : formData.password,
+          sendInvite: formData.sendInvite
+        })
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to create user');
+      const result = await resp.json();
+      if (!resp.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to create user');
       }
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to create user');
-      }
-
-      setCreatedUser(result.data);
+      setCreatedUser({
+        user_id: result.data?.user_id,
+        employee_number: result.data?.employee_number,
+        message: 'User created successfully'
+      });
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
@@ -94,13 +152,19 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
       
     } catch (err: any) {
       console.error('Error creating user:', err);
-      setError(err.message || 'Failed to create user');
+      if (err?.code === '23505' || (typeof err?.message === 'string' && (err.message.includes('duplicate key') || err.message.toLowerCase().includes('already exists')))) {
+        setError('A user with this email already exists.');
+      } else if (typeof err?.details === 'string' && err.details.includes('already exists')) {
+        setError('A user with this email already exists.');
+      } else {
+        setError(err?.message || 'Failed to create user');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -117,7 +181,8 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
       township: '',
       employeeNumber: '',
       password: '',
-      confirmPassword: ''
+      confirmPassword: '',
+      sendInvite: true
     });
     setError('');
     setSuccess(false);
@@ -307,6 +372,18 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
                     Security
                   </h4>
                   
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="inline-flex items-center space-x-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={formData.sendInvite}
+                        onChange={(e) => handleInputChange('sendInvite', e.target.checked)}
+                      />
+                      <span>Send invitation email (user sets password via email)</span>
+                    </label>
+                  </div>
+
+                  {!formData.sendInvite && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="password" className="text-sm font-medium text-gray-700">
@@ -338,6 +415,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
                       />
                     </div>
                   </div>
+                  )}
                 </div>
 
                 {/* Action Buttons */}

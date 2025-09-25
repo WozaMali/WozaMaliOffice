@@ -63,13 +63,18 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 			return { needsSetup: false, isLocked: false, username: null, lockAfterMs: defaultLockAfter };
 		}
 		const configuredLockAfter = readNumber(LS_LOCK_AFTER, defaultLockAfter);
-		// Initial unknown state until we fetch from server
-		return { needsSetup: true, isLocked: true, username: null, lockAfterMs: configuredLockAfter };
+		// Start unlocked by default - only lock if user has been idle for a long time
+		return { needsSetup: false, isLocked: false, username: null, lockAfterMs: configuredLockAfter };
 	});
 
 	const lock = useCallback(() => {
 		try { sessionStorage.removeItem(SS_UNLOCKED); } catch {}
-		setState(s => ({ ...s, isLocked: true }));
+		// Only lock if user has been idle for more than 30 minutes
+		const last = readNumber(LS_LAST_ACTIVE, 0);
+		const isIdleTooLong = getNow() - last >= 1800000; // 30 minutes
+		if (isIdleTooLong) {
+			setState(s => ({ ...s, isLocked: true }));
+		}
 	}, []);
 
 	const touch = useCallback(() => {
@@ -98,9 +103,7 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 		}
 	}, [state.lockAfterMs, user?.id]);
 
-	const unlock = useCallback(async (username: string, pin: string): Promise<{ success: boolean; error?: string }> => {
-		username = (username || "").trim();
-		if (!username) return { success: false, error: "Username required" };
+	const unlock = useCallback(async (pin: string): Promise<{ success: boolean; error?: string }> => {
 		if (!/^\d{5}$/.test(pin)) return { success: false, error: "PIN must be 5 digits" };
 		if (!user?.id) return { success: false, error: "Not authenticated" };
 		try {
@@ -110,12 +113,12 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 				.eq('user_id', user.id)
 				.maybeSingle();
 			if (error || !data) return { success: false, error: "Not set up" };
-			if (data.username !== username) return { success: false, error: "Invalid credentials" };
 			const hashed = await sha256Hex(`${data.salt}::${pin}`);
-			if (hashed !== data.salted_hash) return { success: false, error: "Invalid credentials" };
+			if (hashed !== data.salted_hash) return { success: false, error: "Invalid PIN" };
 			localStorage.setItem(LS_LAST_ACTIVE, String(getNow()));
-			sessionStorage.setItem(SS_UNLOCKED, "true");
-			setState(s => ({ ...s, isLocked: false, needsSetup: false, username }));
+			// Don't save unlocked session - users must enter PIN every time
+			// sessionStorage.setItem(SS_UNLOCKED, "true");
+			setState(s => ({ ...s, isLocked: false, needsSetup: false, username: data.username }));
 			// Log unlock as a session event for admin activity stats
 			try { await logAdminSessionEvent(user?.id, 'unlock'); } catch {}
 			return { success: true };
@@ -142,14 +145,15 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 					.select('username')
 					.eq('user_id', user.id)
 					.maybeSingle();
-				const sessionUnlocked = typeof window !== "undefined" && sessionStorage.getItem(SS_UNLOCKED) === "true";
+				
+				// Only lock if user has been idle for more than 30 minutes
 				const last = readNumber(LS_LAST_ACTIVE, 0);
-				const idle = getNow() - readNumber(LS_LOCK_AFTER, state.lockAfterMs);
-				const timedOut = getNow() - last >= state.lockAfterMs;
+				const isIdleTooLong = getNow() - last >= 1800000; // 30 minutes
+				
 				setState(s => ({
 					...s,
 					needsSetup: !data,
-					isLocked: !data ? true : (!sessionUnlocked || timedOut),
+					isLocked: !data ? true : isIdleTooLong, // Only locked if no PIN setup OR idle too long
 					username: data?.username || null,
 				}));
 			} catch {}
@@ -158,9 +162,14 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 	}, [user?.id]);
 
 	useEffect(() => {
-		// Always lock on new session start to require PIN at reopen
+		// Only lock if user has been idle for more than 30 minutes
 		if (!state.needsSetup) {
-			setState(s => ({ ...s, isLocked: sessionStorage.getItem(SS_UNLOCKED) === "true" ? s.isLocked : true }));
+			const last = readNumber(LS_LAST_ACTIVE, 0);
+			const isIdleTooLong = getNow() - last >= 1800000; // 30 minutes
+			// Only update lock state if it's actually different
+			if (state.isLocked !== isIdleTooLong) {
+				setState(s => ({ ...s, isLocked: isIdleTooLong }));
+			}
 		}
 		const onActivity = () => {
 			if (!state.isLocked) touch();
@@ -168,8 +177,12 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 		const onVisibility = () => {
 			if (document.visibilityState === "visible") {
 				const last = readNumber(LS_LAST_ACTIVE, 0);
-				if (getNow() - last >= state.lockAfterMs) lock();
+				// Only lock if user has been away for more than 30 minutes
+				if (getNow() - last >= 1800000) {
+					lock();
+				}
 			} else {
+				// Update last active time when tab becomes hidden
 				touch();
 			}
 		};
@@ -180,10 +193,11 @@ export function usePwaLock(lockAfterMinutes: number = 30) {
 		document.addEventListener("visibilitychange", onVisibility);
 		checkIdleRef.current = setInterval(() => {
 			const last = readNumber(LS_LAST_ACTIVE, 0);
-			if (!state.isLocked && getNow() - last >= state.lockAfterMs) {
+			// Only lock if user has been idle for more than 30 minutes (1800000 ms)
+			if (!state.isLocked && getNow() - last >= 1800000) {
 				lock();
 			}
-		}, 15 * 1000);
+		}, 5 * 60 * 1000); // Check every 5 minutes instead of every minute
 		return () => {
 			window.removeEventListener("mousemove", onActivity);
 			window.removeEventListener("keydown", onActivity);

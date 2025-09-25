@@ -118,15 +118,13 @@ export function DashboardMetrics() {
       // Fetch data from basic tables instead of admin views
       const [
         pickupsResult,
-        profilesResult,
-        collectionMaterialsResult
+        profilesResult
       ] = await Promise.all([
         supabase.from('pickups').select('*'),
-        supabase.from('users').select('id, role_id'),
-        supabase.from('collection_materials').select('quantity, unit_price')
+        supabase.from('users').select('id, role_id')
       ]);
 
-      setDebugInfo(`Pickups: ${pickupsResult.data?.length || 0}, Profiles: ${profilesResult.data?.length || 0}, Materials: ${collectionMaterialsResult.data?.length || 0}`);
+      setDebugInfo(`Pickups: ${pickupsResult.data?.length || 0}, Profiles: ${profilesResult.data?.length || 0}`);
 
       // Handle errors gracefully
       if (pickupsResult.error) {
@@ -137,23 +135,16 @@ export function DashboardMetrics() {
         setDebugInfo(`Profiles error: ${profilesResult.error.message}`);
         console.warn("Profiles error:", profilesResult.error);
       }
-      if (collectionMaterialsResult.error) {
-        setDebugInfo(`Materials error: ${collectionMaterialsResult.error.message}`);
-        console.warn("Materials error:", collectionMaterialsResult.error);
-      }
 
       const pickups = pickupsResult.data || [];
       const profiles = profilesResult.data || [];
-      const materials = collectionMaterialsResult.data || [];
 
       // Log the raw data for debugging
       console.log("Raw data fetched:", {
         pickups: pickups.length,
         profiles: profiles.length,
-        materials: materials.length,
         samplePickup: pickups[0],
-        sampleProfile: profiles[0],
-        sampleItem: materials[0]
+        sampleProfile: profiles[0]
       });
 
       // Calculate dashboard data
@@ -167,8 +158,8 @@ export function DashboardMetrics() {
         total_pickups: pickups.length,
         unique_customers: countByRole('CUSTOMER'),
         unique_collectors: countByRole('COLLECTOR'),
-        total_kg_collected: materials.reduce((sum, m) => sum + (m.quantity || 0), 0),
-        total_value_generated: materials.reduce((sum, m) => sum + ((m.quantity || 0) * (m.unit_price || 0)), 0),
+        total_kg_collected: pickups.reduce((sum, p) => sum + (p.total_kg || 0), 0),
+        total_value_generated: pickups.reduce((sum, p) => sum + (p.total_value || 0), 0),
         pending_pickups: pickups.filter(p => p.status === 'submitted').length,
         approved_pickups: pickups.filter(p => p.status === 'approved').length,
         rejected_pickups: pickups.filter(p => p.status === 'rejected').length

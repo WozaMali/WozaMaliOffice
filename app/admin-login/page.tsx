@@ -17,10 +17,12 @@ import {
   AlertCircle,
   ArrowLeft,
   Shield,
-  Crown
+  Crown,
+  Mail
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { config } from "@/lib/config";
+import { supabase } from "@/lib/supabase";
 
 // Helper function to check if user has admin privileges
 const isAdminUser = (user: any, profile: any) => {
@@ -56,7 +58,35 @@ export default function AdminLoginPage() {
   const [resetEmail, setResetEmail] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   
-  const { login, resetPassword, isLoading: authLoading, user, profile } = useAuth();
+  const { login, resetPassword, isLoading: authLoading, user, profile, logout } = useAuth();
+  
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      // Use Supabase OAuth with Office-specific redirect
+      const officeLoginUrl = (typeof window !== 'undefined')
+        ? `${window.location.origin}/admin-login`
+        : (process.env.NEXT_PUBLIC_SUPABASE_REDIRECT_URL || 'http://localhost:8081/admin-login');
+      const { error } = await (await import('@/lib/supabase')).supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: officeLoginUrl,
+          queryParams: {
+            // Force consent/select account if needed
+            prompt: 'select_account'
+          }
+        }
+      });
+      if (error) {
+        setError(error.message);
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Google sign-in failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Clear form when switching tabs
   const handleTabChange = (tab: 'admin' | 'superadmin') => {
@@ -69,18 +99,83 @@ export default function AdminLoginPage() {
 
   // If user is already logged in and has admin or super_admin role, redirect to admin dashboard
   useEffect(() => {
-    if (user?.email) {
-      const userEmail = user.email.toLowerCase();
-      const isAdminUserResult = isAdminUser(user, profile);
+    const handlePostAuthRouting = async () => {
+      if (!user?.email) return;
+
+      // If user must change password, force to change-password page
+      try {
+        const { data } = await supabase.auth.getUser();
+        const must = (data.user?.user_metadata as any)?.must_change_password;
+        if (must) {
+          router.push('/auth/change-password');
+          return;
+        }
+      } catch {}
+
+      // Check if user was created with system password and needs to change it
+      const userMetadata = user.user_metadata || {};
+      const needsPasswordChange = 
+        userMetadata.must_change_password === true ||
+        userMetadata.temp_password === true ||
+        userMetadata.created_by_admin === true ||
+        userMetadata.system_generated === true;
       
-      if (isAdminUserResult) {
-        console.log('AdminLogin: Admin user already logged in, redirecting to Office App admin dashboard');
-        const officeUrl = config.getOfficeUrl();
-        console.log('AdminLogin: Using office URL:', officeUrl);
-        window.location.href = `${officeUrl}/admin`;
+      if (needsPasswordChange) {
+        console.log('AdminLogin: User needs to change password, redirecting to change password page');
+        router.push('/auth/change-password');
+        return;
       }
-    }
-  }, [user, router]);
+
+      // Check if unified users entry exists
+      let existingUser: any = null;
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, role, status')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (!error) existingUser = data;
+      } catch (_) {}
+
+      if (!existingUser) {
+        // First-time Office OAuth: create a pending admin application
+        const { error: insErr } = await supabase.from('users').insert({
+          id: user.id,
+          email: user.email,
+          first_name: user.user_metadata?.given_name || '',
+          last_name: user.user_metadata?.family_name || '',
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+          phone: user.user_metadata?.phone || null,
+          role: 'admin',
+          status: 'pending_approval'
+        });
+        if (insErr) {
+          console.warn('AdminLogin: failed to create onboarding row:', insErr);
+        }
+        router.push('/admin-onboarding');
+        return;
+      }
+
+      // If pending approval, go to onboarding
+      if (existingUser.status === 'pending_approval') {
+        router.push('/admin-onboarding');
+        return;
+      }
+
+      // If active admin/super_admin → dashboard
+      const effectiveRole = (existingUser.role || '').toLowerCase();
+      if (['admin','super_admin','superadmin'].includes(effectiveRole) && existingUser.status === 'active') {
+        const officeUrl = config.getOfficeUrl();
+        window.location.href = `${officeUrl}/admin`;
+        return;
+      }
+
+      // Unknown role/status: default to onboarding (never log out in this flow)
+      router.push('/admin-onboarding');
+    };
+
+    handlePostAuthRouting();
+  }, [user, router, logout]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -412,6 +507,16 @@ export default function AdminLoginPage() {
                     ) : (
                       'Sign In as Admin'
                     )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleGoogleLogin}
+                    disabled={isLoading}
+                    className="w-full"
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Continue with Google
                   </Button>
                 </div>
               </form>

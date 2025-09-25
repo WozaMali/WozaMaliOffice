@@ -286,27 +286,27 @@ export default function PickupsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 w-full">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-2 sm:p-4 w-full">
       <div className="w-full">
       {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-4">
         <div>
-            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Pickup Management</h1>
-            <p className="text-gray-600">Manage and track all pickup requests from residents</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Pickup Management</h1>
+            <p className="text-gray-600 text-sm">Manage and track all pickup requests from residents</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
               <div className="text-sm text-gray-500">Total Pickups</div>
-              <div className="text-2xl font-bold text-blue-600">{pickups.length}</div>
+              <div className="text-xl font-bold text-blue-600">{pickups.length}</div>
             </div>
-            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
-              <Package className="h-8 w-8 text-white" />
+            <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-lg">
+              <Package className="h-6 w-6 text-white" />
             </div>
           </div>
       </div>
 
       {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
           <Card className="border-0 shadow-xl bg-gradient-to-br from-blue-50 to-blue-100 hover:shadow-2xl transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-semibold text-blue-900">Total Pickups</CardTitle>

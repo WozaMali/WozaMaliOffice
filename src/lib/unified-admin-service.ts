@@ -771,9 +771,11 @@ export class UnifiedAdminService {
   // ============================================================================
   static async getTownships(): Promise<{ data: TownshipDropdown[] | null; error: any }> {
     try {
+      // Use the same source as Main App and constrain to Soweto
       const { data, error } = await supabase
-        .from('township_dropdown')
-        .select('*')
+        .from('address_townships')
+        .select('id, township_name, city, postal_code')
+        .ilike('city', '%soweto%')
         .order('township_name');
 
       if (error) {
@@ -781,7 +783,13 @@ export class UnifiedAdminService {
         return { data: null, error };
       }
 
-      return { data, error: null };
+      // Ensure a generic name field exists for UI convenience
+      const mapped = (data || []).map((t: any) => ({
+        ...t,
+        name: t.township_name
+      }));
+
+      return { data: mapped as any, error: null };
     } catch (error) {
       console.error('Error in getTownships:', error);
       return { data: null, error };
@@ -790,15 +798,25 @@ export class UnifiedAdminService {
 
   static async getSubdivisions(townshipId: string): Promise<{ data: SubdivisionDropdown[] | null; error: any }> {
     try {
+      // Use the same source as Main App
       const { data, error } = await supabase
-        .from('subdivision_dropdown')
-        .select('*')
+        .from('address_subdivisions')
+        .select('subdivision, area_id')
         .eq('area_id', townshipId)
         .order('subdivision');
 
       if (error) {
         console.error('Error fetching subdivisions:', error);
-        return { data: null, error };
+        // Fallback: legacy subdivisions table
+        const { data: legacy, error: legacyErr } = await supabase
+          .from('address_subdivisions')
+          .select('subdivision, area_id')
+          .eq('area_id', townshipId)
+          .order('subdivision');
+        if (!legacyErr) {
+          return { data: legacy as any, error: null };
+        }
+        return { data: null, error: legacyErr || error };
       }
 
       return { data, error: null };

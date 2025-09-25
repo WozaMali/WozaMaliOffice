@@ -51,12 +51,22 @@ export default function TeamMembersPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<TeamMember[]>([]);
   const [pendingCollectors, setPendingCollectors] = useState<TeamMember[]>([]);
+  const [pendingAdmins, setPendingAdmins] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPending, setLoadingPending] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
+
+  const roleBadgeClass = (role: string) => {
+    const r = (role || '').toString().toLowerCase();
+    if (r === 'super_admin' || r === 'superadmin') return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+    if (r === 'admin') return 'bg-purple-100 text-purple-800 border-purple-300';
+    if (r === 'collector') return 'bg-green-100 text-green-800 border-green-300';
+    if (r === 'staff') return 'bg-blue-100 text-blue-800 border-blue-300';
+    return 'bg-gray-100 text-gray-700 border-gray-300';
+  };
 
   // Check if user is superadmin
   const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin';
@@ -140,6 +150,7 @@ export default function TeamMembersPage() {
   useEffect(() => {
     loadTeamMembers();
     loadPendingCollectors();
+    loadPendingAdmins();
   }, []);
 
   // Filter team members
@@ -275,22 +286,55 @@ export default function TeamMembersPage() {
     }
   };
 
+  const loadPendingAdmins = async () => {
+    setLoadingPending(true);
+    try {
+      const resp = await fetch('/api/admin/pending-applicants');
+      const json = await resp.json();
+      if (!resp.ok || !json.success) throw new Error(json.error || 'Failed to load applicants');
+      const mapped: TeamMember[] = (json.data || []).map((user: any) => ({
+        id: user.id,
+        email: user.email,
+        full_name: `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim(),
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        employee_number: user.employee_number,
+        township: user.subdivision || user.city || 'Unknown',
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+        last_login: undefined,
+        is_approved: false,
+        approval_date: undefined,
+        approved_by: undefined,
+      }));
+      // Admins only here; collectors are loaded separately
+      setPendingAdmins(mapped.filter(m => ['admin','super_admin','superadmin'].includes((m.role||'').toLowerCase())));
+    } catch (error) {
+      console.error('Error loading pending admins:', error);
+      setPendingAdmins([]);
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
   const handleApproveMember = async (memberId: string) => {
     try {
-      const approverId = user?.id;
-      if (!approverId) throw new Error('Not authenticated');
-
-      // Prefer database RPC to ensure all side-effects/logging are applied
-      const { error } = await supabase.rpc('approve_collector', {
-        p_user_id: memberId,
-        p_approver_id: approverId
+      // Approve via Office API which also sends password setup email
+      const resp = await fetch('/api/admin/approve-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: memberId })
       });
-
-      if (error) throw error;
-
-      // Reload team members and pending collectors
+      const json = await resp.json();
+      if (!resp.ok || !json.success) throw new Error(json.error || 'Approval failed');
+      if (json.tempPassword) {
+        alert(`Temporary password generated:\n${json.tempPassword}\n\nShare this with the user. They will be forced to change it on first login.`);
+      }
+      // Reload lists
       loadTeamMembers();
       loadPendingCollectors();
+      loadPendingAdmins();
     } catch (error) {
       console.error('Error approving member:', error);
     }
@@ -314,6 +358,19 @@ export default function TeamMembersPage() {
       loadPendingCollectors();
     } catch (error) {
       console.error('Error rejecting member:', error);
+    }
+  };
+
+  const handleSuspendMember = async (memberId: string) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ status: 'suspended', updated_at: new Date().toISOString() })
+        .eq('id', memberId);
+      if (error) throw error;
+      loadTeamMembers();
+    } catch (error) {
+      console.error('Error suspending member:', error);
     }
   };
 
@@ -420,14 +477,14 @@ export default function TeamMembersPage() {
 
           <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Pending Approval</CardTitle>
+              <CardTitle className="text-sm font-medium text-gray-600">Pending Approval (Admins & Collectors)</CardTitle>
               <div className="w-10 h-10 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-600 flex items-center justify-center">
                 <Clock className="h-5 w-5 text-white" />
               </div>
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-yellow-600">
-                {teamMembers.filter(m => m.status === 'pending_approval' || m.status === 'pending').length}
+                {pendingAdmins.length + pendingCollectors.length}
               </div>
               <p className="text-sm text-gray-600 mt-1">
                 Awaiting review
@@ -530,61 +587,110 @@ export default function TeamMembersPage() {
           </CardContent>
         </Card>
 
-        {/* Pending Collectors Section */}
-        {pendingCollectors.length > 0 && (
+        {/* Pending Admin/Collector Section */}
+        {(pendingCollectors.length > 0 || pendingAdmins.length > 0) && (
           <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
             <CardHeader className="bg-gradient-to-r from-yellow-600 to-yellow-700 rounded-t-lg">
               <CardTitle className="flex items-center gap-2 text-white">
                 <Clock className="w-5 h-5" />
-                Pending Collector Approvals
+                Pending Approvals
                 <Badge className="bg-white text-yellow-600 border-0 px-3 py-1 rounded-full">
-                  {pendingCollectors.length}
+                  {pendingAdmins.length + pendingCollectors.length}
                 </Badge>
               </CardTitle>
               <p className="text-yellow-100">
-                Review and approve collector signup requests
+                Review and approve admin and collector signup requests
               </p>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {pendingCollectors.map((collector) => (
-                  <TeamMemberCard
-                    key={collector.id}
-                    member={collector}
-                    onApprove={() => handleApproveMember(collector.id)}
-                    onReject={() => handleRejectMember(collector.id)}
-                    getStatusBadge={getStatusBadge}
-                    getRoleBadge={getRoleBadge}
-                  />
-                ))}
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {[...pendingAdmins, ...pendingCollectors].map((m) => (
+                      <tr key={m.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{m.full_name || '—'}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{m.email}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <Badge variant="outline" className={`capitalize ${roleBadgeClass(m.role || '')}`}>{(m.role||'').toString().replace('_',' ')}</Badge>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <Badge variant="outline" className="text-yellow-700 border-yellow-400 bg-yellow-50">Pending</Badge>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{new Date(m.created_at).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-right text-sm">
+                        <div className="inline-flex gap-2">
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleApproveMember(m.id)}>Approve</Button>
+                          <Button size="sm" variant="destructive" onClick={() => handleRejectMember(m.id)}>Reject</Button>
+                        </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Team Members Grid */}
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900">Team Members</h2>
-            <Badge className="text-sm bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0 px-4 py-2 rounded-full shadow-lg">
-              {filteredMembers.length} Members
-            </Badge>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredMembers.map((member) => (
-              <TeamMemberCard
-                key={member.id}
-                member={member}
-                onApprove={() => handleApproveMember(member.id)}
-                onReject={() => handleRejectMember(member.id)}
-                getStatusBadge={getStatusBadge}
-                getRoleBadge={getRoleBadge}
-              />
-            ))}
-          </div>
+        {/* Team Members Table */}
+        <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+          <CardHeader className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-t-lg py-3">
+            <CardTitle className="text-white">All Team Members</CardTitle>
+            <CardDescription className="text-gray-300 text-sm">Spreadsheet view with roles and statuses</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Township</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredMembers.map((m) => (
+                    <tr key={m.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2.5 whitespace-nowrap text-sm text-gray-900">{m.full_name || '—'}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-sm text-gray-600">{m.email}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-sm">
+                        <Badge variant="outline" className={`capitalize ${roleBadgeClass(m.role || '')}`}>{(m.role||'').toString().replace('_',' ')}</Badge>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-sm">
+                        {getStatusBadge(m.status, m.is_approved)}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-sm text-gray-600">{m.township || '—'}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-sm text-gray-500">{new Date(m.created_at).toLocaleDateString()}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-right text-sm">
+                        <div className="inline-flex gap-1.5">
+                          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleApproveMember(m.id)}>Approve</Button>
+                          <Button size="sm" variant="destructive" className="h-7 px-2" onClick={() => handleRejectMember(m.id)}>Reject</Button>
+                          <Button size="sm" className="h-7 px-2 bg-orange-600 hover:bg-orange-700 text-white" onClick={() => handleSuspendMember(m.id)}>Suspend</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
 
-          {filteredMembers.length === 0 && (
+        {filteredMembers.length === 0 && (
             <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
               <CardContent className="flex flex-col items-center justify-center py-16">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-r from-gray-100 to-gray-200 flex items-center justify-center mb-6">
@@ -599,7 +705,6 @@ export default function TeamMembersPage() {
               </CardContent>
             </Card>
           )}
-        </div>
 
         {/* Create Admin Modal */}
         {showCreateAdmin && (

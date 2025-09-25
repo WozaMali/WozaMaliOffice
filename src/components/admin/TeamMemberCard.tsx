@@ -60,7 +60,8 @@ export default function TeamMemberCard({
   };
 
   const isPending = member.status === 'pending' || member.status === 'pending_approval' || !member.is_approved;
-  const canApprove = isPending && (member.role === 'collector' || member.role === 'staff' || member.role === 'COLLECTOR' || member.role === 'STAFF');
+  const roleLower = (member.role || '').toLowerCase();
+  const canApprove = isPending && (roleLower === 'collector' || roleLower === 'staff' || roleLower === 'admin');
 
   return (
     <Card className="hover:shadow-xl transition-all duration-200 border-0 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">

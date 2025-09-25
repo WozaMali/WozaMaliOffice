@@ -21,6 +21,7 @@ import {
   Cog
 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { usePwaLock } from '@/hooks/use-pwa-lock';
 import { LogoutUtils } from '@/lib/logout-utils';
 import { supabase } from '@/lib/supabase';
 import { logAdminSessionEvent } from '@/lib/admin-session-logging';
@@ -56,6 +57,7 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
   const [softSignOutOpen, setSoftSignOutOpen] = useState(false);
   const [softReason, setSoftReason] = useState<string>('Tea Break');
   const { user, profile, logout } = useAuth();
+  const { lock } = usePwaLock();
 
   // Filter navigation items based on user role
   const isSuperAdmin = profile?.role === 'superadmin' || profile?.role === 'super_admin';
@@ -119,12 +121,14 @@ export default function AdminLayout({ children, currentPage }: AdminLayoutProps)
     try {
       setSoftSignOutOpen(false);
       await logAdminSessionEvent(user?.id, 'soft_logout', softReason);
-      // Blur screen and show lock overlay by forcing lock state via storage
+      // Force lock state immediately using the lock function
+      lock();
+      // Also clear session storage to ensure lock state
       try {
         sessionStorage.removeItem('pwaLock.unlockedSession');
       } catch {}
-      // Navigate to admin root; the lock overlay will prompt for PIN
-      router.push('/admin');
+      // Force immediate refresh to trigger unlock card
+      window.location.reload();
     } catch (e) {
       console.error('Soft sign-out failed', e);
     }
